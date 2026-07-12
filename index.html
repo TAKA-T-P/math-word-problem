@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+/>
+<title>さんすう文章題クエスト！</title>
+<link rel="stylesheet" href="./css/style.css" />
+</head>
+<body>
+<div id="app">
+
+  <!-- ============== タイトル・設定画面 ============== -->
+  <section id="screen-title" class="screen active-screen">
+    <button id="sound-toggle-btn" class="icon-btn" type="button" aria-label="効果音の切り替え">🔊</button>
+
+    <div class="title-block">
+      <h1 class="app-title">さんすう<br />文章題クエスト！</h1>
+      <p class="app-subtitle">式をつくって モンスターを たおそう！</p>
+      <div class="enemy-preview" aria-hidden="true">
+        <span>👹</span><span>👺</span><span>👻</span><span>🤖</span><span>🐙</span><span>👽</span><span>🐲</span>
+      </div>
+    </div>
+
+    <div class="setting-block">
+      <h2 class="setting-heading">しゅつだいはんい</h2>
+      <div id="range-select" class="option-grid">
+        <button class="range-btn selected" type="button" data-range="4-1" data-label="小学4年生・1学期">
+          小学4年生<br />1学期
+        </button>
+        <button class="range-btn disabled" type="button" disabled>小学4年生<br />2学期<span class="soon-badge">今後追加</span></button>
+        <button class="range-btn disabled" type="button" disabled>小学4年生<br />3学期<span class="soon-badge">今後追加</span></button>
+        <button class="range-btn disabled" type="button" disabled>小学5・6年生<span class="soon-badge">今後追加</span></button>
+      </div>
+
+      <h2 class="setting-heading">なんいど</h2>
+      <div id="level-select" class="option-grid three-col">
+        <button class="level-btn selected" type="button" data-level="1">レベル1<br /><small>やさしい</small></button>
+        <button class="level-btn" type="button" data-level="2">レベル2<br /><small>ふつう</small></button>
+        <button class="level-btn" type="button" data-level="3">レベル3<br /><small>むずかしい</small></button>
+      </div>
+    </div>
+
+    <button id="start-btn" class="primary-btn" type="button">ぼうけんに でる！</button>
+
+    <p class="credit-text">©2026 T.TAKEMOTO / KEC Glows</p>
+  </section>
+
+  <!-- ============== カウントダウン画面 ============== -->
+  <section id="screen-countdown" class="screen">
+    <div id="countdown-text" class="countdown-text">3</div>
+  </section>
+
+  <!-- ============== バトル画面 ============== -->
+  <section id="screen-battle" class="screen">
+    <div id="damage-flash" class="damage-flash" aria-hidden="true"></div>
+
+    <header class="battle-header">
+      <div class="status-pill">
+        <span class="status-label">スコア</span>
+        <span id="score-display" class="status-value">0</span>
+        <span id="rank-display" class="rank-badge">H</span>
+      </div>
+      <button id="retire-btn" class="retire-btn" type="button">リタイア</button>
+    </header>
+
+    <div class="enemy-area">
+      <div class="enemy-visual">
+        <div id="enemy-emoji" class="enemy-emoji">👹</div>
+        <div id="enemy-name" class="enemy-name">エネミー</div>
+        <div class="hp-bar">
+          <div id="enemy-hp-fill" class="hp-fill"></div>
+        </div>
+      </div>
+      <p id="question-text" class="question-text">もんだいを よみこみちゅう…</p>
+    </div>
+
+    <div class="battle-status-row">
+      <div id="hearts-container" class="hearts-container" aria-label="のこりハート"></div>
+      <div class="timer-bar">
+        <div id="timer-fill" class="timer-fill"></div>
+      </div>
+    </div>
+
+    <div class="answer-area">
+      <div class="answer-slots">
+        <button id="answer-slot-0" class="answer-slot" type="button" data-slot-type="number" data-index="0"></button>
+        <button id="answer-slot-1" class="answer-slot operator-slot" type="button" data-slot-type="operator" data-index="1"></button>
+        <button id="answer-slot-2" class="answer-slot" type="button" data-slot-type="number" data-index="2"></button>
+        <button id="judge-btn" class="judge-btn" type="button">＝</button>
+        <div id="result-box" class="result-box"></div>
+      </div>
+      <button id="clear-slots-btn" class="clear-btn" type="button">クリア</button>
+    </div>
+
+    <div id="choices-container" class="choices-container" aria-label="えらべるカード"></div>
+
+    <div id="correct-mark" class="correct-mark" aria-hidden="true">○</div>
+    <div id="battle-message" class="battle-message" aria-hidden="true"></div>
+    <button id="tap-to-continue" class="tap-to-continue" type="button" aria-hidden="true">タップして次の問題へ</button>
+
+    <div id="retire-confirm-dialog" class="dialog-overlay" aria-hidden="true">
+      <div class="dialog-box">
+        <p>バトルをリタイアしますか？</p>
+        <div class="dialog-buttons">
+          <button id="retire-confirm-yes" class="dialog-btn danger" type="button">リタイアする</button>
+          <button id="retire-confirm-no" class="dialog-btn" type="button">バトルに戻る</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="drag-ghost" class="drag-ghost" aria-hidden="true"></div>
+  </section>
+
+  <!-- ============== 結果画面 ============== -->
+  <section id="screen-result" class="screen">
+    <div id="result-content" class="result-content">
+      <h2 id="result-title" class="result-title">クリア！</h2>
+
+      <div class="result-summary">
+        <div class="result-row"><span>しゅつだいはんい</span><strong id="result-range">小学4年生・1学期</strong></div>
+        <div class="result-row"><span>レベル</span><strong id="result-level">1</strong></div>
+        <div class="result-row"><span>せいかい数</span><strong id="result-correct-count">0問</strong></div>
+        <div class="result-row"><span>のこりハート</span><strong id="result-hearts-remaining">3</strong></div>
+        <div class="result-row highlight"><span>今回のスコア</span><strong id="result-score">0</strong></div>
+        <div class="result-row highlight"><span>今回のランク</span><strong id="result-rank">H</strong></div>
+        <div class="result-row"><span>ハイスコア</span><strong id="result-highscore">0</strong></div>
+        <p id="result-newrecord" class="new-record" aria-hidden="true">✨ ハイスコア こうしん！ ✨</p>
+      </div>
+
+      <div class="result-buttons">
+        <button id="retry-btn" class="primary-btn" type="button">もういちど</button>
+        <button id="to-title-btn" class="secondary-btn" type="button">タイトルへ戻る</button>
+      </div>
+
+      <h3 class="history-heading">もんだいの きろく</h3>
+      <div id="history-list" class="history-list"></div>
+    </div>
+  </section>
+
+</div>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>
