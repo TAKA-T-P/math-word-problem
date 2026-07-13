@@ -30,7 +30,9 @@
         <button class="range-btn selected" type="button" data-range="4-1" data-label="小学4年生・1学期">
           小学4年生<br />1学期
         </button>
-        <button class="range-btn disabled" type="button" disabled>小学4年生<br />2学期<span class="soon-badge">今後追加</span></button>
+        <button class="range-btn" type="button" data-range="4-2" data-label="小学4年生・2学期">
+          小学4年生<br />2学期
+        </button>
         <button class="range-btn disabled" type="button" disabled>小学4年生<br />3学期<span class="soon-badge">今後追加</span></button>
         <button class="range-btn disabled" type="button" disabled>小学5・6年生<span class="soon-badge">今後追加</span></button>
       </div>
@@ -75,6 +77,7 @@
         </div>
       </div>
       <p id="question-text" class="question-text">もんだいを よみこみちゅう…</p>
+      <div id="step-indicator" class="step-indicator" aria-hidden="true"></div>
     </div>
 
     <div class="battle-status-row">
@@ -98,6 +101,10 @@
     <div id="choices-container" class="choices-container" aria-label="えらべるカード"></div>
 
     <div id="correct-mark" class="correct-mark" aria-hidden="true">○</div>
+    <div id="intermediate-mark" class="intermediate-mark" aria-hidden="true">
+      <span class="intermediate-circle">○</span>
+      <span class="intermediate-label">途中式正解！</span>
+    </div>
     <div id="battle-message" class="battle-message" aria-hidden="true"></div>
     <button id="tap-to-continue" class="tap-to-continue" type="button" aria-hidden="true">タップして次の問題へ</button>
 

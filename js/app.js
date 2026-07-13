@@ -2,13 +2,12 @@
 
 import { initUI } from "./ui.js";
 import * as game from "./game.js";
-import { grade4Term1Templates } from "../data/grade4-term1.js";
+import { TEMPLATE_SETS_BY_GRADE_TERM } from "../data/index.js";
 
-// 出題範囲ごとの問題テンプレート一覧。
-// 新しい学期のデータファイルを追加する場合は、ここに1行追加するだけで済みます。
-const templateSets = {
-  "4-1": grade4Term1Templates
-};
+// 問題データは data/index.js から一元的に取得する。
+// data/grade4-term1.js のような個別ファイルは直接 import しない。
+// 新しい学期のデータファイルを追加する場合は、data/index.js 側を修正すれば済み、
+// このファイルの変更は不要。
 
 function main() {
   // ui.js は DOM要素をキャッシュしてから使う必要があるため、
@@ -25,7 +24,7 @@ function main() {
     onToTitle: () => game.returnToTitle()
   });
 
-  game.initGame(templateSets);
+  game.initGame(TEMPLATE_SETS_BY_GRADE_TERM);
 }
 
 document.addEventListener("DOMContentLoaded", main);

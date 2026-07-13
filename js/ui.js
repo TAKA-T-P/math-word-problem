@@ -1,8 +1,17 @@
 // 画面表示・DOM操作・カード操作（タップ／ドラッグ）を担当するモジュール。
 // ゲームの状態（ハート数・スコア等）そのものは持たず、game.js から渡された値を
 // 表示するだけに徹しています。
+// 数値の表示は、必ず number-utils.js の formatNumber() を経由します
+// （整数・小数・大きな数の表示をアプリ全体で統一するため）。
+
+import { formatNumber } from "./number-utils.js";
+import { loadSelectedGradeTerm, saveSelectedGradeTerm } from "./storage.js";
 
 const DRAG_THRESHOLD = 6;
+
+// URL に ?debug=true を付けた場合だけ、タイトル画面に開発版の出題範囲
+// 「2段階問題・整数（開発版）」を表示する。通常アクセスでは要素自体を作らない。
+const DEBUG_MODE = new URLSearchParams(window.location.search).get("debug") === "true";
 
 let els = null;
 let callbacks = {};
@@ -44,6 +53,8 @@ function cacheElements() {
     enemyName: qs("enemy-name"),
     enemyHpFill: qs("enemy-hp-fill"),
     questionText: qs("question-text"),
+    stepIndicator: qs("step-indicator"),
+    intermediateMark: qs("intermediate-mark"),
     heartsContainer: qs("hearts-container"),
     timerFill: qs("timer-fill"),
     answerSlots: [qs("answer-slot-0"), qs("answer-slot-1"), qs("answer-slot-2")],
@@ -96,8 +107,8 @@ function setupTitleScreen() {
   els.rangeSelect.addEventListener("click", (e) => {
     const btn = e.target.closest(".range-btn");
     if (!btn || btn.disabled) return;
-    els.rangeSelect.querySelectorAll(".range-btn").forEach((b) => b.classList.remove("selected"));
-    btn.classList.add("selected");
+    selectRangeButton(btn);
+    saveSelectedGradeTerm(btn.dataset.range);
   });
 
   els.levelSelect.addEventListener("click", (e) => {
@@ -116,6 +127,48 @@ function setupTitleScreen() {
     };
     callbacks.onStart && callbacks.onStart(settings);
   });
+
+  if (DEBUG_MODE) {
+    addDevMultiStepRangeOption();
+  }
+
+  restoreSelectedGradeTerm();
+}
+
+function selectRangeButton(btn) {
+  els.rangeSelect.querySelectorAll(".range-btn").forEach((b) => b.classList.remove("selected"));
+  btn.classList.add("selected");
+}
+
+/**
+ * 前回選択した出題範囲を localStorage から復元する。
+ * 保存値が無い場合、あるいは実際に選択可能なボタンと一致しない場合
+ * （不正な値・?debug=true を外したことで開発版ボタンが無くなった場合など）は、
+ * index.html 側で最初から選択済みになっている小学4年生1学期のままにする。
+ */
+function restoreSelectedGradeTerm() {
+  const saved = loadSelectedGradeTerm();
+  if (!saved) return;
+  const matchingBtn = Array.from(els.rangeSelect.querySelectorAll(".range-btn")).find(
+    (b) => b.dataset.range === saved && !b.disabled
+  );
+  if (matchingBtn) {
+    selectRangeButton(matchingBtn);
+  }
+}
+
+/**
+ * ?debug=true のときだけ、タイトル画面に開発版の出題範囲ボタンを追加する。
+ * index.html には最初から書かず、ここで動的に生成することで、
+ * 通常アクセス時にはDOM上にも一切存在しない状態にしている。
+ */
+function addDevMultiStepRangeOption() {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "range-btn dev-range-btn";
+  btn.dataset.range = "4-multi-step";
+  btn.innerHTML = "2段階問題・整数<br />（開発版）";
+  els.rangeSelect.appendChild(btn);
 }
 
 export function setSoundIcon(enabled) {
@@ -170,28 +223,66 @@ export function updateScoreboard(score, rank) {
 
 export function renderProblem(problem) {
   els.questionText.textContent = problem.text;
+  updateStepIndicator(problem);
   slots = [null, null, null];
   allCards = problem.choices.map((c) => ({ ...c }));
   renderSlots();
   renderChoices();
   els.resultBox.textContent = "";
   hideCorrectEffect();
+  hideIntermediateStepEffect();
   hideBattleMessage();
+}
+
+/**
+ * 途中式正解の後、問題文・敵の状態はそのままに、進行表示・解答欄・選択肢だけを
+ * 次のステップ用に再構築する（2段階問題専用）。
+ */
+export function renderStepChoices(problem) {
+  updateStepIndicator(problem);
+  slots = [null, null, null];
+  allCards = problem.choices.map((c) => ({ ...c }));
+  renderSlots();
+  renderChoices();
+  els.resultBox.textContent = "";
+}
+
+function updateStepIndicator(problem) {
+  if (problem.questionType === "multiStep" && problem.multiStep) {
+    els.stepIndicator.textContent = `式 ${problem.multiStep.currentStepIndex + 1}／${problem.multiStep.totalSteps}`;
+    els.stepIndicator.classList.add("show");
+  } else {
+    els.stepIndicator.classList.remove("show");
+    els.stepIndicator.textContent = "";
+  }
 }
 
 function isCardPlaced(cardId) {
   return slots.some((c) => c !== null && c.cardId === cardId);
 }
 
+/**
+ * 表示文字列の長さに応じて、カードの文字サイズを自動調整するためのクラス名を返す。
+ * 125,000 のような大きな数のカードが、はみ出したり読みにくくなったりしないようにする。
+ */
+function getNumberCardSizeClass(displayText) {
+  if (displayText.length >= 8) return "choice-value-xlong";
+  if (displayText.length >= 6) return "choice-value-long";
+  return "";
+}
+
 function renderChoices() {
   els.choicesContainer.innerHTML = "";
   for (const card of allCards) {
     const placed = isCardPlaced(card.cardId);
+    const isIntermediate = card.source === "intermediate";
+    const displayText = card.type === "number" ? formatNumber(card.value) : String(card.value);
+    const sizeClass = card.type === "number" ? getNumberCardSizeClass(displayText) : "";
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = `choice-card choice-${card.type}${placed ? " placed" : ""}`;
+    btn.className = `choice-card choice-${card.type}${placed ? " placed" : ""}${isIntermediate ? " choice-intermediate" : ""}${sizeClass ? ` ${sizeClass}` : ""}`;
     btn.dataset.cardId = card.cardId;
-    btn.textContent = String(card.value);
+    btn.textContent = displayText;
     if (placed) {
       btn.disabled = true;
       btn.tabIndex = -1;
@@ -203,9 +294,15 @@ function renderChoices() {
 function renderSlots() {
   slots.forEach((card, index) => {
     const el = els.answerSlots[index];
+    el.classList.remove("choice-value-long", "choice-value-xlong");
     if (card) {
-      el.textContent = String(card.value);
+      const displayText = card.type === "number" ? formatNumber(card.value) : String(card.value);
+      el.textContent = displayText;
       el.classList.add("filled");
+      if (card.type === "number") {
+        const sizeClass = getNumberCardSizeClass(displayText);
+        if (sizeClass) el.classList.add(sizeClass);
+      }
       el.dataset.cardId = card.cardId;
     } else {
       el.textContent = "";
@@ -326,7 +423,7 @@ function moveDrag(cardData, source, destIndex, destIsPool) {
 }
 
 function showGhost(x, y, card) {
-  els.dragGhost.textContent = String(card.value);
+  els.dragGhost.textContent = card.type === "number" ? formatNumber(card.value) : String(card.value);
   els.dragGhost.className = `drag-ghost drag-ghost-${card.type} visible`;
   positionGhost(x, y);
 }
@@ -467,7 +564,7 @@ export function unlockInput() {
 // ============== 正解・不正解演出 ==============
 
 export function showCorrectEffect(resultValue) {
-  els.resultBox.textContent = String(resultValue);
+  els.resultBox.textContent = formatNumber(resultValue);
   els.correctMark.classList.add("show");
   nextQuestionTapLock = false;
   window.setTimeout(() => {
@@ -478,6 +575,19 @@ export function showCorrectEffect(resultValue) {
 export function hideCorrectEffect() {
   els.correctMark.classList.remove("show");
   els.tapToContinue.classList.remove("show");
+}
+
+/**
+ * 2段階問題で、1つ目の式に正解したときの小さめの演出。
+ * 大きな正解演出（showCorrectEffect）とは別の、控えめなマークを表示する。
+ */
+export function showIntermediateStepEffect(stepResult) {
+  els.resultBox.textContent = formatNumber(stepResult);
+  els.intermediateMark.classList.add("show");
+}
+
+export function hideIntermediateStepEffect() {
+  els.intermediateMark.classList.remove("show");
 }
 
 export function triggerEnemyShake() {
@@ -553,7 +663,9 @@ export function hideRetireDialog() {
 // ============== 結果画面 ==============
 
 const RANGE_LABELS = {
-  "4-1": "小学4年生・1学期"
+  "4-1": "小学4年生・1学期",
+  "4-2": "小学4年生・2学期",
+  "4-multi-step": "2段階問題・整数（開発版）"
 };
 
 export function showResultScreen(data) {
@@ -579,21 +691,61 @@ function renderHistory(history) {
   history.forEach((entry, i) => {
     const item = document.createElement("div");
     item.className = "history-item";
-    item.innerHTML = `
-      <div class="history-item-head">
-        <span class="history-index">第${i + 1}問</span>
-        <span class="history-category">${entry.category}</span>
-      </div>
-      <p class="history-text">${entry.text}</p>
-      <p class="history-formula">正解式：${entry.left}${entry.operator}${entry.right} = ${entry.result}${entry.answerUnit}</p>
-      <p class="history-final">さいごに作った式：${entry.lastAttemptText}</p>
-      <div class="history-counts">
-        <span>不正解 ${entry.incorrectCount}回</span>
-        <span>時間切れ ${entry.timeoutCount}回</span>
-      </div>
-    `;
+    item.innerHTML =
+      entry.questionType === "multiStep"
+        ? buildMultiStepHistoryHtml(entry, i)
+        : buildSingleStepHistoryHtml(entry, i);
     els.historyList.appendChild(item);
   });
+}
+
+function buildSingleStepHistoryHtml(entry, index) {
+  return `
+    <div class="history-item-head">
+      <span class="history-index">第${index + 1}問</span>
+      <span class="history-category">${entry.category}</span>
+    </div>
+    <p class="history-text">${entry.text}</p>
+    <p class="history-formula">正解式：${formatNumber(entry.left)}${entry.operator}${formatNumber(entry.right)} = ${formatNumber(entry.result)}${entry.answerUnit}</p>
+    <p class="history-final">さいごに作った式：${entry.lastAttemptText}</p>
+    <div class="history-counts">
+      <span>不正解 ${entry.incorrectCount}回</span>
+      <span>時間切れ ${entry.timeoutCount}回</span>
+    </div>
+  `;
+}
+
+function buildMultiStepHistoryHtml(entry, index) {
+  const stepsHtml = entry.steps
+    .map((step) => {
+      if (step.completed) {
+        // step.formula は multi-step-engine.js 側で既に formatNumber 済みの文字列。
+        return `<p class="history-step">式${step.stepNumber}：${step.formula}＝${formatNumber(step.result)}</p>`;
+      }
+      if (step.lastAttemptFormula) {
+        return `<p class="history-step history-step-incomplete">式${step.stepNumber}：${step.lastAttemptFormula}（解答途中）</p>`;
+      }
+      return `<p class="history-step history-step-incomplete">式${step.stepNumber}：未回答</p>`;
+    })
+    .join("");
+
+  const answerLine = entry.isComplete
+    ? `<p class="history-final">答え：${formatNumber(entry.finalAnswer)}${entry.answerUnit}</p>`
+    : `<p class="history-final history-step-incomplete">状態：解答途中</p>`;
+
+  return `
+    <div class="history-item-head">
+      <span class="history-index">第${index + 1}問</span>
+      <span class="history-category">${entry.category}</span>
+    </div>
+    <p class="history-text">${entry.text}</p>
+    ${stepsHtml}
+    ${answerLine}
+    <div class="history-counts">
+      <span>不正解 ${entry.incorrectCount}回</span>
+      <span>時間切れ ${entry.timeoutCount}回</span>
+    </div>
+  `;
 }
 
 function setupResultScreen() {
@@ -603,6 +755,25 @@ function setupResultScreen() {
   els.toTitleBtn.addEventListener("click", () => {
     callbacks.onToTitle && callbacks.onToTitle();
   });
+}
+
+// ============== デバッグパネル ==============
+// game.js が ?debug=true のときだけ呼び出す。通常アクセス時は一切呼ばれない。
+
+let debugPanelEl = null;
+
+/**
+ * 画面右下に小さなデバッグ情報パネルを表示する。
+ * 既存の画面レイアウトには影響しない固定オーバーレイとして body 直下に追加する。
+ */
+export function updateDebugPanel(text) {
+  if (!debugPanelEl) {
+    debugPanelEl = document.createElement("pre");
+    debugPanelEl.id = "debug-panel";
+    debugPanelEl.className = "debug-panel";
+    document.body.appendChild(debugPanelEl);
+  }
+  debugPanelEl.textContent = text;
 }
 
 // ============== 初期化 ==============
