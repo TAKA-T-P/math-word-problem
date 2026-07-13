@@ -179,8 +179,15 @@ function wait(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-function pickRandomEnemy() {
-  return ENEMY_LIST[Math.floor(Math.random() * ENEMY_LIST.length)];
+/**
+ * 選んだレベル（内部レベル。レベルMAXは6）以下の minLevel を持つエネミーの中から
+ * ランダムに1体選ぶ（js/enemy-list.js の ENEMY_LIST が単一の情報源）。
+ * 該当するエネミーが1体も無い場合（データ不整合時の安全策）は、全エネミーから選ぶ。
+ */
+function pickRandomEnemy(level) {
+  const pool = ENEMY_LIST.filter((enemy) => enemy.minLevel <= level);
+  const candidates = pool.length > 0 ? pool : ENEMY_LIST;
+  return candidates[Math.floor(Math.random() * candidates.length)];
 }
 
 // 最終問題の解答時間は、1問目のちょうど2倍の速さ（＝時間は半分）になるよう線形に加速する。
@@ -404,7 +411,7 @@ export function startNewGame(settings) {
   gameState.score = 0;
   gameState.rank = "H";
   gameState.enemyHp = 100;
-  gameState.enemy = pickRandomEnemy();
+  gameState.enemy = pickRandomEnemy(settings.level);
   gameState.currentProblem = null;
   gameState.currentQuestionRecord = null;
   gameState.currentQuestionPenalized = false;
@@ -428,6 +435,10 @@ export function startNewGame(settings) {
   ui.updateHearts(gameState.hearts, gameState.maxHearts);
   ui.updateEnemyHp(gameState.enemyHp);
   ui.updateScoreboard(gameState.score, gameState.rank);
+  // 前のゲーム最後の「+スコア」ポップアップが、画面の表示/非表示切り替えで
+  // 再生され直してしまうことがあるため（バトル画面が display:none から再表示される際に
+  // CSSアニメーションが最初から再生し直される）、新しいゲームの開始時に明示的に隠す。
+  ui.hideScoreDelta();
 
   ui.showScreen("countdown");
   runCountdown().then(() => {
@@ -602,6 +613,10 @@ const INTERMEDIATE_STEP_TIMER_RECOVERY_AMOUNT = 0.5;
  */
 function handleIntermediateStepCorrect(problem, stepResult) {
   audio.playCorrect();
+  // 途中式に正解した時点で、危険演出（エネミーの赤いグロー・画面の点滅）を即座に止める。
+  // タイマー自体は演出後に再開する（resumeTimerWithPartialRecovery）が、演出中に危険演出だけ
+  // 残り続けないようにするため、ここで先に止めておく。
+  ui.updateEnemyDangerGlow(1);
   ui.showIntermediateStepEffect(stepResult);
   logDebugInfo();
 
@@ -640,6 +655,9 @@ function handleCorrect(resultValue) {
   const questionNumber = gameState.solvedQuestions + 1;
 
   audio.playCorrect();
+  // 正解した時点で、解答時間ゲージ低下による危険演出（エネミーの赤いグロー・画面の点滅）を
+  // 即座に止める（次の問題が始まるまで演出が残り続けないようにするため）。
+  ui.updateEnemyDangerGlow(1);
   ui.triggerEnemyShake();
 
   const damagePerQuestion = 100 / gameState.totalQuestions;

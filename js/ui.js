@@ -402,8 +402,8 @@ function setDangerOverlayIntensity(intensity) {
     return;
   }
   els.dangerOverlay.classList.add("pulse");
-  els.dangerOverlay.style.setProperty("--danger-overlay-min", (0.04 + intensity * 0.1).toFixed(3));
-  els.dangerOverlay.style.setProperty("--danger-overlay-max", (0.12 + intensity * 0.28).toFixed(3));
+  els.dangerOverlay.style.setProperty("--danger-overlay-min", (0.02 + intensity * 0.05).toFixed(3));
+  els.dangerOverlay.style.setProperty("--danger-overlay-max", (0.05 + intensity * 0.12).toFixed(3));
 }
 
 /**
@@ -544,6 +544,31 @@ export function showScoreDelta(addedScore) {
   els.scoreDelta.classList.remove("show");
   void els.scoreDelta.offsetWidth;
   els.scoreDelta.classList.add("show");
+}
+
+/**
+ * スコア加算ポップアップを即座に隠し、"show" クラスも取り除く。
+ * 新しいゲームを開始する直前に呼び出すことで、前のゲーム最後の加算スコア表示が
+ * 残らないようにする（下の setupScoreDelta() の対策と合わせた保険）。
+ */
+export function hideScoreDelta() {
+  if (!els.scoreDelta) return;
+  els.scoreDelta.classList.remove("show");
+}
+
+/**
+ * スコア加算ポップアップのアニメーションが自然に終わったら、"show" クラスを取り除く。
+ * これを行わないと、アニメーション終了後も "show" クラス（アニメーション再生指定）が
+ * 要素に残ったままになり、画面が display:none → 表示へ切り替わった際に
+ * （例: 前のゲームをクリアしてリトライし、新しいバトル画面が表示されたとき）
+ * ブラウザがアニメーションを最初から再生し直してしまい、前回の加算スコアが
+ * 1問目の開始時に再表示されてしまう（実際に起きていた不具合）。
+ */
+function setupScoreDelta() {
+  if (!els.scoreDelta) return;
+  els.scoreDelta.addEventListener("animationend", () => {
+    els.scoreDelta.classList.remove("show");
+  });
 }
 
 /**
@@ -960,7 +985,8 @@ export function unlockInput() {
 // ============== 正解・不正解演出 ==============
 
 export function showCorrectEffect(resultValue) {
-  els.resultBox.innerHTML = renderValueHtml(resultValue);
+  // ■欄の答えの数字は、選択肢カード・解答欄と同じく桁区切りカンマを付けずに表示する。
+  els.resultBox.innerHTML = renderValueHtml(resultValue, { useSeparator: false });
   els.correctMark.classList.add("show");
   nextQuestionTapLock = false;
   window.setTimeout(() => {
@@ -978,7 +1004,7 @@ export function hideCorrectEffect() {
  * 大きな正解演出（showCorrectEffect）とは別の、控えめなマークを表示する。
  */
 export function showIntermediateStepEffect(stepResult) {
-  els.resultBox.innerHTML = renderValueHtml(stepResult);
+  els.resultBox.innerHTML = renderValueHtml(stepResult, { useSeparator: false });
   els.intermediateMark.classList.add("show");
 }
 
@@ -1238,4 +1264,5 @@ export function initUI(cb) {
   setupNextQuestionTap();
   setupRetireDialog();
   setupResultScreen();
+  setupScoreDelta();
 }

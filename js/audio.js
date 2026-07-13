@@ -117,7 +117,7 @@ export function playTick() {
     return;
   }
   const now = audioContext.currentTime;
-  playTone({ frequency: 1200, startTime: now, duration: 0.045, type: "square", peakVolume: 0.1 });
+  playTone({ frequency: 1200, startTime: now, duration: 0.045, type: "square", peakVolume: 0.04 });
 }
 
 /**
