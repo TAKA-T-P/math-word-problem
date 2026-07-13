@@ -84,6 +84,34 @@ export function areNumbersEqual(a, b, epsilon = 1e-9) {
   return Math.abs(a - b) < epsilon;
 }
 
+/**
+ * 整数のわる数で、割り切れる場合だけ商を返す安全なわり算です
+ * （割り切れない場合や、循環小数になる場合は null を返します）。
+ * 商は最大2桁の小数までしか認めません（maxDecimalPlaces）。
+ *
+ * わられる数(dividend)自身が「見た目上」持っている小数点以下の桁数だけを基準にすると、
+ * 誤って正しい問題を弾いてしまうことがあります。例えば 8.8×4=35.2 のような掛け算とは違い、
+ * 8.8×5=44（整数）のように、わる数との掛け算でたまたま小数部分が0になり整数に見えてしまう
+ * 場合があるためです。dividend=44, divisor=5 は "44" だけを見ると小数点以下0桁に見えますが、
+ * 実際には 44÷5=8.8 という正しい有限小数のわり算です。
+ * そのため、dividendの見た目の桁数を最小値としつつ、maxDecimalPlacesまで桁数を1つずつ増やしながら
+ * 「割り切れる桁数」を探します。これにより、上記のようなケースも正しく有限小数として認識しつつ、
+ * 2桁を超えないと割り切れない（＝循環小数、または不自然に細かい）わり算は正しく除外します。
+ * わる数(divisor)は必ず整数である必要があります（小数÷小数は今回未対応）。
+ */
+export function divideExactByInteger(dividend, divisor, maxDecimalPlaces = 2) {
+  if (!Number.isInteger(divisor) || divisor === 0) return null;
+  const minPlaces = getDecimalPlaces(dividend);
+  for (let places = minPlaces; places <= maxDecimalPlaces; places++) {
+    const factor = Math.pow(10, places);
+    const scaledDividend = Math.round(dividend * factor);
+    if (scaledDividend % divisor === 0) {
+      return normalizeNumber(scaledDividend / divisor / factor);
+    }
+  }
+  return null;
+}
+
 function addThousandsSeparator(integerDigitsString) {
   return integerDigitsString.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }

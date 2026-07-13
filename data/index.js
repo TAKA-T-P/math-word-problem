@@ -21,9 +21,10 @@ import { grade4Term1Templates } from "./grade4-term1.js";
 import { multiStepIntegerTemplates } from "./multi-step-integer.js";
 // 小学4年生・2学期の新内容（小数のたし算・ひき算、大きな数、2けたでわるわり算）。
 import { grade4Term2Templates } from "./grade4-term2.js";
+// 小学4年生・3学期の新内容（小数×整数、小数÷整数、同分母分数のたし算・ひき算）。
+import { grade4Term3Templates } from "./grade4-term3.js";
 
 // 将来追加する学期データは、ここに import 文を追加していきます。
-// import { grade4Term3Templates } from "./grade4-term3.js";
 // import { grade5Term1Templates } from "./grade5-term1.js";
 // import { grade5Term2Templates } from "./grade5-term2.js";
 // import { grade5Term3Templates } from "./grade5-term3.js";
@@ -42,8 +43,8 @@ import { grade4Term2Templates } from "./grade4-term2.js";
 export const TEMPLATE_SETS_BY_GRADE_TERM = {
   "4-1": grade4Term1Templates,
   "4-2": grade4Term2Templates,
+  "4-3": grade4Term3Templates,
   "4-multi-step": multiStepIntegerTemplates
-  // "4-3": grade4Term3Templates,
   // "5-1": grade5Term1Templates,
   // "5-2": grade5Term2Templates,
   // "5-3": grade5Term3Templates,

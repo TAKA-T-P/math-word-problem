@@ -173,9 +173,10 @@
   <h1>問題データ検証ツール</h1>
   <p class="desc">
     data/index.js に登録されているすべての問題テンプレートを検証します。
-    1段階問題（questionType: "singleStep"）は数値を変えて10回、
+    1段階問題（questionType: "singleStep"）は数値を変えて30回、
     2段階問題（questionType: "multiStep"）は数値を変えて20回生成し、
     2段階問題はさらに、すべての解法ルートを実際に最後まで解けるかもシミュレーションします。
+    分数を含む問題は、実際のゲームと同じ縦型分数で例を表示します。
     「再検証」を押すたびに乱数を変えて再実行します。
   </p>
 
@@ -212,6 +213,14 @@
         <option value="multiStep">2段階のみ</option>
       </select>
     </label>
+    <label>値の種類
+      <select id="filter-valueType">
+        <option value="all">すべて</option>
+        <option value="integer">整数のみ</option>
+        <option value="decimal">小数のみ</option>
+        <option value="fraction">分数のみ</option>
+      </select>
+    </label>
     <label>判定
       <select id="filter-validity">
         <option value="all">すべて</option>
@@ -229,28 +238,40 @@
     import { validateTemplateSet, validateGeneratedQuestion } from "../js/question-validator.js";
     import { generateQuestionFromTemplate, getContentGroup } from "../js/question-generator.js";
     import { simulateAllRoutesToCompletion } from "../js/multi-step-engine.js";
-    import { formatNumber } from "../js/number-utils.js";
+    import { renderValueHtml, renderTextPartsHtml, escapeHtml } from "../js/value-renderer.js";
 
-    const SINGLE_STEP_SAMPLE_COUNT = 10;
+    const SINGLE_STEP_SAMPLE_COUNT = 30;
     const MULTI_STEP_SAMPLE_COUNT = 20;
 
-    function escapeHtml(value) {
-      return String(value).replace(/[&<>"']/g, (c) => (
-        { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
-      ));
+    /**
+     * テンプレートの variables 定義から、値の種類（整数／小数／分数）を大まかに分類する。
+     * 実際に生成した値ではなくテンプレート定義から判定するため、構造検証に失敗した
+     * テンプレート（数値を1回も生成しない）でもフィルタリングに使える。
+     */
+    function classifyValueType(template) {
+      if (!template || !template.variables) return "integer";
+      const ranges = Object.values(template.variables);
+      if (ranges.some((r) => r && r.type === "fraction")) return "fraction";
+      if (ranges.some((r) => r && r.decimalPlaces > 0)) return "decimal";
+      return "integer";
     }
 
+    /**
+     * 生成された問題の例を、実際のゲームと同じ縦型分数を含むHTML断片として組み立てる。
+     * 分数を含む問題文は problem.textParts を使って描画する。
+     */
     function formatExample(problem) {
+      const textHtml = problem.textParts ? renderTextPartsHtml(problem.textParts) : escapeHtml(problem.text);
       if (problem.questionType === "multiStep") {
-        const steps = problem.solutionRoutes[0].steps
-          .map((s, i) => `式${i + 1}: ${formatNumber(s.left)}${s.operator}${formatNumber(s.right)}=${formatNumber(s.result)}`)
+        const stepsHtml = problem.solutionRoutes[0].steps
+          .map((s, i) => `式${i + 1}: ${renderValueHtml(s.left)}${s.operator}${renderValueHtml(s.right)}=${renderValueHtml(s.result)}`)
           .join(" / ");
-        return { text: problem.text, formula: steps, result: formatNumber(problem.answer), unit: problem.answerUnit };
+        return { textHtml, formulaHtml: stepsHtml, resultHtml: renderValueHtml(problem.answer), unit: problem.answerUnit };
       }
       return {
-        text: problem.text,
-        formula: `${formatNumber(problem.left)}${problem.operator}${formatNumber(problem.right)}`,
-        result: formatNumber(problem.result),
+        textHtml,
+        formulaHtml: `${renderValueHtml(problem.left)}${problem.operator}${renderValueHtml(problem.right)}`,
+        resultHtml: renderValueHtml(problem.result),
         unit: problem.answerUnit
       };
     }
@@ -277,6 +298,7 @@
           questionType: template ? template.questionType : "-",
           generatorType: template ? template.generatorType : "-",
           contentGroup: template ? getContentGroup(template) : "-",
+          valueType: classifyValueType(template),
           sampleCount,
           structuralErrors: structural.errors,
           sampleErrors: [],
@@ -326,11 +348,13 @@
         : "";
       const exampleHtml = row.example
         ? `<div class="template-example">
-             <div>例: ${escapeHtml(row.example.text)}</div>
-             <div>正解式: ${escapeHtml(row.example.formula)}${row.questionType === "multiStep" ? "" : ` = ${escapeHtml(row.example.result)}${escapeHtml(row.example.unit || "")}`}</div>
-             ${row.questionType === "multiStep" ? `<div>答え: ${escapeHtml(row.example.result)}${escapeHtml(row.example.unit || "")}</div>` : ""}
+             <div>例: ${row.example.textHtml}</div>
+             <div>正解式: ${row.example.formulaHtml}${row.questionType === "multiStep" ? "" : ` = ${row.example.resultHtml}${escapeHtml(row.example.unit || "")}`}</div>
+             ${row.questionType === "multiStep" ? `<div>答え: ${row.example.resultHtml}${escapeHtml(row.example.unit || "")}</div>` : ""}
            </div>`
         : "";
+
+      const VALUE_TYPE_LABELS = { integer: "整数", decimal: "小数", fraction: "分数" };
 
       const card = document.createElement("div");
       card.className = `template-card ${row.overallValid ? "ok" : "error"}`;
@@ -343,7 +367,8 @@
         </div>
         <div class="template-meta">
           gradeTerm: ${escapeHtml(row.gradeTerm)} / difficulty: ${escapeHtml(row.difficulty)} /
-          questionType: ${escapeHtml(row.questionType)} / generatorType: ${escapeHtml(row.generatorType)}
+          questionType: ${escapeHtml(row.questionType)} / generatorType: ${escapeHtml(row.generatorType)} /
+          値の種類: ${VALUE_TYPE_LABELS[row.valueType] || row.valueType}
         </div>
         <div class="template-sample">生成テスト: ${row.sampleSuccessCount} / ${row.sampleCount} 回成功</div>
         ${exampleHtml}
@@ -380,12 +405,14 @@
       const gradeTerm = document.getElementById("filter-gradeTerm").value;
       const category = document.getElementById("filter-category").value;
       const questionType = document.getElementById("filter-questionType").value;
+      const valueType = document.getElementById("filter-valueType").value;
       const validity = document.getElementById("filter-validity").value;
 
       return rows.filter((row) => {
         if (gradeTerm !== "all" && row.gradeTerm !== gradeTerm) return false;
         if (category !== "all" && row.category !== category) return false;
         if (questionType !== "all" && row.questionType !== questionType) return false;
+        if (valueType !== "all" && row.valueType !== valueType) return false;
         if (validity === "ok" && !row.overallValid) return false;
         if (validity === "error" && row.overallValid) return false;
         return true;
@@ -419,7 +446,7 @@
     }
 
     document.getElementById("rerun-btn").addEventListener("click", render);
-    for (const id of ["filter-gradeTerm", "filter-category", "filter-questionType", "filter-validity"]) {
+    for (const id of ["filter-gradeTerm", "filter-category", "filter-questionType", "filter-valueType", "filter-validity"]) {
       document.getElementById(id).addEventListener("change", renderList);
     }
     render();

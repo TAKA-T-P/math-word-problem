@@ -14,7 +14,8 @@
 import { safeCalculate } from "./answer-checker.js";
 import { validateGeneratedQuestion } from "./question-validator.js";
 import { initializeMultiStepQuestion } from "./multi-step-engine.js";
-import { normalizeNumber } from "./number-utils.js";
+import { normalizeNumber, multiplyDecimal } from "./number-utils.js";
+import { valueKey, isFractionValue, formatValue } from "./value-utils.js";
 
 export const OPERATORS = ["+", "-", "×", "÷"];
 
@@ -62,16 +63,36 @@ export function pickDecimalValue(range) {
 }
 
 /**
+ * 分数の変数定義 { type:"fraction", denominator, numeratorMin, numeratorMax } から、
+ * 分子だけをランダムに選び、分数の値を1つ作ります。
+ * 分母はテンプレート側で固定値として指定するため（同分母分数のたし算・ひき算専用）、
+ * ここでランダム化することはありません。
+ */
+function pickFractionValue(range) {
+  const numerator = pickInt(range.numeratorMin, range.numeratorMax);
+  return { type: "fraction", numerator, denominator: range.denominator };
+}
+
+/**
  * variables で定義された各変数の値を、独立にランダム生成します。
- * 変数の定義に decimalPlaces があれば小数として、無ければ従来どおり
- * min〜max（step刻み）の整数として生成します（たし算・ひき算・かけ算、
- * 小数のたし算・ひき算、大きな数、除算を含まない2段階問題で使用）。
+ * 変数の定義に応じて、次のいずれかとして生成します。
+ *   - type: "fraction"      → 分数（pickFractionValue）
+ *   - decimalPlaces あり    → 小数（pickDecimalValue）
+ *   - それ以外               → 整数（pickStepped、従来どおり）
+ * （たし算・ひき算・かけ算、小数のたし算・ひき算・かけ算、大きな数、
+ *  同分母分数のたし算・ひき算、除算を含まない2段階問題で使用）
  */
 export function generateStandardValues(variables) {
   const values = {};
   for (const key of Object.keys(variables)) {
     const range = variables[key];
-    values[key] = range.decimalPlaces ? pickDecimalValue(range) : pickStepped(range);
+    if (range.type === "fraction") {
+      values[key] = pickFractionValue(range);
+    } else if (range.decimalPlaces) {
+      values[key] = pickDecimalValue(range);
+    } else {
+      values[key] = pickStepped(range);
+    }
   }
   return values;
 }
@@ -136,22 +157,40 @@ function generateMultiStepSumToDivisibleValues(variables) {
   };
 }
 
+/**
+ * 小数÷整数専用の生成ルール。
+ * 先に商(quotient・小数)とわる数(divisor・整数)を決めてから、
+ * わられる数(dividend) = quotient × divisor を計算します（誤差の出ない multiplyDecimal を使用）。
+ * これにより、必ず有限小数で割り切れる問題になります（循環小数・あまりのあるわり算を防止）。
+ */
+function generateExactDecimalDivisionValues(variables) {
+  const divisor = pickStepped(variables.divisor);
+  const quotient = pickDecimalValue(variables.quotient);
+  const dividend = normalizeNumber(multiplyDecimal(quotient, divisor));
+  return { divisor, quotient, dividend };
+}
+
 const GENERATOR_TYPE_HANDLERS = {
   standard: (variables) => generateStandardValues(variables),
-  // decimalAddition / decimalSubtraction は standard のエイリアス。
-  // 生成の「戦略」（各変数を独立に生成する）は同じで、演算の種類は
-  // solutionRoutes 側が決めるため、別の生成関数を用意する必要が無いためです。
+  // decimalAddition / decimalSubtraction / decimalTimesInteger /
+  // sameDenominatorFractionAddition / sameDenominatorFractionSubtraction は
+  // すべて standard のエイリアス。生成の「戦略」（各変数を独立に生成する）は同じで、
+  // 演算の種類は solutionRoutes 側が決めるため、別の生成関数を用意する必要が無いためです。
   decimalAddition: (variables) => generateStandardValues(variables),
   decimalSubtraction: (variables) => generateStandardValues(variables),
+  decimalTimesInteger: (variables) => generateStandardValues(variables),
+  sameDenominatorFractionAddition: (variables) => generateStandardValues(variables),
+  sameDenominatorFractionSubtraction: (variables) => generateStandardValues(variables),
   exactDivision: (variables) => generateExactDivisionValues(variables),
   // わる数が2けたになる点だけが exactDivision と異なる（variables.divisor の範囲で決まる）。
   exactDivisionTwoDigit: (variables) => generateExactDivisionValues(variables),
+  exactDecimalDivisionByInteger: (variables) => generateExactDecimalDivisionValues(variables),
   multiStepDivideFirst: (variables) => generateMultiStepDivideFirstValues(variables),
   multiStepSumToDivisible: (variables) => generateMultiStepSumToDivisibleValues(variables)
 };
 
 // getVisibleNumbers 等で「dividend/divisor を特別扱いする」対象の generatorType。
-const DIVISION_GENERATOR_TYPES = new Set(["exactDivision", "exactDivisionTwoDigit"]);
+const DIVISION_GENERATOR_TYPES = new Set(["exactDivision", "exactDivisionTwoDigit", "exactDecimalDivisionByInteger"]);
 
 function generateValuesForTemplate(template) {
   const handler = GENERATOR_TYPE_HANDLERS[template.generatorType] || GENERATOR_TYPE_HANDLERS.standard;
@@ -162,6 +201,28 @@ export function renderTemplateText(template, values) {
   return template.template.replace(/\{(\w+)\}/g, (match, key) => {
     return Object.prototype.hasOwnProperty.call(values, key) ? String(values[key]) : match;
   });
+}
+
+/**
+ * テンプレートの textParts（{type:"text", value:string} と {type:"value", ref:変数名} の配列）を、
+ * 実際に生成された値へ解決します。分数のような、横並びの文字列だけでは正しく表示できない値を
+ * 問題文に含める場合に使用します（value-renderer.js の renderTextPartsHtml で縦型分数として描画されます）。
+ */
+function resolveTextParts(template, values) {
+  return template.textParts.map((part) => {
+    if (part.type === "value") {
+      return { type: "value", value: values[part.ref] };
+    }
+    return part;
+  });
+}
+
+/**
+ * 解決済みの textParts を、HTML表示を経由しないプレーンテキストに変換します。
+ * 問題履歴の検索・デバッグ表示・result.text（後方互換用の文字列表現）に使用します。
+ */
+function flattenTextPartsToPlainText(resolvedTextParts) {
+  return resolvedTextParts.map((part) => (part.type === "value" ? formatValue(part.value) : part.value)).join("");
 }
 
 /**
@@ -237,8 +298,10 @@ export function generateDummyOperators(correctOperator, count) {
 /**
  * 既存の数値と重複せず、答えとも一致しないダミー数値を生成します。
  * 桁数の近い、もっともらしい数値になるようにしています。
+ * @param {number} referenceValue
+ * @param {Set<string>} excludedKeys - valueKey() で表した除外対象の集合
  */
-export function generateDummyNumber(referenceValue, excludedValues) {
+function generateDummyNumber(referenceValue, excludedKeys) {
   const magnitude = Math.max(1, Math.abs(referenceValue));
   const spread = Math.max(2, Math.round(magnitude * 0.4));
 
@@ -251,16 +314,52 @@ export function generateDummyNumber(referenceValue, excludedValues) {
     if (candidate === 0) {
       candidate = 1;
     }
-    if (!excludedValues.has(candidate)) {
+    if (!excludedKeys.has(valueKey(candidate))) {
       return candidate;
     }
   }
   // フォールバック：それでも重複する場合は、十分離れた値を返す
   let fallback = referenceValue + spread + 1;
-  while (excludedValues.has(fallback)) {
+  while (excludedKeys.has(valueKey(fallback))) {
     fallback += 1;
   }
   return fallback;
+}
+
+/**
+ * 既存の分数と重複しない、同じ分母のダミー分数を生成します
+ * （分数カードが正解の分数と紛らわしくなりすぎないよう、同じ分母を使います）。
+ * @param {{type:"fraction", numerator:number, denominator:number}} referenceFraction
+ * @param {Set<string>} excludedKeys - valueKey() で表した除外対象の集合
+ */
+function generateDummyFraction(referenceFraction, excludedKeys) {
+  const denominator = referenceFraction.denominator;
+  const maxNumerator = Math.max(denominator * 2, referenceFraction.numerator + 5);
+
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const numerator = pickInt(1, maxNumerator);
+    const candidate = { type: "fraction", numerator, denominator };
+    if (!excludedKeys.has(valueKey(candidate))) {
+      return candidate;
+    }
+  }
+  // フォールバック：それでも重複する場合は、十分離れた分子を返す
+  let numerator = referenceFraction.numerator + 1;
+  let candidate = { type: "fraction", numerator, denominator };
+  while (excludedKeys.has(valueKey(candidate))) {
+    numerator += 1;
+    candidate = { type: "fraction", numerator, denominator };
+  }
+  return candidate;
+}
+
+/**
+ * 値の型（数値・分数）を意識せず、既存の値と重複しないダミー値を生成します。
+ */
+export function generateDummyValue(referenceValue, excludedKeys) {
+  return isFractionValue(referenceValue)
+    ? generateDummyFraction(referenceValue, excludedKeys)
+    : generateDummyNumber(referenceValue, excludedKeys);
 }
 
 export function shuffleArray(array) {
@@ -303,7 +402,10 @@ export function makeCard(type, value, source = "variable") {
 export function buildChoiceCards(realNumbers, correctOperators, resultsToExclude) {
   const uniqueCorrectOps = [...new Set(Array.isArray(correctOperators) ? correctOperators : [correctOperators])];
   const excludedResults = Array.isArray(resultsToExclude) ? resultsToExclude : [resultsToExclude];
-  const excluded = new Set([...realNumbers.map((n) => n.value), ...excludedResults.filter((v) => v !== undefined)]);
+  const excludedKeys = new Set([
+    ...realNumbers.map((n) => valueKey(n.value)),
+    ...excludedResults.filter((v) => v !== undefined && v !== null).map((v) => valueKey(v))
+  ]);
 
   const cards = [];
 
@@ -325,8 +427,8 @@ export function buildChoiceCards(realNumbers, correctOperators, resultsToExclude
   const referenceValues = realNumbers.map((n) => n.value);
   for (let i = 0; i < remainingSlots; i++) {
     const reference = referenceValues.length > 0 ? referenceValues[i % referenceValues.length] : 10;
-    const dummy = generateDummyNumber(reference, excluded);
-    excluded.add(dummy);
+    const dummy = generateDummyValue(reference, excludedKeys);
+    excludedKeys.add(valueKey(dummy));
     cards.push(makeCard("number", dummy, "dummy"));
   }
 
@@ -335,10 +437,17 @@ export function buildChoiceCards(realNumbers, correctOperators, resultsToExclude
 
 /**
  * 1段階問題用の選択肢カードを生成します（内部専用）。
+ *
+ * 見えている数値（変数の値）は、値が偶然同じでも重複排除しません。
+ * 例えば同分母分数のたし算で a と b がどちらも 3/10 になった場合
+ * （「朝に3/10、昼に3/10歩いた」のような問題）、正解の式 3/10+3/10 を作るには
+ * 3/10 のカードが2枚必要です。ここで値の一致だけを見て1枚に減らしてしまうと、
+ * 正解不可能な問題になってしまいます。各変数は必ず1枚ずつ独立したカードにします
+ * （ダミーカードの重複回避は buildChoiceCards() 側の valueKey() が担当します）。
  */
 function buildSingleStepChoices(problem) {
-  const numberValues = new Set(getVisibleNumbers(problem.template, problem.values));
-  const realNumbers = Array.from(numberValues, (value) => ({ value, source: "variable" }));
+  const numbers = getVisibleNumbers(problem.template, problem.values);
+  const realNumbers = numbers.map((value) => ({ value, source: "variable" }));
   return buildChoiceCards(realNumbers, problem.operator, problem.result);
 }
 
@@ -362,15 +471,24 @@ export function generateQuestionFromTemplate(template) {
 
   questionSequence += 1;
 
+  // textParts を持つテンプレート（分数を含む問題文など）は、それを実際の値に解決して
+  // problem.textParts に保存する（ui.js が縦型分数として描画する）。
+  // problem.text には、HTML描画を経由しない場所（履歴の検索・デバッグ表示など）で使う
+  // プレーンテキスト表現を、どちらの形式のテンプレートでも必ず用意する。
+  const resolvedTextParts = template.textParts ? resolveTextParts(template, values) : null;
+  const text = resolvedTextParts ? flattenTextPartsToPlainText(resolvedTextParts) : renderTemplateText(template, values);
+
   const problem = {
     id: `q_${Date.now()}_${questionSequence}`,
     templateId: template.id,
     gradeTerm: template.gradeTerm,
     category: template.category,
     questionType: template.questionType,
-    text: renderTemplateText(template, values),
+    text,
+    textParts: resolvedTextParts,
     // canonical（1番目の正解ルート）を、表示・選択肢生成・スコア計算用に
     // トップレベルにも複製している。既存の game.js / ui.js はこちらを参照する。
+    // 値は数値または分数オブジェクトのいずれか（value-utils.js が共通して扱う）。
     left: canonical.left,
     operator: canonical.operator,
     right: canonical.right,
@@ -468,29 +586,52 @@ export function generateQuestion(templates, options = {}) {
 }
 
 // ============================================================
-// 小学4年生2学期モード：新内容／復習内容の出題プラン
+// 小学4年生2学期・3学期モード：新内容／復習内容の出題プラン
 // ============================================================
 //
-// 「4-2」の問題テンプレート（新内容）と「4-1」の問題テンプレート（復習内容）を、
-// およそ半分ずつ・カテゴリに偏りなく・3問以上連続しないように並べた
-// 「出題プラン」を作ります。実際の問題生成（数値のランダム化）は行わず、
-// 各問題スロットが「新内容か復習内容か」「新内容ならどのカテゴリか」を
+// 出題モード（gradeTerm: "4-2" または "4-3"）ごとに「どのgradeTermキーを新内容として
+// 扱うか」「どのgradeTermキーを復習内容として扱うか」を GRADE_TERM_PLAN_CONFIG で定義し、
+// それに基づいて、新内容・復習内容がおよそ半分ずつ・カテゴリに偏りなく・3問以上連続しない
+// ように並べた「出題プラン」を作ります。実際の問題生成（数値のランダム化）は行わず、
+// 各問題スロットが「新内容か復習内容か」「どのカテゴリか（復習の場合はどの学期のどのカテゴリか）」を
 // 決めるだけです（実際の生成は、既存の generateQuestion() がそのカテゴリの
 // テンプレート集合から行います）。
 //
-// カテゴリは data/grade4-term2.js の category フィールドから自動的に集計するため、
+// 「4-multi-step」（整数のみの2段階文章題）は、モードによって役割が変わります。
+//   - 4-2モードでは「新内容」の1カテゴリ（2段階文章題）として扱う
+//   - 4-3モードでは「復習内容」の一部として扱う（今回、分数・小数の2段階問題は追加しないため）
+// このため、テンプレート1つだけを見て「新内容か復習内容か」を判定する関数は用意せず、
+// 常に「今どのモードで遊んでいるか」を踏まえて判定します。
+//
+// カテゴリは各データファイルの category フィールドから自動的に集計するため、
 // 新しいカテゴリのテンプレートを追加しても、このファイルの修正は不要です
 // （唯一の例外は「2段階文章題」で、data/multi-step-integer.js 側の複数のカテゴリ名を
 // 1つの疑似カテゴリとしてまとめて扱います）。
 
 const MULTI_STEP_PSEUDO_CATEGORY = "2段階文章題";
 
+const GRADE_TERM_PLAN_CONFIG = {
+  "4-2": {
+    newContentGradeTerms: ["4-2", "4-multi-step"],
+    reviewGradeTerms: ["4-1"]
+  },
+  "4-3": {
+    newContentGradeTerms: ["4-3"],
+    reviewGradeTerms: ["4-1", "4-2", "4-multi-step"]
+  }
+};
+
 /**
- * テンプレートが「新内容」か「復習内容」かを判定します。
- * template.contentGroup が明示されていればそれに従い、
- * 無ければ gradeTerm から推測します（"4-1" は復習、それ以外は新内容）。
- * これにより、data/grade4-term1.js や data/multi-step-integer.js に
- * contentGroup フィールドを追加しなくても正しく分類できます。
+ * テンプレートが「新内容」か「復習内容」かを、テンプレート単体から大まかに判定します。
+ * template.contentGroup が明示されていればそれに従い、無ければ gradeTerm から推測します
+ * （"4-1" は復習、それ以外は新内容）。
+ *
+ * 注意: この関数は「今どのモードで遊んでいるか」を考慮しない、簡易的な判定です
+ * （例えば "4-multi-step" は、4-2モードでは新内容ですが4-3モードでは復習内容として
+ *  扱われるため、本当に正しい分類はモードごとに異なります）。実際の出題プラン
+ * （planQuestionSequence）はこの関数を使わず、GRADE_TERM_PLAN_CONFIG に基づいて
+ * モードを踏まえた判定を行います。この関数は、開発者用検証ページでテンプレート単体に
+ * 大まかなバッジを表示する用途にのみ使用してください。
  */
 export function getContentGroup(template) {
   if (template.contentGroup === "new" || template.contentGroup === "review") {
@@ -500,29 +641,62 @@ export function getContentGroup(template) {
 }
 
 /**
- * 小学4年生2学期モードの「新内容」テンプレートを、カテゴリ名ごとにグループ化します。
- * data/multi-step-integer.js（2段階文章題）は、カテゴリ名がテンプレートごとに
- * 異なる（例: "2段階・かけ算とたし算" 等）ため、1つの疑似カテゴリ「2段階文章題」に
- * まとめます。
+ * gradeTermキーの配列（例: ["4-2", "4-multi-step"]）から、カテゴリ名ごとにテンプレートを
+ * グループ化します。"4-multi-step" だけは、カテゴリ名がテンプレートごとに異なる
+ * （例: "2段階・かけ算とたし算" 等）ため、1つの疑似カテゴリ「2段階文章題」にまとめます。
  *
- * @param {Record<string, Array>} templateSets - data/index.js の TEMPLATE_SETS_BY_GRADE_TERM 相当
+ * @param {string[]} sourceGradeTerms
+ * @param {Record<string, Array>} templateSets
  * @returns {Map<string, Array>} カテゴリ名 → テンプレート配列
  */
-export function buildNewContentCategoryGroups(templateSets) {
+function groupTemplatesByCategory(sourceGradeTerms, templateSets) {
   const groups = new Map();
-
-  for (const template of templateSets["4-2"] || []) {
-    const list = groups.get(template.category) || [];
-    list.push(template);
-    groups.set(template.category, list);
+  for (const sourceGradeTerm of sourceGradeTerms) {
+    const list = templateSets[sourceGradeTerm] || [];
+    if (list.length === 0) continue;
+    if (sourceGradeTerm === "4-multi-step") {
+      const existing = groups.get(MULTI_STEP_PSEUDO_CATEGORY) || [];
+      groups.set(MULTI_STEP_PSEUDO_CATEGORY, [...existing, ...list]);
+      continue;
+    }
+    for (const template of list) {
+      const arr = groups.get(template.category) || [];
+      arr.push(template);
+      groups.set(template.category, arr);
+    }
   }
-
-  const multiStepTemplates = templateSets["4-multi-step"] || [];
-  if (multiStepTemplates.length > 0) {
-    groups.set(MULTI_STEP_PSEUDO_CATEGORY, multiStepTemplates);
-  }
-
   return groups;
+}
+
+/**
+ * 現在の出題モード（gradeTerm）における「新内容」テンプレートを、カテゴリ名ごとにグループ化します。
+ * @param {Record<string, Array>} templateSets - data/index.js の TEMPLATE_SETS_BY_GRADE_TERM 相当
+ * @param {string} currentGradeTerm - "4-2" または "4-3"
+ * @returns {Map<string, Array>} カテゴリ名 → テンプレート配列
+ */
+export function buildNewContentCategoryGroups(templateSets, currentGradeTerm) {
+  const config = GRADE_TERM_PLAN_CONFIG[currentGradeTerm];
+  if (!config) return new Map();
+  return groupTemplatesByCategory(config.newContentGradeTerms, templateSets);
+}
+
+/**
+ * 現在の出題モードにおける「復習内容」テンプレートを、学期ごと・カテゴリごとに
+ * 2段構えでグループ化します（例: Map{"4-1" => Map{"整数のたし算" => [...]}, "4-2" => Map{...}}）。
+ * 特定の学期・カテゴリだけに偏らないよう、出題プランはこの2段構えの構造を使って
+ * 「学期を選ぶ→その学期のカテゴリを選ぶ→テンプレートを選ぶ」の順で選択します。
+ */
+function buildReviewGroupsByTerm(templateSets, currentGradeTerm) {
+  const config = GRADE_TERM_PLAN_CONFIG[currentGradeTerm];
+  const byTerm = new Map();
+  if (!config) return byTerm;
+  for (const sourceGradeTerm of config.reviewGradeTerms) {
+    const categoryMap = groupTemplatesByCategory([sourceGradeTerm], templateSets);
+    if (categoryMap.size > 0) {
+      byTerm.set(sourceGradeTerm, categoryMap);
+    }
+  }
+  return byTerm;
 }
 
 // 「3問以上連続しない並び」を再抽選（シャッフルし直し）で探すときの最大試行回数。
@@ -568,42 +742,100 @@ function limitConsecutiveRuns(items, keyFn, maxRun = 2) {
 }
 
 /**
- * 小学4年生2学期モード用の出題プランを作成します。
+ * groupsByKey（Map<キー, 配列>）のキーをシャッフルし、count個ぶんラウンドロビンで
+ * 割り当てたラベルの配列を返します。キーが1つも無い場合は null の配列を返します。
+ * 「全テンプレートから単純にランダム選択する」のではなく、この関数でキー（カテゴリや学期）を
+ * 先に均等に割り振ってからテンプレートを選ぶことで、テンプレート数が多いキーに
+ * 出題が偏らないようにしています。
+ */
+function buildRoundRobinLabels(groupsByKey, count) {
+  const keys = shuffleArray([...groupsByKey.keys()]);
+  const labels = [];
+  for (let i = 0; i < count; i++) {
+    labels.push(keys.length > 0 ? keys[i % keys.length] : null);
+  }
+  return labels;
+}
+
+/**
+ * 復習内容のスロットを reviewCount 個作ります。
+ * 「学期を選ぶ→その学期の中でカテゴリを選ぶ」の2段階を、それぞれラウンドロビンで行うことで、
+ * 特定の学期・特定のカテゴリだけに偏らないようにします。
+ */
+function planReviewSlots(reviewCount, templateSets, currentGradeTerm) {
+  const byTerm = buildReviewGroupsByTerm(templateSets, currentGradeTerm);
+  if (byTerm.size === 0) {
+    return Array.from({ length: reviewCount }, () => ({ contentGroup: "review", reviewGradeTerm: null, category: null }));
+  }
+
+  const termLabels = buildRoundRobinLabels(byTerm, reviewCount);
+  const countsByTerm = new Map();
+  for (const term of termLabels) {
+    countsByTerm.set(term, (countsByTerm.get(term) || 0) + 1);
+  }
+
+  const categoryQueueByTerm = new Map();
+  for (const [term, count] of countsByTerm) {
+    categoryQueueByTerm.set(term, buildRoundRobinLabels(byTerm.get(term), count));
+  }
+
+  const cursorByTerm = new Map();
+  return termLabels.map((term) => {
+    const cursor = cursorByTerm.get(term) || 0;
+    const category = categoryQueueByTerm.get(term)[cursor];
+    cursorByTerm.set(term, cursor + 1);
+    return { contentGroup: "review", reviewGradeTerm: term, category };
+  });
+}
+
+/**
+ * 小学4年生2学期・3学期モード用の出題プランを作成します。
  * 新内容が約半分・復習内容が約半分（問題数が奇数の場合は新内容を1問多く）になり、
- * 新内容の中のカテゴリはできるだけ均等に、全体としては同じカテゴリ（復習は
- * "review" というひとまとまりとして扱う）が3問以上連続しないようにします。
+ * 新内容の中のカテゴリ・復習内容の中の学期とカテゴリは、それぞれできるだけ均等になります。
+ * 全体としては、同じキー（新内容は各カテゴリ、復習内容は「復習内容」全体を1つのまとまりとして
+ * 扱う）が3問以上連続しないようにします。
  *
  * @param {number} totalQuestions
  * @param {Record<string, Array>} templateSets
- * @returns {Array<{contentGroup: "new"|"review", category: string|null}>}
+ * @param {string} currentGradeTerm - "4-2" または "4-3"
+ * @returns {Array<{contentGroup:"new", category:string}|{contentGroup:"review", reviewGradeTerm:string, category:string}>}
  */
-export function planQuestionSequence(totalQuestions, templateSets) {
+export function planQuestionSequence(totalQuestions, templateSets, currentGradeTerm) {
   const newCount = Math.ceil(totalQuestions / 2);
   const reviewCount = totalQuestions - newCount;
 
-  const categoryGroups = buildNewContentCategoryGroups(templateSets);
-  const categoryLabels = shuffleArray([...categoryGroups.keys()]);
+  const categoryGroups = buildNewContentCategoryGroups(templateSets, currentGradeTerm);
+  const newLabels = buildRoundRobinLabels(categoryGroups, newCount);
+  const newSlots = newLabels.map((label) => ({ contentGroup: "new", category: label }));
 
-  const slots = [];
-  for (let i = 0; i < newCount; i++) {
-    const label = categoryLabels.length > 0 ? categoryLabels[i % categoryLabels.length] : null;
-    slots.push({ contentGroup: "new", category: label });
-  }
-  for (let i = 0; i < reviewCount; i++) {
-    slots.push({ contentGroup: "review", category: null });
-  }
+  const reviewSlots = planReviewSlots(reviewCount, templateSets, currentGradeTerm);
 
-  const shuffled = shuffleArray(slots);
-  return limitConsecutiveRuns(shuffled, (slot) => (slot.contentGroup === "review" ? "review" : slot.category), 2);
+  const shuffled = shuffleArray([...newSlots, ...reviewSlots]);
+  return limitConsecutiveRuns(
+    shuffled,
+    (slot) => (slot.contentGroup === "review" ? "review" : slot.category),
+    2
+  );
 }
 
 /**
  * 出題プランの1スロット分から、実際に問題を生成する際の候補テンプレート一覧を求めます。
+ * @param {object|null} slot
+ * @param {Record<string, Array>} templateSets
+ * @param {string} currentGradeTerm - "4-2" または "4-3"
  */
-export function getCandidateTemplatesForSlot(slot, templateSets) {
-  if (!slot || slot.contentGroup === "review") {
-    return templateSets["4-1"] || [];
+export function getCandidateTemplatesForSlot(slot, templateSets, currentGradeTerm) {
+  if (!slot) {
+    return templateSets[currentGradeTerm] || [];
   }
-  const groups = buildNewContentCategoryGroups(templateSets);
-  return groups.get(slot.category) || templateSets["4-2"] || [];
+  if (slot.contentGroup === "review") {
+    const byTerm = buildReviewGroupsByTerm(templateSets, currentGradeTerm);
+    const categoryMap = byTerm.get(slot.reviewGradeTerm);
+    if (categoryMap && categoryMap.has(slot.category)) {
+      return categoryMap.get(slot.category);
+    }
+    return templateSets[slot.reviewGradeTerm] || [];
+  }
+  const groups = buildNewContentCategoryGroups(templateSets, currentGradeTerm);
+  return groups.get(slot.category) || templateSets[currentGradeTerm] || [];
 }

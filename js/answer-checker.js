@@ -1,47 +1,24 @@
 // 式の正誤判定を行うモジュール。
 // eval() は使用せず、数値・演算記号を個別に受け取って安全に計算します。
-// たし算・ひき算・かけ算は number-utils.js の誤差の出ない計算関数を使うため、
-// 0.1 + 0.2 のような浮動小数点の誤差の影響を受けません。
+// 整数・小数・分数ごとの計算方法の違いは value-utils.js に集約しており、
+// このファイルは「その値が何であるか」を意識せず、common な calculateValues /
+// areValuesEqual を呼び出すだけにしています。
 
-import { addDecimal, subtractDecimal, multiplyDecimal, normalizeNumber, areNumbersEqual } from "./number-utils.js";
+import { calculateValues, areValuesEqual } from "./value-utils.js";
 
 const OPERATORS = ["+", "-", "×", "÷"];
 
 /**
- * 2つの数値と演算記号から、安全に計算結果を求めます。
- * 割り算で割り切れない場合や 0 で割る場合は null を返します。
- * 小数のたし算・ひき算・かけ算は number-utils.js のスケーリング計算を使うため、
- * 浮動小数点の誤差が出ません。
- * @param {number} left
+ * 2つの値（数値または分数）と演算記号から、安全に計算結果を求めます。
+ * 割り算で割り切れない場合や 0 で割る場合、今回未対応の型の組み合わせの場合は null を返します。
+ * 実際の計算方法（数値の誤差の出ない計算・分数の分子分母計算）は value-utils.js に委譲します。
+ * @param {number|{type:"fraction",numerator:number,denominator:number}} left
  * @param {"+"|"-"|"×"|"÷"} operator
- * @param {number} right
- * @returns {number|null}
+ * @param {number|{type:"fraction",numerator:number,denominator:number}} right
+ * @returns {number|{type:"fraction",numerator:number,denominator:number}|null}
  */
 export function safeCalculate(left, operator, right) {
-  if (!Number.isFinite(left) || !Number.isFinite(right)) {
-    return null;
-  }
-  switch (operator) {
-    case "+":
-      return addDecimal(left, right);
-    case "-":
-      return subtractDecimal(left, right);
-    case "×":
-      return multiplyDecimal(left, right);
-    case "÷": {
-      if (right === 0) {
-        return null;
-      }
-      const normalizedLeft = normalizeNumber(left);
-      const normalizedRight = normalizeNumber(right);
-      if (normalizedLeft % normalizedRight !== 0) {
-        return null;
-      }
-      return normalizeNumber(normalizedLeft / normalizedRight);
-    }
-    default:
-      return null;
-  }
+  return calculateValues(left, operator, right);
 }
 
 /**
@@ -53,10 +30,10 @@ export function safeCalculate(left, operator, right) {
  * step.commutative が明示されていればそれに従い、無い場合は演算子から自動判定します
  * （"+" "×" は交換法則あり、"-" "÷" は順序を区別する、という既存仕様どおりの既定値）。
  *
- * @param {{left:number, operator:string, right:number, commutative?:boolean}} step
- * @param {number} submittedLeft
+ * @param {{left:*, operator:string, right:*, commutative?:boolean}} step
+ * @param {*} submittedLeft
  * @param {string} submittedOperator
- * @param {number} submittedRight
+ * @param {*} submittedRight
  * @returns {boolean}
  */
 export function matchesStep(step, submittedLeft, submittedOperator, submittedRight) {
@@ -66,10 +43,11 @@ export function matchesStep(step, submittedLeft, submittedOperator, submittedRig
   const isCommutative =
     step.commutative !== undefined ? Boolean(step.commutative) : step.operator === "+" || step.operator === "×";
 
-  // 小数の内部誤差の影響を受けないよう、厳密な === ではなく誤差許容の比較を使う。
-  const sameOrder = areNumbersEqual(submittedLeft, step.left) && areNumbersEqual(submittedRight, step.right);
+  // 小数・分数の内部表現の違いの影響を受けないよう、厳密な === ではなく
+  // 値の型に応じた誤差許容・同値判定（areValuesEqual）を使う。
+  const sameOrder = areValuesEqual(submittedLeft, step.left) && areValuesEqual(submittedRight, step.right);
   const reversedOrder =
-    isCommutative && areNumbersEqual(submittedLeft, step.right) && areNumbersEqual(submittedRight, step.left);
+    isCommutative && areValuesEqual(submittedLeft, step.right) && areValuesEqual(submittedRight, step.left);
   return sameOrder || reversedOrder;
 }
 

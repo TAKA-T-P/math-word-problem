@@ -26,7 +26,7 @@
 
 import { matchesStep } from "./answer-checker.js";
 import { buildChoiceCards } from "./question-generator.js";
-import { formatNumber } from "./number-utils.js";
+import { renderValueHtml } from "./value-renderer.js";
 
 const DEFAULT_TOTAL_STEPS = 2;
 
@@ -105,8 +105,12 @@ export function getStepProgressLabel(problem) {
   return `式 ${state.currentStepIndex + 1}／${state.totalSteps}`;
 }
 
+// 数値・分数どちらの値でも共通して扱えるよう、value-renderer.js の renderValueHtml() を使う
+// （今回のバージョンの2段階問題はすべて整数のみのため、返る文字列の見た目は
+//  従来のformatNumber()と変わらない。将来、分数の2段階問題を追加した場合に
+//  自動的に縦型分数のHTMLになるようにするための下地）。
 function formatFormula(left, operator, right) {
-  return `${formatNumber(left)}${operator}${formatNumber(right)}`;
+  return `${renderValueHtml(left)}${operator}${renderValueHtml(right)}`;
 }
 
 /**

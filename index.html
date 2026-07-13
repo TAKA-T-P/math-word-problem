@@ -17,7 +17,7 @@
     <button id="sound-toggle-btn" class="icon-btn" type="button" aria-label="効果音の切り替え">🔊</button>
 
     <div class="title-block">
-      <h1 class="app-title">さんすう<br />文章題クエスト！</h1>
+      <h1 class="app-title">文章題クエスト！</h1>
       <p class="app-subtitle">式をつくって モンスターを たおそう！</p>
       <div class="enemy-preview" aria-hidden="true">
         <span>👹</span><span>👺</span><span>👻</span><span>🤖</span><span>🐙</span><span>👽</span><span>🐲</span>
@@ -26,22 +26,26 @@
 
     <div class="setting-block">
       <h2 class="setting-heading">しゅつだいはんい</h2>
-      <div id="range-select" class="option-grid">
-        <button class="range-btn selected" type="button" data-range="4-1" data-label="小学4年生・1学期">
-          小学4年生<br />1学期
-        </button>
-        <button class="range-btn" type="button" data-range="4-2" data-label="小学4年生・2学期">
-          小学4年生<br />2学期
-        </button>
-        <button class="range-btn disabled" type="button" disabled>小学4年生<br />3学期<span class="soon-badge">今後追加</span></button>
-        <button class="range-btn disabled" type="button" disabled>小学5・6年生<span class="soon-badge">今後追加</span></button>
+      <div id="range-select" class="option-grid three-col">
+        <button class="range-btn selected" type="button" data-range="4-1" data-label="小学4年生・1学期">4年1学期</button>
+        <button class="range-btn" type="button" data-range="4-2" data-label="小学4年生・2学期">4年2学期</button>
+        <button class="range-btn" type="button" data-range="4-3" data-label="小学4年生・3学期">4年3学期</button>
+        <button class="range-btn disabled" type="button" disabled>5年1学期<span class="soon-badge">今後追加</span></button>
+        <button class="range-btn disabled" type="button" disabled>5年2学期<span class="soon-badge">今後追加</span></button>
+        <button class="range-btn disabled" type="button" disabled>5年3学期<span class="soon-badge">今後追加</span></button>
+        <button class="range-btn disabled" type="button" disabled>6年1学期<span class="soon-badge">今後追加</span></button>
+        <button class="range-btn disabled" type="button" disabled>6年2学期<span class="soon-badge">今後追加</span></button>
+        <button class="range-btn disabled" type="button" disabled>6年3学期<span class="soon-badge">今後追加</span></button>
       </div>
 
       <h2 class="setting-heading">なんいど</h2>
       <div id="level-select" class="option-grid three-col">
-        <button class="level-btn selected" type="button" data-level="1">レベル1<br /><small>やさしい</small></button>
-        <button class="level-btn" type="button" data-level="2">レベル2<br /><small>ふつう</small></button>
-        <button class="level-btn" type="button" data-level="3">レベル3<br /><small>むずかしい</small></button>
+        <button class="level-btn selected" type="button" data-level="1">レベル1</button>
+        <button class="level-btn" type="button" data-level="2">レベル2</button>
+        <button class="level-btn" type="button" data-level="3">レベル3</button>
+        <button class="level-btn" type="button" data-level="4">レベル4</button>
+        <button class="level-btn" type="button" data-level="5">レベル5</button>
+        <button class="level-btn" type="button" data-level="8">レベルMAX</button>
       </div>
     </div>
 

@@ -6,7 +6,10 @@ import { checkAnswer } from "./answer-checker.js";
 import { calculateQuestionScore, calculateRank, toTimeRatioPercent, formatFinalRank } from "./score.js";
 import { loadHighScore, saveHighScoreIfBetter, loadSoundSetting, saveSoundSetting } from "./storage.js";
 import { validateTemplateSet } from "./question-validator.js";
-import { formatNumber, getDecimalPlaces } from "./number-utils.js";
+import { getDecimalPlaces } from "./number-utils.js";
+import { formatValue, isFractionValue } from "./value-utils.js";
+import { renderValueHtml } from "./value-renderer.js";
+import { gcd, simplifyFraction } from "./fraction-utils.js";
 import * as multiStepEngine from "./multi-step-engine.js";
 import * as audio from "./audio.js";
 import * as ui from "./ui.js";
@@ -15,6 +18,10 @@ import * as ui from "./ui.js";
 // 生成された変数・現在のゲーム状態をコンソールと画面隅のデバッグパネルに表示する。
 // 通常アクセス（パラメータなし）では一切表示しない。
 const DEBUG_MODE = new URLSearchParams(window.location.search).get("debug") === "true";
+
+// 出題プラン（新内容/復習内容がおよそ半分ずつになる仕組み）を使うモード。
+// 4-2（小学4年生2学期）・4-3（小学4年生3学期）が対象。
+const PLANNED_GRADE_TERMS = new Set(["4-2", "4-3"]);
 
 const ENEMY_LIST = [
   { emoji: "👹", name: "あかおに" },
@@ -147,9 +154,22 @@ function speedMultiplier(questionNumber, totalQuestions) {
   return 1 + (0.5 * (questionNumber - 1)) / (totalQuestions - 1);
 }
 
+/**
+ * 内部レベル（レベルMAXは8として扱う）から、初期ハート数を求めます。
+ * レベル1〜4は3個、レベル5は2個、それ以上（レベルMAX=8）は1個。
+ */
+function heartsForLevel(level) {
+  if (level <= 4) return 3;
+  if (level === 5) return 2;
+  return 1;
+}
+
+// value-renderer.js の renderValueHtml() を使うことで、分数を含む式でも
+// 縦型分数のHTMLとして履歴（さいごに作った式）に表示できるようにしている。
+// 整数・小数の場合は従来と同じ見た目の文字列になる。
 function formatFormula(answer) {
   if (!answer) return "（未回答）";
-  return `${formatNumber(answer.left)}${answer.operator}${formatNumber(answer.right)}`;
+  return `${renderValueHtml(answer.left)}${answer.operator}${renderValueHtml(answer.right)}`;
 }
 
 function pushCurrentRecordToHistory() {
@@ -196,8 +216,20 @@ function filterValidTemplateSets(sets) {
 }
 
 function formatSolutionRoutes(problem) {
+  // 2段階問題のルートは {id, steps:[...]} という形で、1段階問題の {left,operator,right,result} とは
+  // 構造が異なるため、questionType に応じてフォーマット方法を分ける
+  // （分けないと "undefinedundefinedundefined = undefined" のような表示になってしまう）。
+  if (problem.questionType === "multiStep") {
+    return (problem.solutionRoutes || [])
+      .map(
+        (route) =>
+          `[${route.id}] ` +
+          route.steps.map((s) => `${formatValue(s.left)}${s.operator}${formatValue(s.right)}=${formatValue(s.result)}`).join(" → ")
+      )
+      .join(" / ");
+  }
   const routes = problem.solutionRoutes && problem.solutionRoutes.length > 0 ? problem.solutionRoutes : [problem];
-  return routes.map((r) => `${r.left}${r.operator}${r.right} = ${r.result}`).join(" / ");
+  return routes.map((r) => `${formatValue(r.left)}${r.operator}${formatValue(r.right)} = ${formatValue(r.result)}`).join(" / ");
 }
 
 /**
@@ -214,10 +246,56 @@ function summarizePlanComposition() {
   const byCategory = {};
   for (const slot of gameState.questionPlan || []) {
     byContentGroup[slot.contentGroup] = (byContentGroup[slot.contentGroup] || 0) + 1;
-    const category = slot.contentGroup === "review" ? "復習内容(4-1全体)" : slot.category;
+    const category =
+      slot.contentGroup === "review" ? `復習内容(${slot.reviewGradeTerm || "-"}:${slot.category || "-"})` : slot.category;
     byCategory[category] = (byCategory[category] || 0) + 1;
   }
   return { byContentGroup, byCategory };
+}
+
+/**
+ * problem.values の各値（数値・分数）を、デバッグ表示用に詳しく説明するオブジェクトへ変換する。
+ * 分数は、分子・分母・最大公約数・約分後の値まで表示する（?debug=true 専用）。
+ */
+function describeValuesForDebug(values) {
+  const result = {};
+  for (const [key, value] of Object.entries(values || {})) {
+    if (isFractionValue(value)) {
+      const simplified = simplifyFraction(value);
+      result[key] = {
+        type: "fraction",
+        numerator: value.numerator,
+        denominator: value.denominator,
+        gcd: gcd(value.numerator, value.denominator),
+        simplifiedNumerator: simplified.numerator,
+        simplifiedDenominator: simplified.denominator,
+        display: formatValue(value)
+      };
+    } else {
+      result[key] = {
+        type: "number",
+        value,
+        decimalPlaces: getDecimalPlaces(value),
+        display: formatValue(value)
+      };
+    }
+  }
+  return result;
+}
+
+/**
+ * 現在の問題の出題プラン上の区分（新内容/復習内容。復習内容ならどの学期のどのカテゴリか）を
+ * デバッグ表示用の文字列にする。出題プランを使わないモード（4-1・開発版）では、
+ * テンプレート単体から大まかに判定した区分（getContentGroup）にフォールバックする。
+ */
+function describeContentGroupForDebug(problem) {
+  if (gameState.currentSlot) {
+    const slot = gameState.currentSlot;
+    return slot.contentGroup === "review"
+      ? `review（復習内容／${slot.reviewGradeTerm || "-"}／${slot.category || "-"}）`
+      : `new（新内容／${slot.category || "-"}）`;
+  }
+  return problem && problem.template ? getContentGroup(problem.template) : "(なし)";
 }
 
 function logDebugInfo() {
@@ -225,15 +303,17 @@ function logDebugInfo() {
 
   const problem = gameState.currentProblem;
   const isMultiStep = Boolean(problem && problem.questionType === "multiStep");
-  const displayValues = {};
-  const decimalPlacesByKey = {};
+  const valueDetails = problem ? describeValuesForDebug(problem.values) : {};
+  const composition = gameState.questionPlan ? summarizePlanComposition() : null;
+  const fractionCardIds = problem
+    ? problem.choices.filter((c) => isFractionValue(c.value)).map((c) => c.cardId)
+    : [];
+  const displayHtmlByKey = {};
   if (problem && problem.values) {
     for (const [key, value] of Object.entries(problem.values)) {
-      displayValues[key] = formatNumber(value);
-      decimalPlacesByKey[key] = getDecimalPlaces(value);
+      displayHtmlByKey[key] = renderValueHtml(value);
     }
   }
-  const composition = gameState.questionPlan ? summarizePlanComposition() : null;
 
   const lines = [
     `選択した出題範囲: ${gameState.gradeTerm}`,
@@ -241,12 +321,13 @@ function logDebugInfo() {
     `問題ID: ${problem ? problem.id : "(なし)"}`,
     `テンプレートID: ${problem ? problem.templateId : "(なし)"}`,
     `単元: ${problem ? problem.category : "(なし)"}`,
-    `新内容／復習内容: ${problem && problem.template ? getContentGroup(problem.template) : "(なし)"}`,
+    `新内容／復習内容: ${describeContentGroupForDebug(problem)}`,
     `生成に使用したgeneratorType: ${problem && problem.template ? problem.template.generatorType : "(なし)"}`,
     `正解式: ${problem ? formatSolutionRoutes(problem) : "(なし)"}`,
     `元の数値データ: ${problem ? JSON.stringify(problem.values || {}) : "(なし)"}`,
-    `表示用数値: ${JSON.stringify(displayValues)}`,
-    `小数点以下の桁数: ${JSON.stringify(decimalPlacesByKey)}`,
+    `値の詳細(型・分数の分子分母・最大公約数・約分後・表示用): ${JSON.stringify(valueDetails)}`,
+    `表示用HTML: ${JSON.stringify(displayHtmlByKey)}`,
+    fractionCardIds.length > 0 ? `分数カードの一意ID: ${fractionCardIds.join(", ")}` : null,
     composition ? `問題一覧の新内容/復習内容の数: ${JSON.stringify(composition.byContentGroup)}` : null,
     composition ? `問題一覧のカテゴリ構成: ${JSON.stringify(composition.byCategory)}` : null,
     `ゲーム状態: ${JSON.stringify({
@@ -308,8 +389,8 @@ export function startNewGame(settings) {
 
   gameState.gradeTerm = settings.gradeTerm;
   gameState.level = settings.level;
-  gameState.maxHearts = 3;
-  gameState.hearts = 3;
+  gameState.maxHearts = heartsForLevel(settings.level);
+  gameState.hearts = gameState.maxHearts;
   gameState.totalQuestions = 2 * settings.level;
   gameState.solvedQuestions = 0;
   gameState.score = 0;
@@ -328,9 +409,11 @@ export function startNewGame(settings) {
   gameState.currentSlot = null;
   gameState.usedQuestionTexts = new Set();
   gameState.usedFormulas = new Set();
-  // 小学4年生2学期モードだけ、新内容/復習内容がおよそ半分ずつになる出題プランを事前に決める。
-  gameState.questionPlan =
-    gameState.gradeTerm === "4-2" ? planQuestionSequence(gameState.totalQuestions, templateSets) : null;
+  // 4-2（2学期）・4-3（3学期）モードだけ、新内容/復習内容がおよそ半分ずつになる
+  // 出題プランを事前に決める（詳しくは question-generator.js の planQuestionSequence）。
+  gameState.questionPlan = PLANNED_GRADE_TERMS.has(gameState.gradeTerm)
+    ? planQuestionSequence(gameState.totalQuestions, templateSets, gameState.gradeTerm)
+    : null;
   isBusy = false;
 
   ui.setEnemy(gameState.enemy);
@@ -397,7 +480,7 @@ function beginQuestion() {
   if (gameState.questionPlan) {
     const slot = gameState.questionPlan[gameState.solvedQuestions] || null;
     gameState.currentSlot = slot;
-    candidateTemplates = getCandidateTemplatesForSlot(slot, templateSets);
+    candidateTemplates = getCandidateTemplatesForSlot(slot, templateSets, gameState.gradeTerm);
   } else {
     gameState.currentSlot = null;
     candidateTemplates = templateSets[gameState.gradeTerm] || [];
@@ -418,6 +501,10 @@ function beginQuestion() {
     gameState.currentQuestionRecord = {
       category: problem.category,
       text: problem.text,
+      // 分数を含む問題文は textParts（縦型分数を描画するための構造化データ）を持つ。
+      // 整数・小数のみの問題は null のままで、ui.js は text をそのまま表示する。
+      textParts: problem.textParts || null,
+      // left/right/result は数値または分数オブジェクト（value-utils.js が共通して扱う）。
       left: problem.left,
       operator: problem.operator,
       right: problem.right,

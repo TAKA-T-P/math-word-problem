@@ -3,27 +3,35 @@
 // （tools/question-validator.html）の両方から使われる、副作用のない純粋関数群です。
 
 import { safeCalculate } from "./answer-checker.js";
+import { areValuesEqual, isValueNegative, isFractionValue, isValidFraction } from "./value-utils.js";
 import { areNumbersEqual, getDecimalPlaces, formatNumber, parseFormattedNumber } from "./number-utils.js";
+import { renderValueHtml, buildFractionAriaLabel } from "./value-renderer.js";
 
 // このアプリで扱う小数点以下の最大桁数（4.15 のような2桁まで）。
 // これを超える場合は「小学4年生として不自然」と判断してエラーにします。
 const MAX_REASONABLE_DECIMAL_PLACES = 2;
 
+// 分数の分母として許容する範囲（小学4年生として不自然に大きな分母を避けるため）。
+const MIN_REASONABLE_FRACTION_DENOMINATOR = 2;
+const MAX_REASONABLE_FRACTION_DENOMINATOR = 12;
+
 // 現在 data/index.js に登録されている出題範囲キー。新しい学期を追加したら、
 // ここにも追加してください（data/index.js から自動取得すると循環参照になりやすいため、
 // 検証専用の一覧として独立させています）。
-const VALID_GRADE_TERMS = ["4-1", "4-2", "4-multi-step"];
+const VALID_GRADE_TERMS = ["4-1", "4-2", "4-3", "4-multi-step"];
 
 export const VALID_OPERATORS = ["+", "-", "×", "÷"];
 export const VALID_QUESTION_TYPES = ["singleStep", "multiStep"];
 
+// template（{変数名}を埋め込んだ文字列）と textParts（文字列/値パーツの配列）は、
+// どちらか一方があればよい（両方必須ではない）ため、REQUIRED_TEMPLATE_FIELDS には含めず、
+// validateTemplate() 内で個別にチェックします。
 export const REQUIRED_TEMPLATE_FIELDS = [
   "id",
   "gradeTerm",
   "category",
   "difficulty",
   "questionType",
-  "template",
   "variables",
   "generatorType",
   "solutionRoutes",
@@ -38,12 +46,16 @@ const GENERATOR_TYPE_RULES = {
     requiredVariableKeys: [],
     computedVariables: []
   },
-  // decimalAddition / decimalSubtraction は standard のエイリアス（生成戦略は同じ）。
+  // decimalAddition / decimalSubtraction / decimalTimesInteger は standard のエイリアス（生成戦略は同じ）。
   decimalAddition: {
     requiredVariableKeys: [],
     computedVariables: []
   },
   decimalSubtraction: {
+    requiredVariableKeys: [],
+    computedVariables: []
+  },
+  decimalTimesInteger: {
     requiredVariableKeys: [],
     computedVariables: []
   },
@@ -57,6 +69,11 @@ const GENERATOR_TYPE_RULES = {
     computedVariables: ["dividend"],
     divisorRange: { min: 10, max: 99 } // わる数は2けた
   },
+  exactDecimalDivisionByInteger: {
+    requiredVariableKeys: ["divisor", "quotient"],
+    computedVariables: ["dividend"],
+    divisorRange: { min: 2, max: 9 } // わる数は整数(1けた)
+  },
   multiStepDivideFirst: {
     requiredVariableKeys: ["divisor", "quotient"],
     computedVariables: ["dividend"]
@@ -64,6 +81,17 @@ const GENERATOR_TYPE_RULES = {
   multiStepSumToDivisible: {
     requiredVariableKeys: ["divisor", "quotient", "a"],
     computedVariables: ["b", "sum"]
+  },
+  // 分数どうしのたし算・ひき算は、a・bという名前の分数型変数を直接使う（自動計算される変数は無い）。
+  sameDenominatorFractionAddition: {
+    requiredVariableKeys: ["a", "b"],
+    computedVariables: [],
+    isFractionGenerator: true
+  },
+  sameDenominatorFractionSubtraction: {
+    requiredVariableKeys: ["a", "b"],
+    computedVariables: [],
+    isFractionGenerator: true
   }
 };
 
@@ -82,6 +110,98 @@ function getGeneratorRule(generatorType) {
 }
 
 /**
+ * textParts（{type:"text", value:string} と {type:"value", ref:変数名} の配列）の
+ * 構造を検証します。ref は variables（または generatorType が計算する変数）の
+ * キー名と一致している必要があります。
+ */
+function validateTextParts(template, rule, errors) {
+  if (!Array.isArray(template.textParts)) {
+    errors.push("textPartsは配列である必要があります");
+    return;
+  }
+  if (template.textParts.length === 0) {
+    errors.push("textPartsが空です");
+  }
+  const hasVariables = template.variables && typeof template.variables === "object";
+  const knownVariableKeys =
+    rule && hasVariables ? new Set([...Object.keys(template.variables), ...rule.computedVariables]) : null;
+
+  template.textParts.forEach((part, i) => {
+    if (!part || typeof part !== "object") {
+      errors.push(`textParts[${i}] がオブジェクトではありません`);
+      return;
+    }
+    if (part.type === "text") {
+      if (typeof part.value !== "string") {
+        errors.push(`textParts[${i}]（text）のvalueは文字列である必要があります`);
+      }
+    } else if (part.type === "value") {
+      if (typeof part.ref !== "string" || part.ref.length === 0) {
+        errors.push(`textParts[${i}]（value）のrefは変数名（文字列）で指定してください`);
+      } else if (knownVariableKeys && !knownVariableKeys.has(part.ref)) {
+        errors.push(`textParts[${i}].ref が未定義の変数です: ${part.ref}`);
+      }
+    } else {
+      errors.push(`textParts[${i}] のtypeが不正です: ${part.type}（"text" か "value" のみ）`);
+    }
+  });
+}
+
+/**
+ * 分数型の変数定義 { type:"fraction", denominator, numeratorMin, numeratorMax } を検証します。
+ */
+function validateFractionVariable(key, range, errors) {
+  if (!Number.isInteger(range.denominator) || range.denominator === 0) {
+    errors.push(`variables.${key}.denominator は0以外の整数である必要があります: ${range.denominator}`);
+  } else if (
+    range.denominator < MIN_REASONABLE_FRACTION_DENOMINATOR ||
+    range.denominator > MAX_REASONABLE_FRACTION_DENOMINATOR
+  ) {
+    errors.push(
+      `variables.${key}.denominator が範囲外です: ${range.denominator}` +
+        `（${MIN_REASONABLE_FRACTION_DENOMINATOR}〜${MAX_REASONABLE_FRACTION_DENOMINATOR}である必要があります）`
+    );
+  }
+  if (!Number.isInteger(range.numeratorMin) || !Number.isInteger(range.numeratorMax)) {
+    errors.push(`variables.${key} の numeratorMin/numeratorMax は整数である必要があります`);
+  } else if (range.numeratorMin > range.numeratorMax) {
+    errors.push(`variables.${key}.numeratorMin が numeratorMax を超えています`);
+  }
+  if (typeof range.numeratorMin === "number" && range.numeratorMin < 0) {
+    errors.push(`variables.${key}.numeratorMin が負の数です: ${range.numeratorMin}`);
+  }
+}
+
+/**
+ * 同分母分数のたし算・ひき算のテンプレートについて、a・bの分母が一致しているか、
+ * ひき算の場合に答えが負にならない範囲設計になっているかを検証します
+ * （実際の生成値ではなく、テンプレートの範囲定義そのものを静的にチェックします）。
+ */
+function validateSameDenominatorFractionRanges(template, errors) {
+  const variables = template.variables || {};
+  const a = variables.a;
+  const b = variables.b;
+  if (!a || !b || a.type !== "fraction" || b.type !== "fraction") {
+    errors.push(`generatorType="${template.generatorType}" には、a と b が分数型の変数として必要です`);
+    return;
+  }
+  if (a.denominator !== b.denominator) {
+    errors.push(`同分母分数の問題なのに、a と b の分母が異なります: ${a.denominator} / ${b.denominator}`);
+  }
+  if (
+    template.generatorType === "sameDenominatorFractionSubtraction" &&
+    typeof a.numeratorMin === "number" &&
+    typeof b.numeratorMax === "number" &&
+    a.numeratorMin < b.numeratorMax
+  ) {
+    errors.push(
+      `ひき算の答えが負になる可能性があります: a.numeratorMin(${a.numeratorMin}) が` +
+        ` b.numeratorMax(${b.numeratorMax}) より小さいです`
+    );
+  }
+}
+
+/**
  * 問題テンプレート1件の構造を検証します（数値は生成しません）。
  * @returns {{valid: boolean, errors: string[]}}
  */
@@ -96,6 +216,13 @@ export function validateTemplate(template) {
     if (template[field] === undefined || template[field] === null) {
       errors.push(`必須項目が不足しています: ${field}`);
     }
+  }
+
+  // template（文字列）と textParts（配列）は、どちらか一方が必要（両方必須ではない）。
+  const hasStringTemplate = typeof template.template === "string" && template.template.length > 0;
+  const hasTextParts = Array.isArray(template.textParts);
+  if (!hasStringTemplate && !hasTextParts) {
+    errors.push("templateまたはtextPartsのいずれかが必要です");
   }
 
   if (template.questionType !== undefined && !VALID_QUESTION_TYPES.includes(template.questionType)) {
@@ -122,13 +249,18 @@ export function validateTemplate(template) {
   const rule = generatorTypeKnown ? getGeneratorRule(template.generatorType) : null;
   const hasVariables = template.variables && typeof template.variables === "object";
 
-  if (typeof template.template === "string" && hasVariables && rule) {
+  if (hasStringTemplate && hasVariables && rule) {
     const knownVariableKeys = new Set([...Object.keys(template.variables), ...rule.computedVariables]);
     for (const key of extractPlaceholders(template.template)) {
       if (!knownVariableKeys.has(key)) {
         errors.push(`未定義の変数が問題文で使われています: {${key}}`);
       }
     }
+  }
+  if (hasTextParts && rule) {
+    validateTextParts(template, rule, errors);
+  }
+  if (hasVariables && rule) {
     for (const requiredKey of rule.requiredVariableKeys) {
       if (!(requiredKey in template.variables)) {
         errors.push(`generatorType="${template.generatorType}" に必要な変数がありません: ${requiredKey}`);
@@ -151,10 +283,17 @@ export function validateTemplate(template) {
     }
   }
 
-  // 小数を扱う変数（decimalPlaces 指定あり）が、不自然に細かすぎないかを確認する。
+  if (rule && rule.isFractionGenerator && hasVariables) {
+    validateSameDenominatorFractionRanges(template, errors);
+  }
+
+  // 小数（decimalPlaces指定）・分数（type:"fraction"）の変数定義を検証する。
   if (hasVariables) {
     for (const [key, range] of Object.entries(template.variables)) {
-      if (range && range.decimalPlaces > MAX_REASONABLE_DECIMAL_PLACES) {
+      if (!range || typeof range !== "object") continue;
+      if (range.type === "fraction") {
+        validateFractionVariable(key, range, errors);
+      } else if (range.decimalPlaces > MAX_REASONABLE_DECIMAL_PLACES) {
         errors.push(
           `variables.${key} の decimalPlaces が大きすぎます: ${range.decimalPlaces}（最大 ${MAX_REASONABLE_DECIMAL_PLACES} 桁）`
         );
@@ -207,7 +346,7 @@ function validateSingleStepSolutionRoutes(template, rule, errors) {
  * - ステップ数が2であること（このバージョンは2段階固定）
  * - 各ステップの演算記号の妥当性
  * - resultKey の重複（同じルート内）
- * - left/right の source/key が正しいか（未定義の変数を参照していないか、
+ * - left/right の source/key が正しいか（未定義の変数/中間結果の参照や循環参照が無いか、
  *   source:"result" が「同じルート内の、より前のステップの resultKey」だけを
  *   参照しているか＝これにより自己参照・前方参照・循環参照を機械的に防止する）
  */
@@ -330,6 +469,56 @@ export function validateTemplateSet(templates) {
 }
 
 /**
+ * 値（数値または分数）1つが、表示・検証の観点から正常かどうかを確認します。
+ * - 数値: 小数点以下の桁数が多すぎないか、formatNumber/parseFormattedNumberの往復変換が一致するか
+ * - 分数: 分子・分母が整数かつ分母が0でないか、表示用HTML・aria-labelが正しく生成できるか
+ */
+function validateValueRepresentation(value, label, errors) {
+  if (isFractionValue(value)) {
+    if (!isValidFraction(value)) {
+      errors.push(`${label} が正しい分数の形ではありません: ${JSON.stringify(value)}`);
+      return;
+    }
+    try {
+      const html = renderValueHtml(value);
+      if (!html || typeof html !== "string" || html.length === 0) {
+        errors.push(`${label} の分数表示用HTMLが生成できません`);
+      }
+    } catch (error) {
+      errors.push(`${label} の分数表示用HTML生成中にエラーが発生しました: ${error.message}`);
+    }
+    const ariaLabel = buildFractionAriaLabel(value);
+    if (!/^\d+分の\d+$/.test(ariaLabel)) {
+      errors.push(`${label} のaria-labelの形式が不正です: ${ariaLabel}`);
+    }
+    return;
+  }
+
+  if (typeof value !== "number") return;
+  if (getDecimalPlaces(value) > MAX_REASONABLE_DECIMAL_PLACES) {
+    errors.push(`${label} の小数点以下の桁数が不自然です: ${value}`);
+  }
+  const roundTrip = parseFormattedNumber(formatNumber(value));
+  if (!areNumbersEqual(roundTrip, value)) {
+    errors.push(`${label} の表示用の数値表現が内部値と一致しません: ${value} → "${formatNumber(value)}" → ${roundTrip}`);
+  }
+}
+
+/**
+ * 値の配列に、指定した値と構造的に一致する要素が含まれているかを判定します
+ * （分数はオブジェクト参照ではなく、分子・分母の値で判定します）。
+ */
+function containsValue(values, target) {
+  if (target === undefined) return true;
+  if (isFractionValue(target)) {
+    return values.some(
+      (v) => isFractionValue(v) && v.numerator === target.numerator && v.denominator === target.denominator
+    );
+  }
+  return values.includes(target);
+}
+
+/**
  * question-generator.js が生成した問題（数値確定後）を検証します。
  * 2段階問題（questionType: "multiStep"）は validateGeneratedMultiStepQuestion に委譲します。
  * @returns {{valid: boolean, errors: string[]}}
@@ -361,55 +550,61 @@ export function validateGeneratedQuestion(problem) {
       errors.push(`不正な演算記号です: ${route && route.operator}`);
       continue;
     }
+
     if (route.operator === "÷") {
       if (route.right === 0) {
         errors.push("わる数が0です");
         continue;
       }
-      if (route.left % route.right !== 0) {
-        errors.push(`あまりのあるわり算です: ${route.left}÷${route.right}`);
-        continue;
-      }
-      if (
-        problem.template &&
-        problem.template.generatorType === "exactDivisionTwoDigit" &&
-        (route.right < 10 || route.right > 99)
-      ) {
-        errors.push(`2けたでわるわり算のはずが、わる数が2けたではありません: ${route.right}`);
+      const generatorType = problem.template && problem.template.generatorType;
+      const rule = getGeneratorRule(generatorType);
+      if (rule.divisorRange) {
+        const { min, max } = rule.divisorRange;
+        if (route.right < min || route.right > max) {
+          errors.push(`わる数が想定範囲外です: ${route.right}（${min}〜${max}である必要があります）`);
+        }
       }
     }
+
     const computed = safeCalculate(route.left, route.operator, route.right);
     if (computed === null) {
-      errors.push(`式が計算できません: ${route.left}${route.operator}${route.right}`);
+      errors.push(`式が計算できません（わり切れない場合も含む）: ${route.left}${route.operator}${route.right}`);
       continue;
     }
-    // 小数の内部誤差の影響を受けないよう、厳密な !== ではなく誤差許容の比較を使う。
-    if (route.result !== undefined && !areNumbersEqual(computed, route.result)) {
+    if (route.result !== undefined && !areValuesEqual(computed, route.result)) {
       errors.push(
-        `正解式と計算結果が一致しません: ${route.left}${route.operator}${route.right} => 期待値${route.result}, 計算値${computed}`
+        `正解式と計算結果が一致しません: ${route.left}${route.operator}${route.right} => 期待値${JSON.stringify(route.result)}, 計算値${JSON.stringify(computed)}`
       );
       continue;
     }
-    if (computed < 0) {
-      errors.push(`答えが負の数です: ${route.left}${route.operator}${route.right} = ${computed}`);
+    if (isValueNegative(computed)) {
+      errors.push(`答えが負の数です: ${route.left}${route.operator}${route.right} = ${JSON.stringify(computed)}`);
       continue;
     }
-    for (const value of [route.left, route.right, computed]) {
-      if (getDecimalPlaces(value) > MAX_REASONABLE_DECIMAL_PLACES) {
-        errors.push(`小数点以下の桁数が不自然です: ${value}`);
-      }
-      const roundTrip = parseFormattedNumber(formatNumber(value));
-      if (!areNumbersEqual(roundTrip, value)) {
-        errors.push(`表示用の数値表現が内部値と一致しません: ${value} → "${formatNumber(value)}" → ${roundTrip}`);
+    validateValueRepresentation(route.left, "left", errors);
+    validateValueRepresentation(route.right, "right", errors);
+    validateValueRepresentation(computed, "計算結果", errors);
+
+    // 同分母分数のたし算・ひき算では、実際に生成された left/right の分母が一致しているかも確認する。
+    if (isFractionValue(route.left) && isFractionValue(route.right) && (route.operator === "+" || route.operator === "-")) {
+      if (route.left.denominator !== route.right.denominator) {
+        errors.push(`同分母分数の問題なのに、生成されたleft/rightの分母が異なります: ${route.left.denominator} / ${route.right.denominator}`);
       }
     }
+
     validResults.push(computed);
   }
 
   if (validResults.length === 0) {
     errors.push("正解ルートが存在しません(すべてのルートが不正です)");
-  } else if (new Set(validResults).size > 1) {
-    errors.push(`solutionRoutes間で答えが一致しません: ${[...new Set(validResults)].join(", ")}`);
+  } else {
+    const uniqueResultKeys = new Set(validResults.map((v) => (isFractionValue(v) ? `${v.numerator}/${v.denominator}` : v)));
+    if (uniqueResultKeys.size > 1) {
+      const anyMismatch = validResults.some((v, i) => i > 0 && !areValuesEqual(v, validResults[0]));
+      if (anyMismatch) {
+        errors.push(`solutionRoutes間で答えが一致しません: ${JSON.stringify(validResults)}`);
+      }
+    }
   }
 
   if (!Array.isArray(problem.choices)) {
@@ -425,11 +620,11 @@ export function validateGeneratedQuestion(problem) {
       if (!operatorValues.includes(canonical.operator)) {
         errors.push(`必要な演算記号カードがありません: ${canonical.operator}`);
       }
-      if (!numberValues.includes(canonical.left)) {
-        errors.push(`必要な数値カードがありません: ${canonical.left}`);
+      if (!containsValue(numberValues, canonical.left)) {
+        errors.push(`必要な数値カードがありません: ${JSON.stringify(canonical.left)}`);
       }
-      if (!numberValues.includes(canonical.right)) {
-        errors.push(`必要な数値カードがありません: ${canonical.right}`);
+      if (!containsValue(numberValues, canonical.right)) {
+        errors.push(`必要な数値カードがありません: ${JSON.stringify(canonical.right)}`);
       }
     }
   }
@@ -444,6 +639,9 @@ export function validateGeneratedQuestion(problem) {
  * 「すべての解法ルートを実際に最後まで進められるか」「2つ目以降のステップのカードが
  * 正しいか」といった重い検証は、開発者用の検証ページから
  * multi-step-engine.js の simulateAllRoutesToCompletion() を使って行います。
+ * 今回のバージョンでは2段階問題に小数・分数は存在しませんが、areValuesEqual /
+ * isValueNegative など値の型を意識しない共通関数を使っているため、将来
+ * 小数・分数の2段階問題を追加した場合もこの関数はそのまま使えます。
  */
 function validateGeneratedMultiStepQuestion(problem) {
   const errors = [];
@@ -476,11 +674,6 @@ function validateGeneratedMultiStepQuestion(problem) {
           routeValid = false;
           break;
         }
-        if (step.left % step.right !== 0) {
-          errors.push(`[${route.id}] あまりのあるわり算です: ${step.left}÷${step.right}`);
-          routeValid = false;
-          break;
-        }
       }
       const computed = safeCalculate(step.left, step.operator, step.right);
       if (computed === null) {
@@ -488,15 +681,15 @@ function validateGeneratedMultiStepQuestion(problem) {
         routeValid = false;
         break;
       }
-      if (step.result !== undefined && !areNumbersEqual(computed, step.result)) {
+      if (step.result !== undefined && !areValuesEqual(computed, step.result)) {
         errors.push(
-          `[${route.id}] 正解式と計算結果が一致しません: ${step.left}${step.operator}${step.right} => 期待値${step.result}, 計算値${computed}`
+          `[${route.id}] 正解式と計算結果が一致しません: ${step.left}${step.operator}${step.right} => 期待値${JSON.stringify(step.result)}, 計算値${JSON.stringify(computed)}`
         );
         routeValid = false;
         break;
       }
-      if (computed < 0) {
-        errors.push(`[${route.id}] 途中結果が負の数です: ${step.left}${step.operator}${step.right} = ${computed}`);
+      if (isValueNegative(computed)) {
+        errors.push(`[${route.id}] 途中結果が負の数です: ${step.left}${step.operator}${step.right} = ${JSON.stringify(computed)}`);
         routeValid = false;
         break;
       }
@@ -505,16 +698,19 @@ function validateGeneratedMultiStepQuestion(problem) {
     if (routeValid) {
       const lastStep = route.steps[route.steps.length - 1];
       finalResultsByRoute.push(lastStep.result);
-      if (finalAnswer !== undefined && lastStep.result !== finalAnswer) {
-        errors.push(`[${route.id}] 最終結果が answer/result と一致しません: ${lastStep.result} !== ${finalAnswer}`);
+      if (finalAnswer !== undefined && !areValuesEqual(lastStep.result, finalAnswer)) {
+        errors.push(`[${route.id}] 最終結果が answer/result と一致しません: ${JSON.stringify(lastStep.result)} !== ${JSON.stringify(finalAnswer)}`);
       }
     }
   }
 
   if (finalResultsByRoute.length === 0) {
     errors.push("正解ルートが存在しません(すべてのルートが不正です)");
-  } else if (new Set(finalResultsByRoute).size > 1) {
-    errors.push(`solutionRoutes間で最終的な答えが一致しません: ${[...new Set(finalResultsByRoute)].join(", ")}`);
+  } else {
+    const anyMismatch = finalResultsByRoute.some((v, i) => i > 0 && !areValuesEqual(v, finalResultsByRoute[0]));
+    if (anyMismatch) {
+      errors.push(`solutionRoutes間で最終的な答えが一致しません: ${JSON.stringify(finalResultsByRoute)}`);
+    }
   }
 
   if (!Array.isArray(problem.choices)) {
@@ -527,8 +723,8 @@ function validateGeneratedMultiStepQuestion(problem) {
       errors.push("1つ目の式の時点で、中間結果カードが選択肢に含まれています");
     }
     const dummyNumberValues = problem.choices.filter((c) => c.type === "number" && c.source === "dummy").map((c) => c.value);
-    if (finalAnswer !== undefined && dummyNumberValues.includes(finalAnswer)) {
-      errors.push(`最終的な答え(${finalAnswer})がダミーカードとして選択肢に含まれています`);
+    if (finalAnswer !== undefined && containsValue(dummyNumberValues, finalAnswer)) {
+      errors.push(`最終的な答え(${JSON.stringify(finalAnswer)})がダミーカードとして選択肢に含まれています`);
     }
 
     // 1つ目の式で必要になりうる数値・演算記号(候補ルートすべて)が揃っているか
@@ -539,11 +735,11 @@ function validateGeneratedMultiStepQuestion(problem) {
       if (!operatorValues.includes(step.operator)) {
         errors.push(`必要な演算記号カードがありません: ${step.operator}`);
       }
-      if (!numberValues.includes(step.left)) {
-        errors.push(`必要な数値カードがありません: ${step.left}`);
+      if (!containsValue(numberValues, step.left)) {
+        errors.push(`必要な数値カードがありません: ${JSON.stringify(step.left)}`);
       }
-      if (!numberValues.includes(step.right)) {
-        errors.push(`必要な数値カードがありません: ${step.right}`);
+      if (!containsValue(numberValues, step.right)) {
+        errors.push(`必要な数値カードがありません: ${JSON.stringify(step.right)}`);
       }
     }
   }

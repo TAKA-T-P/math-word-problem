@@ -5,6 +5,8 @@
 // （整数・小数・大きな数の表示をアプリ全体で統一するため）。
 
 import { formatNumber } from "./number-utils.js";
+import { isFractionValue } from "./value-utils.js";
+import { renderValueHtml, renderTextPartsHtml, escapeHtml } from "./value-renderer.js";
 import { loadSelectedGradeTerm, saveSelectedGradeTerm } from "./storage.js";
 
 const DRAG_THRESHOLD = 6;
@@ -221,8 +223,18 @@ export function updateScoreboard(score, rank) {
 
 // ============== 問題表示・カード ==============
 
+// 分数を含む問題文は problem.textParts（文字列/値パーツの配列）を持つため、
+// value-renderer.js の renderTextPartsHtml() で縦型分数を含むHTMLとして描画する。
+// 整数・小数のみの問題は textParts を持たないため、従来どおり problem.text を
+// そのまま（エスケープした上で）表示する。
+function renderQuestionText(problem) {
+  els.questionText.innerHTML = problem.textParts
+    ? renderTextPartsHtml(problem.textParts)
+    : escapeHtml(problem.text);
+}
+
 export function renderProblem(problem) {
-  els.questionText.textContent = problem.text;
+  renderQuestionText(problem);
   updateStepIndicator(problem);
   slots = [null, null, null];
   allCards = problem.choices.map((c) => ({ ...c }));
@@ -262,27 +274,35 @@ function isCardPlaced(cardId) {
 }
 
 /**
- * 表示文字列の長さに応じて、カードの文字サイズを自動調整するためのクラス名を返す。
- * 125,000 のような大きな数のカードが、はみ出したり読みにくくなったりしないようにする。
+ * 値の種類・表示文字列の長さに応じて、カードの文字サイズ・高さを自動調整するための
+ * クラス名を返す。分数は縦に場所を取るため専用のクラス（choice-value-fraction）を、
+ * 125,000 のような大きな数は文字サイズを縮小するクラスを返す。
  */
-function getNumberCardSizeClass(displayText) {
+function getValueCardSizeClass(value) {
+  if (isFractionValue(value)) return "choice-value-fraction";
+  const displayText = formatNumber(value);
   if (displayText.length >= 8) return "choice-value-xlong";
   if (displayText.length >= 6) return "choice-value-long";
   return "";
 }
+
+const SIZE_CLASS_NAMES = ["choice-value-long", "choice-value-xlong", "choice-value-fraction"];
 
 function renderChoices() {
   els.choicesContainer.innerHTML = "";
   for (const card of allCards) {
     const placed = isCardPlaced(card.cardId);
     const isIntermediate = card.source === "intermediate";
-    const displayText = card.type === "number" ? formatNumber(card.value) : String(card.value);
-    const sizeClass = card.type === "number" ? getNumberCardSizeClass(displayText) : "";
+    const sizeClass = card.type === "number" ? getValueCardSizeClass(card.value) : "";
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = `choice-card choice-${card.type}${placed ? " placed" : ""}${isIntermediate ? " choice-intermediate" : ""}${sizeClass ? ` ${sizeClass}` : ""}`;
     btn.dataset.cardId = card.cardId;
-    btn.textContent = displayText;
+    if (card.type === "number") {
+      btn.innerHTML = renderValueHtml(card.value);
+    } else {
+      btn.textContent = String(card.value);
+    }
     if (placed) {
       btn.disabled = true;
       btn.tabIndex = -1;
@@ -294,13 +314,16 @@ function renderChoices() {
 function renderSlots() {
   slots.forEach((card, index) => {
     const el = els.answerSlots[index];
-    el.classList.remove("choice-value-long", "choice-value-xlong");
+    el.classList.remove(...SIZE_CLASS_NAMES);
     if (card) {
-      const displayText = card.type === "number" ? formatNumber(card.value) : String(card.value);
-      el.textContent = displayText;
+      if (card.type === "number") {
+        el.innerHTML = renderValueHtml(card.value);
+      } else {
+        el.textContent = String(card.value);
+      }
       el.classList.add("filled");
       if (card.type === "number") {
-        const sizeClass = getNumberCardSizeClass(displayText);
+        const sizeClass = getValueCardSizeClass(card.value);
         if (sizeClass) el.classList.add(sizeClass);
       }
       el.dataset.cardId = card.cardId;
@@ -423,7 +446,11 @@ function moveDrag(cardData, source, destIndex, destIsPool) {
 }
 
 function showGhost(x, y, card) {
-  els.dragGhost.textContent = card.type === "number" ? formatNumber(card.value) : String(card.value);
+  if (card.type === "number") {
+    els.dragGhost.innerHTML = renderValueHtml(card.value);
+  } else {
+    els.dragGhost.textContent = String(card.value);
+  }
   els.dragGhost.className = `drag-ghost drag-ghost-${card.type} visible`;
   positionGhost(x, y);
 }
@@ -564,7 +591,7 @@ export function unlockInput() {
 // ============== 正解・不正解演出 ==============
 
 export function showCorrectEffect(resultValue) {
-  els.resultBox.textContent = formatNumber(resultValue);
+  els.resultBox.innerHTML = renderValueHtml(resultValue);
   els.correctMark.classList.add("show");
   nextQuestionTapLock = false;
   window.setTimeout(() => {
@@ -582,7 +609,7 @@ export function hideCorrectEffect() {
  * 大きな正解演出（showCorrectEffect）とは別の、控えめなマークを表示する。
  */
 export function showIntermediateStepEffect(stepResult) {
-  els.resultBox.textContent = formatNumber(stepResult);
+  els.resultBox.innerHTML = renderValueHtml(stepResult);
   els.intermediateMark.classList.add("show");
 }
 
@@ -665,8 +692,15 @@ export function hideRetireDialog() {
 const RANGE_LABELS = {
   "4-1": "小学4年生・1学期",
   "4-2": "小学4年生・2学期",
+  "4-3": "小学4年生・3学期",
   "4-multi-step": "2段階問題・整数（開発版）"
 };
+
+// 内部レベル（レベルMAXの計算には8を使う）を、タイトル画面のボタンと同じ表示ラベルに変換する。
+// 8だけが「レベルMAX」の内部値のため、8のときだけ "MAX" と表示する。
+function formatLevelLabel(level) {
+  return level === 8 ? "MAX" : String(level);
+}
 
 export function showResultScreen(data) {
   els.resultTitle.textContent = data.title;
@@ -675,7 +709,7 @@ export function showResultScreen(data) {
   qs("screen-result").classList.toggle("result-dark", data.variant === "gameover");
 
   els.resultRange.textContent = RANGE_LABELS[data.gradeTerm] || data.gradeTerm;
-  els.resultLevel.textContent = `レベル${data.level}`;
+  els.resultLevel.textContent = `レベル${formatLevelLabel(data.level)}`;
   els.resultCorrectCount.textContent = `${data.correctCount}問`;
   els.resultHeartsRemaining.textContent = `${data.heartsRemaining} / ${data.maxHearts}`;
   els.resultScore.textContent = String(data.score);
@@ -700,13 +734,16 @@ function renderHistory(history) {
 }
 
 function buildSingleStepHistoryHtml(entry, index) {
+  // 分数を含む問題文は entry.textParts（value-renderer.js で縦型分数として描画）を使う。
+  // 整数・小数のみの問題は textParts を持たないため、entry.text をそのまま表示する。
+  const questionTextHtml = entry.textParts ? renderTextPartsHtml(entry.textParts) : escapeHtml(entry.text);
   return `
     <div class="history-item-head">
       <span class="history-index">第${index + 1}問</span>
-      <span class="history-category">${entry.category}</span>
+      <span class="history-category">${escapeHtml(entry.category)}</span>
     </div>
-    <p class="history-text">${entry.text}</p>
-    <p class="history-formula">正解式：${formatNumber(entry.left)}${entry.operator}${formatNumber(entry.right)} = ${formatNumber(entry.result)}${entry.answerUnit}</p>
+    <p class="history-text">${questionTextHtml}</p>
+    <p class="history-formula">正解式：${renderValueHtml(entry.left)}${entry.operator}${renderValueHtml(entry.right)} = ${renderValueHtml(entry.result)}${escapeHtml(entry.answerUnit || "")}</p>
     <p class="history-final">さいごに作った式：${entry.lastAttemptText}</p>
     <div class="history-counts">
       <span>不正解 ${entry.incorrectCount}回</span>
@@ -730,15 +767,15 @@ function buildMultiStepHistoryHtml(entry, index) {
     .join("");
 
   const answerLine = entry.isComplete
-    ? `<p class="history-final">答え：${formatNumber(entry.finalAnswer)}${entry.answerUnit}</p>`
+    ? `<p class="history-final">答え：${renderValueHtml(entry.finalAnswer)}${escapeHtml(entry.answerUnit || "")}</p>`
     : `<p class="history-final history-step-incomplete">状態：解答途中</p>`;
 
   return `
     <div class="history-item-head">
       <span class="history-index">第${index + 1}問</span>
-      <span class="history-category">${entry.category}</span>
+      <span class="history-category">${escapeHtml(entry.category)}</span>
     </div>
-    <p class="history-text">${entry.text}</p>
+    <p class="history-text">${escapeHtml(entry.text)}</p>
     ${stepsHtml}
     ${answerLine}
     <div class="history-counts">
