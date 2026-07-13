@@ -4,6 +4,9 @@
 
 const SOUND_SETTING_KEY = "mathWordBattle_soundEnabled";
 const SELECTED_RANGE_KEY = "mathWordBattle_selectedGradeTerm";
+const LAST_MODE_KEY = "mathWordBattle_lastMode";
+const LAST_TRAINING_GRADETERM_KEY = "mathWordBattle_lastTrainingGradeTerm";
+const LAST_TRAINING_CATEGORY_KEY = "mathWordBattle_lastTrainingCategoryId";
 
 let localStorageAvailable = null;
 
@@ -126,6 +129,102 @@ export function saveSelectedGradeTerm(gradeTerm) {
   }
   try {
     window.localStorage.setItem(SELECTED_RANGE_KEY, gradeTerm);
+  } catch (error) {
+    // 保存に失敗しても、アプリの動作は継続する
+  }
+}
+
+/**
+ * 前回選択したモード（"battle" | "training"）を読み込みます。
+ * 保存が無い/壊れている/localStorageが使えない場合は null を返します
+ * （呼び出し側＝ui.jsが、"battle" 以外の不正値は "battle" 扱いにフォールバックしてください）。
+ * トレーニングのスコア・進捗・ハイスコアはここでは一切扱いません（保存対象外）。
+ */
+export function loadLastMode() {
+  if (!checkLocalStorageAvailable()) {
+    return null;
+  }
+  try {
+    const raw = window.localStorage.getItem(LAST_MODE_KEY);
+    return raw === "battle" || raw === "training" ? raw : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
+ * 選択したモード（"battle" | "training"）を保存します。
+ */
+export function saveLastMode(mode) {
+  if (!checkLocalStorageAvailable()) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(LAST_MODE_KEY, mode);
+  } catch (error) {
+    // 保存に失敗しても、アプリの動作は継続する
+  }
+}
+
+/**
+ * 前回選択したトレーニングの学年・学期（gradeTerm）を読み込みます。
+ * 保存が無い/localStorageが使えない場合は null を返します。
+ * 値が実際に選択可能な学期かどうかは、呼び出し側（ui.js）が
+ * data/category-registry.js の内容と突き合わせて判定してください。
+ */
+export function loadLastTrainingGradeTerm() {
+  if (!checkLocalStorageAvailable()) {
+    return null;
+  }
+  try {
+    const raw = window.localStorage.getItem(LAST_TRAINING_GRADETERM_KEY);
+    return typeof raw === "string" && raw.length > 0 ? raw : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
+ * 選択したトレーニングの学年・学期（gradeTerm）を保存します。
+ */
+export function saveLastTrainingGradeTerm(gradeTerm) {
+  if (!checkLocalStorageAvailable()) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(LAST_TRAINING_GRADETERM_KEY, gradeTerm);
+  } catch (error) {
+    // 保存に失敗しても、アプリの動作は継続する
+  }
+}
+
+/**
+ * 前回選択したトレーニングのカテゴリID（categoryId）を読み込みます。
+ * 保存が無い/localStorageが使えない場合は null を返します。
+ * 値が実際に選択可能なカテゴリかどうかは、呼び出し側（ui.js）が
+ * data/category-registry.js の内容と突き合わせて判定してください。
+ */
+export function loadLastTrainingCategoryId() {
+  if (!checkLocalStorageAvailable()) {
+    return null;
+  }
+  try {
+    const raw = window.localStorage.getItem(LAST_TRAINING_CATEGORY_KEY);
+    return typeof raw === "string" && raw.length > 0 ? raw : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
+ * 選択したトレーニングのカテゴリID（categoryId）を保存します。
+ */
+export function saveLastTrainingCategoryId(categoryId) {
+  if (!checkLocalStorageAvailable()) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(LAST_TRAINING_CATEGORY_KEY, categoryId);
   } catch (error) {
     // 保存に失敗しても、アプリの動作は継続する
   }

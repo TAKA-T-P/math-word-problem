@@ -16,6 +16,7 @@ import { validateGeneratedQuestion } from "./question-validator.js";
 import { initializeMultiStepQuestion } from "./multi-step-engine.js";
 import { normalizeNumber, multiplyDecimal } from "./number-utils.js";
 import { valueKey, isFractionValue, formatValue } from "./value-utils.js";
+import { fractionToNumber } from "./fraction-utils.js";
 
 export const OPERATORS = ["+", "-", "×", "÷"];
 
@@ -400,13 +401,14 @@ const NUMBER_ROW_SLOTS = 4;
  * 演算記号カードは、常に4枚すべて（+ - × ÷）を、この順番の固定位置で表示します
  * （正解として認める記号は本物のカード、それ以外はダミーカードになりますが、
  * 見た目の並び順・位置は常に同じです）。数値カードは上段に配置し、
- * 実際の数値の後にダミー数値を追加して4枚に揃えます（上段内の並び順はシャッフルします）。
+ * 実際の数値の後にダミー数値を追加して4枚に揃えたうえで、数字の小さい順に左から並べます
+ * （分数は数値換算した上で比較します）。
  *
  * @param {Array<{value:number, source:string}>} realNumbers - 実際に見えている数値（重複は事前に排除しておくこと）
  * @param {string|string[]} correctOperators - 今回正解として認める演算記号（複数解法で1つ目の式の演算子が
  *   ルートによって異なる場合は配列で複数渡せる。例: ["+","-"]）
  * @param {number|number[]} resultsToExclude - ダミー数値として出現させてはいけない値（その式の答え・最終的な答えなど）
- * @returns {Array} 上段（数値・シャッフル済み）→下段（演算記号・固定順）の順のカード配列
+ * @returns {Array} 上段（数値・小さい順）→下段（演算記号・固定順）の順のカード配列
  */
 export function buildChoiceCards(realNumbers, correctOperators, resultsToExclude) {
   const uniqueCorrectOps = [...new Set(Array.isArray(correctOperators) ? correctOperators : [correctOperators])];
@@ -431,7 +433,16 @@ export function buildChoiceCards(realNumbers, correctOperators, resultsToExclude
     numberCards.push(makeCard("number", dummy, "dummy"));
   }
 
-  return [...shuffleArray(numberCards), ...operatorCards];
+  // 上段の数値カードは、数字の小さい順に左から並べる（分数は数値換算して比較する）。
+  const sortedNumberCards = numberCards
+    .slice()
+    .sort((a, b) => numericValueForSort(a.value) - numericValueForSort(b.value));
+
+  return [...sortedNumberCards, ...operatorCards];
+}
+
+function numericValueForSort(value) {
+  return isFractionValue(value) ? fractionToNumber(value) : value;
 }
 
 /**

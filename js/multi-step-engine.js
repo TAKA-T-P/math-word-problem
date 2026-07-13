@@ -109,8 +109,8 @@ export function getStepProgressLabel(problem) {
 // （今回のバージョンの2段階問題はすべて整数のみのため、返る文字列の見た目は
 //  従来のformatNumber()と変わらない。将来、分数の2段階問題を追加した場合に
 //  自動的に縦型分数のHTMLになるようにするための下地）。
-function formatFormula(left, operator, right) {
-  return `${renderValueHtml(left)}${operator}${renderValueHtml(right)}`;
+function formatFormula(left, operator, right, { useSeparator = true } = {}) {
+  return `${renderValueHtml(left, { useSeparator })}${operator}${renderValueHtml(right, { useSeparator })}`;
 }
 
 /**
@@ -191,7 +191,8 @@ export function buildHistoryEntry(problem) {
     if (completed) {
       steps.push({
         stepNumber: i + 1,
-        formula: formatFormula(completed.left, completed.operator, completed.right),
+        // 結果画面の履歴では桁区切りカンマを付けない（例: "3,900" ではなく "3900"）。
+        formula: formatFormula(completed.left, completed.operator, completed.right, { useSeparator: false }),
         result: completed.result,
         completed: true
       });

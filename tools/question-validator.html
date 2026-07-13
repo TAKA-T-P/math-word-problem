@@ -233,11 +233,59 @@
 
   <div id="template-list"></div>
 
+  <h1 style="margin-top:40px;">トレーニングモード：カテゴリレジストリ</h1>
+  <p class="desc">
+    data/category-registry.js に登録されているカテゴリの一覧です。
+    IDの重複・学期の不整合・対応するテンプレートの有無・孤立した categoryId（レジストリに
+    存在しない categoryId を持つテンプレート）が無いかを検証します。
+  </p>
+  <div class="stats">
+    <div class="stat-box">
+      <div class="label">カテゴリ数</div>
+      <div class="value" id="cat-stat-total">-</div>
+    </div>
+    <div class="stat-box ok">
+      <div class="label">正常なカテゴリ数</div>
+      <div class="value" id="cat-stat-ok">-</div>
+    </div>
+    <div class="stat-box error">
+      <div class="label">エラーがあるカテゴリ数</div>
+      <div class="value" id="cat-stat-error">-</div>
+    </div>
+  </div>
+  <div id="registry-global-errors"></div>
+  <div id="category-list"></div>
+
+  <h1 style="margin-top:40px;">トレーニングモード：出題テスト</h1>
+  <p class="desc">
+    カテゴリを1つ選び、「5問生成する」で実際の generateTrainingQuestions() の結果（テンプレートID・
+    問題文・正解式・questionType・選択肢カード数）を確認できます。「20回検証する」は、
+    毎回5問ちょうど生成されるか・他のカテゴリが混ざらないか・例外が発生しないか・
+    問題文の重複が無いかを20回まとめて検証します。
+  </p>
+  <div class="toolbar">
+    <label>カテゴリ
+      <select id="training-test-category"></select>
+    </label>
+    <button id="training-generate-btn" type="button">5問生成する</button>
+    <button id="training-validate-btn" type="button">20回検証する</button>
+  </div>
+  <div id="training-validate-result"></div>
+  <div id="training-generated-list"></div>
+
   <script type="module">
-    import { getAllTemplates } from "../data/index.js";
-    import { validateTemplateSet, validateGeneratedQuestion } from "../js/question-validator.js";
+    import { getAllTemplates, TEMPLATE_SETS_BY_GRADE_TERM } from "../data/index.js";
+    import { categoryRegistry } from "../data/category-registry.js";
+    import {
+      validateTemplateSet,
+      validateGeneratedQuestion,
+      filterValidTemplateSets,
+      validateCategoryRegistry,
+      validateCategoryRegistryAgainstTemplates
+    } from "../js/question-validator.js";
     import { generateQuestionFromTemplate, getContentGroup } from "../js/question-generator.js";
     import { simulateAllRoutesToCompletion } from "../js/multi-step-engine.js";
+    import { generateTrainingQuestions, validateTrainingSetGeneration } from "../js/training-mode.js";
     import { renderValueHtml, renderTextPartsHtml, escapeHtml } from "../js/value-renderer.js";
 
     const SINGLE_STEP_SAMPLE_COUNT = 30;
@@ -450,6 +498,163 @@
       document.getElementById(id).addEventListener("change", renderList);
     }
     render();
+
+    // ============================================================
+    // トレーニングモード：カテゴリレジストリの検証
+    // ============================================================
+
+    function buildCategoryRows() {
+      const allTemplates = getAllTemplates();
+      const registryResult = validateCategoryRegistry(categoryRegistry);
+      const crossResult = validateCategoryRegistryAgainstTemplates(categoryRegistry, allTemplates);
+      const globalErrors = [...registryResult.errors, ...crossResult.errors];
+
+      const rows = categoryRegistry.map((category) => {
+        const templatesForCategory = allTemplates.filter((t) => t.categoryId === category.id);
+        const singleStepCount = templatesForCategory.filter((t) => t.questionType === "singleStep").length;
+        const multiStepCount = templatesForCategory.filter((t) => t.questionType === "multiStep").length;
+        const errors = globalErrors.filter((e) => e.includes(`"${category.id}"`));
+        if (category.enabledInTraining && templatesForCategory.length === 0 && !errors.some((e) => e.includes("テンプレートが1件"))) {
+          errors.push("対応するテンプレートがありません");
+        }
+        return {
+          id: category.id,
+          label: category.label,
+          gradeTerm: category.gradeTerm,
+          gradeLabel: category.gradeLabel,
+          enabledInTraining: category.enabledInTraining,
+          order: category.order,
+          templateCount: templatesForCategory.length,
+          singleStepCount,
+          multiStepCount,
+          errors,
+          valid: errors.length === 0
+        };
+      });
+
+      const ungroupedErrors = globalErrors.filter((e) => !categoryRegistry.some((c) => e.includes(`"${c.id}"`)));
+      return { rows, globalErrors: ungroupedErrors };
+    }
+
+    function renderCategoryRow(row) {
+      const card = document.createElement("div");
+      card.className = `template-card ${row.valid ? "ok" : "error"}`;
+      const errorsHtml = row.errors.length
+        ? `<ul class="template-errors">${row.errors.map((e) => `<li>${escapeHtml(e)}</li>`).join("")}</ul>`
+        : "";
+      card.innerHTML = `
+        <div class="template-card-head">
+          <span class="badge ${row.valid ? "badge-ok" : "badge-error"}">${row.valid ? "OK" : "NG"}</span>
+          <span class="badge ${row.enabledInTraining ? "badge-ok" : "badge-review"}">${row.enabledInTraining ? "トレーニング選択可" : "非表示"}</span>
+          <span class="template-id">${escapeHtml(row.id)}</span>
+          <span class="template-category">${escapeHtml(row.label)}</span>
+        </div>
+        <div class="template-meta">
+          学期: ${escapeHtml(row.gradeLabel)}（${escapeHtml(row.gradeTerm)}） / order: ${row.order} /
+          テンプレート数: ${row.templateCount}（1段階 ${row.singleStepCount} / 2段階 ${row.multiStepCount}）
+        </div>
+        ${errorsHtml}
+      `;
+      return card;
+    }
+
+    function renderCategoryList() {
+      const { rows, globalErrors } = buildCategoryRows();
+      document.getElementById("cat-stat-total").textContent = String(rows.length);
+      document.getElementById("cat-stat-ok").textContent = String(rows.filter((r) => r.valid).length);
+      document.getElementById("cat-stat-error").textContent = String(rows.filter((r) => !r.valid).length);
+
+      const globalErrorsEl = document.getElementById("registry-global-errors");
+      globalErrorsEl.innerHTML = globalErrors.length
+        ? `<div class="template-card error"><div class="template-card-head"><span class="badge badge-error">レジストリ全体のエラー</span></div><ul class="template-errors">${globalErrors.map((e) => `<li>${escapeHtml(e)}</li>`).join("")}</ul></div>`
+        : "";
+
+      const listEl = document.getElementById("category-list");
+      listEl.innerHTML = "";
+      for (const row of rows.slice().sort((a, b) => a.order - b.order)) {
+        listEl.appendChild(renderCategoryRow(row));
+      }
+    }
+
+    renderCategoryList();
+
+    // ============================================================
+    // トレーニングモード：出題テスト（実際の generateTrainingQuestions() を使う）
+    // ============================================================
+
+    function getValidatedTrainingTemplates() {
+      const filtered = filterValidTemplateSets(TEMPLATE_SETS_BY_GRADE_TERM);
+      return Object.values(filtered).flat();
+    }
+
+    function populateTrainingTestCategorySelect() {
+      const select = document.getElementById("training-test-category");
+      select.innerHTML = categoryRegistry
+        .filter((c) => c.enabledInTraining)
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.gradeLabel)} ／ ${escapeHtml(c.label)}</option>`)
+        .join("");
+    }
+
+    function renderTrainingQuestionCard(problem, index) {
+      const example = formatExample(problem);
+      const card = document.createElement("div");
+      card.className = "template-card ok";
+      card.innerHTML = `
+        <div class="template-card-head">
+          <span class="badge badge-ok">問題${index + 1}</span>
+          <span class="template-id">${escapeHtml(problem.templateId)}</span>
+          <span class="template-category">${escapeHtml(problem.category)}</span>
+        </div>
+        <div class="template-meta">
+          questionType: ${escapeHtml(problem.questionType)} / 値の種類: ${escapeHtml(classifyValueType(problem.template))} /
+          選択肢カード数: ${problem.choices.length}
+        </div>
+        <div class="template-example">
+          <div>問題文: ${example.textHtml}</div>
+          <div>正解式: ${example.formulaHtml}${problem.questionType === "multiStep" ? "" : ` = ${example.resultHtml}${escapeHtml(example.unit || "")}`}</div>
+          ${problem.questionType === "multiStep" ? `<div>答え: ${example.resultHtml}${escapeHtml(example.unit || "")}</div>` : ""}
+        </div>
+      `;
+      return card;
+    }
+
+    document.getElementById("training-generate-btn").addEventListener("click", () => {
+      const categoryId = document.getElementById("training-test-category").value;
+      const templates = getValidatedTrainingTemplates();
+      const resultEl = document.getElementById("training-generated-list");
+      resultEl.innerHTML = "";
+      try {
+        const questions = generateTrainingQuestions(categoryId, templates, 5);
+        questions.forEach((problem, i) => {
+          resultEl.appendChild(renderTrainingQuestionCard(problem, i));
+        });
+      } catch (error) {
+        resultEl.innerHTML = `<div class="template-card error"><div class="template-card-head"><span class="badge badge-error">生成エラー</span></div><p>${escapeHtml(error.message)}</p></div>`;
+      }
+    });
+
+    document.getElementById("training-validate-btn").addEventListener("click", () => {
+      const categoryId = document.getElementById("training-test-category").value;
+      const templates = getValidatedTrainingTemplates();
+      const result = validateTrainingSetGeneration(categoryId, templates, 20, 5);
+      const el = document.getElementById("training-validate-result");
+      const errorsHtml = result.errors.length
+        ? `<ul class="template-errors">${result.errors.slice(0, 30).map((e) => `<li>${escapeHtml(e)}</li>`).join("")}</ul>`
+        : "";
+      el.innerHTML = `
+        <div class="template-card ${result.valid ? "ok" : "error"}">
+          <div class="template-card-head">
+            <span class="badge ${result.valid ? "badge-ok" : "badge-error"}">${result.valid ? "OK" : "NG"}</span>
+            <span>${result.attempts}回中 ${result.successfulRuns} 回成功</span>
+          </div>
+          ${errorsHtml}
+        </div>
+      `;
+    });
+
+    populateTrainingTestCategorySelect();
   </script>
 </body>
 </html>

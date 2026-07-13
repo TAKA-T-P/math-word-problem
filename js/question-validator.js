@@ -748,6 +748,132 @@ function validateGeneratedMultiStepQuestion(problem) {
 }
 
 /**
+ * 出題範囲ごとのテンプレート集合を検証し、不正なテンプレートを出題プールから除外します。
+ * questionType が multiStep のテンプレートも（専用の gradeTerm に登録されていれば）
+ * 通常どおり対象になります。除外したものはコンソールに理由を出力します。
+ * js/game.js（通常バトル）・js/training-mode.js（トレーニング）の両方が、
+ * 起動時にこの関数を通してから出題プールとして使用します。
+ */
+export function filterValidTemplateSets(sets) {
+  const filtered = {};
+  for (const [gradeTerm, templates] of Object.entries(sets || {})) {
+    const { results } = validateTemplateSet(templates);
+    const byId = new Map(templates.map((t) => [t.id, t]));
+    const validTemplates = [];
+
+    for (const result of results) {
+      if (!result.valid) {
+        console.error(`[question-validator] テンプレート "${result.id}" (${gradeTerm}) は無効なため出題プールから除外します:`, result.errors);
+        continue;
+      }
+      validTemplates.push(byId.get(result.id));
+    }
+
+    filtered[gradeTerm] = validTemplates;
+  }
+  return filtered;
+}
+
+/**
+ * カテゴリレジストリ（data/category-registry.js の categoryRegistry）自体の構造を検証します。
+ * - id が空でない文字列で、重複していないか
+ * - label / gradeLabel が空でないか
+ * - gradeTerm が実在の出題範囲キーか
+ * - order が数値か
+ * @returns {{valid: boolean, errors: string[]}}
+ */
+export function validateCategoryRegistry(registry) {
+  const errors = [];
+  if (!Array.isArray(registry)) {
+    return { valid: false, errors: ["カテゴリレジストリが配列ではありません"] };
+  }
+
+  const idCounts = new Map();
+  for (const category of registry) {
+    if (!category || typeof category.id !== "string" || category.id.length === 0) {
+      errors.push("idが空、または文字列ではないカテゴリがあります");
+      continue;
+    }
+    idCounts.set(category.id, (idCounts.get(category.id) || 0) + 1);
+
+    if (typeof category.label !== "string" || category.label.length === 0) {
+      errors.push(`カテゴリ "${category.id}" のlabelが空です`);
+    }
+    if (typeof category.gradeLabel !== "string" || category.gradeLabel.length === 0) {
+      errors.push(`カテゴリ "${category.id}" のgradeLabelが空です`);
+    }
+    if (!VALID_GRADE_TERMS.includes(category.gradeTerm)) {
+      errors.push(`カテゴリ "${category.id}" のgradeTermが不正です: ${category.gradeTerm}`);
+    }
+    if (typeof category.order !== "number" || !Number.isFinite(category.order)) {
+      errors.push(`カテゴリ "${category.id}" のorderが数値ではありません`);
+    }
+    if (typeof category.enabledInTraining !== "boolean") {
+      errors.push(`カテゴリ "${category.id}" のenabledInTrainingがtrue/falseではありません`);
+    }
+  }
+
+  const duplicateIds = [...idCounts.entries()].filter(([, count]) => count > 1).map(([id]) => id);
+  if (duplicateIds.length > 0) {
+    errors.push(`カテゴリIDが重複しています: ${duplicateIds.join(", ")}`);
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+/**
+ * カテゴリレジストリと、実際のテンプレート一覧（data/index.js の getAllTemplates() 相当）との
+ * 対応関係を検証します。
+ * - トレーニング選択可能な（enabledInTraining）カテゴリに、対応するテンプレートが1件以上あるか
+ * - そのカテゴリのテンプレートが、レジストリに登録した学期（gradeTerm）と矛盾していないか
+ *   （"multi-step-integer" は gradeTerm: "4-multi-step" のテンプレートを
+ *    4-2学期グループの1カテゴリとして扱う特別枠のため、この学期一致チェックの対象外とします）
+ * - どのカテゴリにも属さない（レジストリに存在しない categoryId を持つ）孤立したテンプレートがないか
+ * @returns {{valid: boolean, errors: string[]}}
+ */
+export function validateCategoryRegistryAgainstTemplates(registry, allTemplates) {
+  const errors = [];
+  const templatesByCategoryId = new Map();
+
+  for (const template of allTemplates || []) {
+    const categoryId = template && template.categoryId;
+    if (typeof categoryId !== "string" || categoryId.length === 0) {
+      errors.push(`テンプレート "${template && template.id}" に categoryId がありません`);
+      continue;
+    }
+    const arr = templatesByCategoryId.get(categoryId) || [];
+    arr.push(template);
+    templatesByCategoryId.set(categoryId, arr);
+  }
+
+  const registryIds = new Set((registry || []).map((c) => c.id));
+
+  for (const category of (registry || []).filter((c) => c.enabledInTraining)) {
+    const templates = templatesByCategoryId.get(category.id) || [];
+    if (templates.length === 0) {
+      errors.push(`カテゴリ "${category.id}"（${category.label}）に対応するテンプレートが1件もありません`);
+      continue;
+    }
+    if (category.id !== "multi-step-integer") {
+      const wrongTermTemplates = templates.filter((t) => t.gradeTerm !== category.gradeTerm);
+      if (wrongTermTemplates.length > 0) {
+        errors.push(
+          `カテゴリ "${category.id}"（学期: ${category.gradeTerm}）に、異なる学期のテンプレートが含まれています: ${wrongTermTemplates.map((t) => t.id).join(", ")}`
+        );
+      }
+    }
+  }
+
+  for (const [categoryId, templates] of templatesByCategoryId) {
+    if (!registryIds.has(categoryId)) {
+      errors.push(`レジストリに存在しない categoryId を持つテンプレートがあります: ${categoryId}（${templates.map((t) => t.id).join(", ")}）`);
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+/**
  * 検証エラーをコンソールに分かりやすく出力します。
  */
 export function logValidationErrors(id, errors) {

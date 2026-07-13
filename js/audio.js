@@ -109,6 +109,18 @@ export function playCountdown(final = false) {
 }
 
 /**
+ * 解答時間ゲージが減っている間、0.5秒ごとに鳴らす「カチ」という時計の秒針のような音。
+ * 短く控えめな音量にし、連続で鳴っても耳障りになりすぎないようにしている。
+ */
+export function playTick() {
+  if (!canPlay()) {
+    return;
+  }
+  const now = audioContext.currentTime;
+  playTone({ frequency: 1200, startTime: now, duration: 0.045, type: "square", peakVolume: 0.1 });
+}
+
+/**
  * 正解音（明るい上昇アルペジオ）。
  */
 export function playCorrect() {

@@ -18,14 +18,21 @@
 
     <div class="title-block">
       <h1 class="app-title">文章題クエスト！</h1>
-      <p class="app-subtitle">式をつくって モンスターを たおそう！</p>
+      <p class="app-subtitle">式をつくって エネミーを たおそう！</p>
+      <!-- 中身は js/enemy-list.js（js/ui.js）から動的に生成する。エネミーを追加・変更した場合、
+           ここは書き換えなくても自動的に反映される。 -->
       <div class="enemy-preview" aria-hidden="true">
-        <span>👹</span><span>👺</span><span>👻</span><span>🤖</span><span>🐙</span><span>👽</span><span>🐲</span>
+        <div id="enemy-preview-track" class="enemy-preview-track"></div>
       </div>
     </div>
 
-    <div class="setting-block">
-      <h2 class="setting-heading">しゅつだいはんい</h2>
+    <div class="mode-select" id="mode-select">
+      <button class="mode-btn selected" type="button" data-mode="battle">文章題バトル</button>
+      <button class="mode-btn" type="button" data-mode="training">トレーニング</button>
+    </div>
+
+    <div class="setting-block" id="battle-settings">
+      <h2 class="setting-heading">出題はんい</h2>
       <div id="range-select" class="option-grid three-col">
         <button class="range-btn selected" type="button" data-range="4-1" data-label="小学4年生・1学期">4年1学期</button>
         <button class="range-btn" type="button" data-range="4-2" data-label="小学4年生・2学期">4年2学期</button>
@@ -38,18 +45,28 @@
         <button class="range-btn disabled" type="button" disabled>6年3学期<span class="soon-badge">今後追加</span></button>
       </div>
 
-      <h2 class="setting-heading">なんいど</h2>
-      <div id="level-select" class="option-grid three-col">
-        <button class="level-btn selected" type="button" data-level="1">レベル1</button>
-        <button class="level-btn" type="button" data-level="2">レベル2</button>
-        <button class="level-btn" type="button" data-level="3">レベル3</button>
-        <button class="level-btn" type="button" data-level="4">レベル4</button>
-        <button class="level-btn" type="button" data-level="5">レベル5</button>
-        <button class="level-btn" type="button" data-level="6">レベルMAX</button>
+      <h2 class="setting-heading">レベル</h2>
+      <div id="level-select" class="option-grid six-col">
+        <button class="level-btn" type="button" data-level="1">1</button>
+        <button class="level-btn" type="button" data-level="2">2</button>
+        <button class="level-btn selected" type="button" data-level="3">3</button>
+        <button class="level-btn" type="button" data-level="4">4</button>
+        <button class="level-btn" type="button" data-level="5">5</button>
+        <button class="level-btn" type="button" data-level="6">MAX</button>
       </div>
     </div>
 
-    <button id="start-btn" class="primary-btn" type="button">ぼうけんに でる！</button>
+    <!-- トレーニングモードのカテゴリ一覧は data/category-registry.js から js/ui.js が動的に生成する。
+         HTML側にはコンテナだけを用意する（個別カテゴリのボタンは書かない）。 -->
+    <div class="setting-block" id="training-settings" aria-hidden="true">
+      <h2 class="setting-heading">学年・学期</h2>
+      <div id="training-gradeterm-select" class="option-grid three-col"></div>
+
+      <h2 class="setting-heading">問題の しゅるい</h2>
+      <div id="training-category-select" class="option-grid"></div>
+    </div>
+
+    <button id="start-btn" class="primary-btn" type="button">バトル スタート！</button>
 
     <p class="credit-text">©2026 T.TAKEMOTO / KEC Glows</p>
   </section>
@@ -62,30 +79,38 @@
   <!-- ============== バトル画面 ============== -->
   <section id="screen-battle" class="screen">
     <div id="damage-flash" class="damage-flash" aria-hidden="true"></div>
+    <div id="danger-overlay" class="danger-overlay" aria-hidden="true"></div>
 
     <header class="battle-header">
-      <div class="status-pill">
+      <div class="status-pill battle-only">
         <span class="status-label">スコア</span>
         <span id="score-display" class="status-value">0</span>
         <span id="rank-display" class="rank-badge">H</span>
         <span id="score-delta" class="score-delta" aria-hidden="true"></span>
       </div>
+      <div class="status-pill training-status-pill training-only" id="training-status-pill" aria-hidden="true">
+        <span class="status-label">トレーニング</span>
+        <span id="training-category-display" class="status-value">－</span>
+      </div>
       <button id="retire-btn" class="retire-btn" type="button">リタイア</button>
     </header>
 
     <div class="enemy-area">
-      <div class="enemy-visual">
-        <div id="enemy-emoji" class="enemy-emoji">👹</div>
-        <div id="enemy-name" class="enemy-name">エネミー</div>
+      <div class="enemy-visual battle-only">
+        <div class="enemy-identity">
+          <div id="enemy-emoji" class="enemy-emoji">👹</div>
+          <div id="enemy-name" class="enemy-name">エネミー</div>
+        </div>
         <div class="hp-bar">
           <div id="enemy-hp-fill" class="hp-fill"></div>
         </div>
       </div>
+      <div id="training-progress" class="training-progress training-only" aria-hidden="true">問題 1／5</div>
       <p id="question-text" class="question-text">もんだいを よみこみちゅう…</p>
       <div id="step-indicator" class="step-indicator" aria-hidden="true"></div>
     </div>
 
-    <div class="battle-status-row">
+    <div class="battle-status-row battle-only">
       <div id="hearts-container" class="hearts-container" aria-label="のこりハート"></div>
       <div class="timer-bar">
         <div id="timer-fill" class="timer-fill"></div>
@@ -115,7 +140,7 @@
 
     <div id="retire-confirm-dialog" class="dialog-overlay" aria-hidden="true">
       <div class="dialog-box">
-        <p>バトルをリタイアしますか？</p>
+        <p id="retire-confirm-text">バトルをリタイアしますか？</p>
         <div class="dialog-buttons">
           <button id="retire-confirm-yes" class="dialog-btn danger" type="button">リタイアする</button>
           <button id="retire-confirm-no" class="dialog-btn" type="button">バトルに戻る</button>
@@ -132,14 +157,19 @@
       <h2 id="result-title" class="result-title">クリア！</h2>
 
       <div class="result-summary">
-        <div class="result-item"><span class="result-item-label">しゅつだいはんい</span><strong id="result-range" class="result-item-value">小学4年生・1学期</strong></div>
-        <div class="result-item"><span class="result-item-label">レベル</span><strong id="result-level" class="result-item-value">1</strong></div>
-        <div class="result-item"><span class="result-item-label">せいかい数</span><strong id="result-correct-count" class="result-item-value">0問</strong></div>
-        <div class="result-item"><span class="result-item-label">のこりハート</span><strong id="result-hearts-remaining" class="result-item-value">3</strong></div>
-        <div class="result-item highlight"><span class="result-item-label">今回のスコア</span><strong id="result-score" class="result-item-value">0</strong></div>
-        <div class="result-item highlight"><span class="result-item-label">今回のランク</span><strong id="result-rank" class="result-item-value">H</strong></div>
-        <div class="result-item result-item-full"><span class="result-item-label">ハイスコア</span><strong id="result-highscore" class="result-item-value">0</strong></div>
-        <p id="result-newrecord" class="new-record" aria-hidden="true">✨ ハイスコア こうしん！ ✨</p>
+        <div class="result-item battle-only"><span class="result-item-label">出題はんい</span><strong id="result-range" class="result-item-value">小学4年生・1学期</strong></div>
+        <div class="result-item battle-only"><span class="result-item-label">レベル</span><strong id="result-level" class="result-item-value">1</strong></div>
+        <div class="result-item battle-only"><span class="result-item-label">せいかい数</span><strong id="result-correct-count" class="result-item-value">0問</strong></div>
+        <div class="result-item battle-only"><span class="result-item-label">のこりハート</span><strong id="result-hearts-remaining" class="result-item-value">3</strong></div>
+        <div class="result-item highlight battle-only"><span class="result-item-label">今回のスコア</span><strong id="result-score" class="result-item-value">0</strong></div>
+        <div class="result-item highlight battle-only"><span class="result-item-label">今回のランク</span><strong id="result-rank" class="result-item-value">H</strong></div>
+        <div class="result-item result-item-full battle-only"><span class="result-item-label">ハイスコア</span><strong id="result-highscore" class="result-item-value">0</strong></div>
+        <p id="result-newrecord" class="new-record battle-only" aria-hidden="true">✨ ハイスコア こうしん！ ✨</p>
+
+        <div class="result-item result-item-full training-only"><span class="result-item-label">問題の しゅるい</span><strong id="result-training-category" class="result-item-value">－</strong></div>
+        <div class="result-item training-only"><span class="result-item-label">完了</span><strong id="result-training-completed" class="result-item-value">0／5問</strong></div>
+        <div class="result-item training-only"><span class="result-item-label">1回で正解</span><strong id="result-training-firsttry" class="result-item-value">0問</strong></div>
+        <div class="result-item training-only"><span class="result-item-label">ミス</span><strong id="result-training-wrongcount" class="result-item-value">0回</strong></div>
       </div>
 
       <div class="result-buttons">

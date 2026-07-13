@@ -118,12 +118,15 @@ function addThousandsSeparator(integerDigitsString) {
 
 /**
  * 整数・小数・大きな数の表示を統一する関数。
- * - 整数（大きな数を含む）は3桁区切りのカンマを付けます（例: 125000 → "125,000"）。
+ * - 整数（大きな数を含む）は既定で3桁区切りのカンマを付けます（例: 125000 → "125,000"）。
  * - 小数は不要な末尾の0を表示しません（例: 4.150 ではなく "4.15"）。
  * 問題文・選択肢カード・解答欄・■欄・正解演出・問題履歴・デバッグ表示・検証ページのすべてで、
  * この関数だけを数値の表示に使用してください。
+ * @param {number} value
+ * @param {{useSeparator?: boolean}} options - useSeparator: false を指定すると桁区切りカンマを付けない
+ *   （選択肢カード・解答欄は「3,900」ではなく「3900」と表示するため false を指定して呼び出す）。
  */
-export function formatNumber(value) {
+export function formatNumber(value, { useSeparator = true } = {}) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return String(value);
   }
@@ -132,12 +135,12 @@ export function formatNumber(value) {
   const abs = Math.abs(normalized);
 
   if (Number.isInteger(abs)) {
-    return sign + addThousandsSeparator(String(abs));
+    return sign + (useSeparator ? addThousandsSeparator(String(abs)) : String(abs));
   }
 
   const [intPart, fracPartRaw] = abs.toString().split(".");
   const fracPart = (fracPartRaw || "").replace(/0+$/, "");
-  const intWithComma = addThousandsSeparator(intPart);
+  const intWithComma = useSeparator ? addThousandsSeparator(intPart) : intPart;
   return fracPart ? `${sign}${intWithComma}.${fracPart}` : `${sign}${intWithComma}`;
 }
 

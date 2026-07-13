@@ -5,11 +5,12 @@ import { generateQuestion, planQuestionSequence, getCandidateTemplatesForSlot, g
 import { checkAnswer } from "./answer-checker.js";
 import { calculateQuestionScore, calculateRank, toTimeRatioPercent, formatFinalRank } from "./score.js";
 import { loadHighScore, saveHighScoreIfBetter, loadSoundSetting, saveSoundSetting } from "./storage.js";
-import { validateTemplateSet } from "./question-validator.js";
+import { filterValidTemplateSets } from "./question-validator.js";
 import { getDecimalPlaces } from "./number-utils.js";
 import { formatValue, isFractionValue } from "./value-utils.js";
 import { renderValueHtml } from "./value-renderer.js";
 import { gcd, simplifyFraction } from "./fraction-utils.js";
+import { ENEMY_LIST } from "./enemy-list.js";
 import * as multiStepEngine from "./multi-step-engine.js";
 import * as audio from "./audio.js";
 import * as ui from "./ui.js";
@@ -22,16 +23,6 @@ const DEBUG_MODE = new URLSearchParams(window.location.search).get("debug") === 
 // 出題プラン（新内容/復習内容がおよそ半分ずつになる仕組み）を使うモード。
 // 4-2（小学4年生2学期）・4-3（小学4年生3学期）が対象。
 const PLANNED_GRADE_TERMS = new Set(["4-2", "4-3"]);
-
-const ENEMY_LIST = [
-  { emoji: "👹", name: "あかおに" },
-  { emoji: "👺", name: "てんぐ" },
-  { emoji: "👻", name: "おばけ" },
-  { emoji: "🤖", name: "ロボット" },
-  { emoji: "🐙", name: "タコンスター" },
-  { emoji: "👽", name: "エイリアン" },
-  { emoji: "🐲", name: "ドラゴン" }
-];
 
 const DAMAGE_ANIMATION_MS = 480;
 const CLEAR_MESSAGE_DELAY_MS = 1400;
@@ -87,6 +78,25 @@ let timerRemainingMs = 0;
 let timerLastTs = null;
 let lastTimerRatio = 1;
 
+// 解答時間ゲージが減っている間、0.5秒ごとに「カチカチ」と時計の秒針のような音を鳴らす。
+// 正解・不正解・時間切れ・リタイアなど、タイマーが止まるタイミングと連動して必ず止める。
+const TICK_INTERVAL_MS = 500;
+let tickIntervalHandle = null;
+
+function startTickSound() {
+  stopTickSound();
+  tickIntervalHandle = window.setInterval(() => {
+    audio.playTick();
+  }, TICK_INTERVAL_MS);
+}
+
+function stopTickSound() {
+  if (tickIntervalHandle !== null) {
+    window.clearInterval(tickIntervalHandle);
+    tickIntervalHandle = null;
+  }
+}
+
 function cancelTimerLoop() {
   if (timerHandle !== null) {
     cancelAnimationFrame(timerHandle);
@@ -106,10 +116,12 @@ function timerLoop(ts) {
   lastTimerRatio = ratio;
   gameState.timerRemainingRatio = ratio;
   ui.updateTimer(ratio * 100);
+  ui.updateEnemyDangerGlow(ratio);
 
   if (timerRemainingMs <= 0) {
     timerActive = false;
     cancelTimerLoop();
+    stopTickSound();
     onTimerExpired();
     return;
   }
@@ -124,7 +136,9 @@ function startTimer(durationSec) {
   lastTimerRatio = 1;
   timerActive = true;
   ui.updateTimer(100);
+  ui.updateEnemyDangerGlow(1);
   timerHandle = requestAnimationFrame(timerLoop);
+  startTickSound();
 }
 
 function resumeTimer() {
@@ -132,22 +146,23 @@ function resumeTimer() {
   timerLastTs = null;
   timerActive = true;
   timerHandle = requestAnimationFrame(timerLoop);
+  startTickSound();
 }
 
 /**
- * 解答時間ゲージを、指定した割合（0〜1）まで回復させてから再開します
- * （すでにその割合より残量が多い場合は減らさない＝「回復」なので下げる方向には作用しません）。
- * 2段階問題の途中式（第1段階）に正解したときに、ゲージを50%まで回復させるために使います。
+ * 解答時間ゲージを、指定した割合（0〜1）分だけ上乗せして回復させてから再開します
+ * （現在の残量に加算するため、すでに残量が多い場合はその分さらに多く回復し、100%を超える分は切り捨てます）。
+ * 2段階問題の途中式（第1段階）に正解したときに、ゲージを50%分回復させるために使います。
  */
-function resumeTimerWithPartialRecovery(recoverToRatio) {
+function resumeTimerWithPartialRecovery(recoveryRatio) {
   if (timerDurationMs > 0) {
-    const currentRatio = timerRemainingMs / timerDurationMs;
-    if (currentRatio < recoverToRatio) {
-      timerRemainingMs = timerDurationMs * recoverToRatio;
-      lastTimerRatio = recoverToRatio;
-      gameState.timerRemainingRatio = recoverToRatio;
-      ui.updateTimer(recoverToRatio * 100);
-    }
+    const currentRatio = Math.min(1, timerRemainingMs / timerDurationMs);
+    const recoveredRatio = Math.min(1, currentRatio + recoveryRatio);
+    timerRemainingMs = timerDurationMs * recoveredRatio;
+    lastTimerRatio = recoveredRatio;
+    gameState.timerRemainingRatio = recoveredRatio;
+    ui.updateTimer(recoveredRatio * 100);
+    ui.updateEnemyDangerGlow(recoveredRatio);
   }
   resumeTimer();
 }
@@ -155,6 +170,7 @@ function resumeTimerWithPartialRecovery(recoverToRatio) {
 function stopTimer() {
   timerActive = false;
   cancelTimerLoop();
+  stopTickSound();
 }
 
 // ---------- ユーティリティ ----------
@@ -167,9 +183,10 @@ function pickRandomEnemy() {
   return ENEMY_LIST[Math.floor(Math.random() * ENEMY_LIST.length)];
 }
 
+// 最終問題の解答時間は、1問目のちょうど2倍の速さ（＝時間は半分）になるよう線形に加速する。
 function speedMultiplier(questionNumber, totalQuestions) {
   if (totalQuestions <= 1) return 1;
-  return 1 + (0.5 * (questionNumber - 1)) / (totalQuestions - 1);
+  return 1 + (questionNumber - 1) / (totalQuestions - 1);
 }
 
 /**
@@ -204,32 +221,6 @@ function pushCurrentRecordToHistory() {
     gameState.currentQuestionRecord = null;
     gameState.historyPushed = true;
   }
-}
-
-/**
- * 出題範囲ごとのテンプレート集合を検証し、不正なテンプレートを出題プールから除外する。
- * questionType が multiStep のテンプレートも（"4-multi-step" のような専用の
- * gradeTerm に登録されていれば）通常どおり出題対象になる。
- * 除外したものはコンソールに理由を出力する。
- */
-function filterValidTemplateSets(sets) {
-  const filtered = {};
-  for (const [gradeTerm, templates] of Object.entries(sets || {})) {
-    const { results } = validateTemplateSet(templates);
-    const byId = new Map(templates.map((t) => [t.id, t]));
-    const validTemplates = [];
-
-    for (const result of results) {
-      if (!result.valid) {
-        console.error(`[question-validator] テンプレート "${result.id}" (${gradeTerm}) は無効なため出題プールから除外します:`, result.errors);
-        continue;
-      }
-      validTemplates.push(byId.get(result.id));
-    }
-
-    filtered[gradeTerm] = validTemplates;
-  }
-  return filtered;
 }
 
 function formatSolutionRoutes(problem) {
@@ -446,7 +437,8 @@ export function startNewGame(settings) {
   });
 }
 
-async function runCountdown() {
+// トレーニングモード（js/training-mode.js）もこのカウントダウン演出をそのまま再利用する。
+export async function runCountdown() {
   const steps = ["3", "2", "1", "START!"];
   for (let i = 0; i < steps.length; i++) {
     ui.setCountdownText(steps[i]);
@@ -598,15 +590,15 @@ function handleMultiStepJudge(problem, answer) {
   handleIntermediateStepCorrect(problem, outcome.stepResult);
 }
 
-// 途中式（第1段階）に正解したときに、解答時間ゲージを回復させる割合。
-const INTERMEDIATE_STEP_TIMER_RECOVERY_RATIO = 0.5;
+// 途中式（第1段階）に正解したときに、解答時間ゲージへ上乗せする回復量（現在の残量に加算）。
+const INTERMEDIATE_STEP_TIMER_RECOVERY_AMOUNT = 0.5;
 
 /**
  * 2段階問題で、1つ目の式に正解したときの処理。
  * 敵HP・スコア・正解数・履歴は変更しない（最終式に正解したときだけ変更する）。
- * 短い演出の間はタイマーを止めたままにし、演出後に解答時間ゲージを50%まで回復してから
- * 再開する（すでに50%より多く残っている場合は減らさない）。演出中は「＝」連打で
- * 2問目まで自動的に進んでしまわないよう、入力ロックを維持したままにする。
+ * 短い演出の間はタイマーを止めたままにし、演出後に解答時間ゲージへ50%分を上乗せして回復してから
+ * 再開する（現在の残量に加算するため、多く残っていればさらに多く回復する。100%は超えない）。
+ * 演出中は「＝」連打で2問目まで自動的に進んでしまわないよう、入力ロックを維持したままにする。
  */
 function handleIntermediateStepCorrect(problem, stepResult) {
   audio.playCorrect();
@@ -616,7 +608,7 @@ function handleIntermediateStepCorrect(problem, stepResult) {
   window.setTimeout(() => {
     ui.hideIntermediateStepEffect();
     ui.renderStepChoices(problem);
-    resumeTimerWithPartialRecovery(INTERMEDIATE_STEP_TIMER_RECOVERY_RATIO);
+    resumeTimerWithPartialRecovery(INTERMEDIATE_STEP_TIMER_RECOVERY_AMOUNT);
     ui.unlockInput();
     isBusy = false;
   }, INTERMEDIATE_STEP_DELAY_MS);

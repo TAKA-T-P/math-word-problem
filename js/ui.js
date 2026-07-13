@@ -7,7 +7,18 @@
 import { formatNumber } from "./number-utils.js";
 import { isFractionValue } from "./value-utils.js";
 import { renderValueHtml, renderTextPartsHtml, escapeHtml } from "./value-renderer.js";
-import { loadSelectedGradeTerm, saveSelectedGradeTerm } from "./storage.js";
+import {
+  loadSelectedGradeTerm,
+  saveSelectedGradeTerm,
+  loadLastMode,
+  saveLastMode,
+  loadLastTrainingGradeTerm,
+  saveLastTrainingGradeTerm,
+  loadLastTrainingCategoryId,
+  saveLastTrainingCategoryId
+} from "./storage.js";
+import { getGradeTermGroups, getCategoriesForGradeTerm } from "../data/category-registry.js";
+import { ENEMY_LIST } from "./enemy-list.js";
 
 const DRAG_THRESHOLD = 6;
 
@@ -41,7 +52,14 @@ function qs(id) {
 
 function cacheElements() {
   els = {
+    appEl: qs("app"),
     soundToggleBtn: qs("sound-toggle-btn"),
+    modeSelect: qs("mode-select"),
+    enemyPreviewTrack: qs("enemy-preview-track"),
+    battleSettings: qs("battle-settings"),
+    trainingSettings: qs("training-settings"),
+    trainingGradeTermSelect: qs("training-gradeterm-select"),
+    trainingCategorySelect: qs("training-category-select"),
     rangeSelect: qs("range-select"),
     levelSelect: qs("level-select"),
     startBtn: qs("start-btn"),
@@ -52,6 +70,8 @@ function cacheElements() {
     scoreDisplay: qs("score-display"),
     rankDisplay: qs("rank-display"),
     scoreDelta: qs("score-delta"),
+    trainingCategoryDisplay: qs("training-category-display"),
+    trainingProgress: qs("training-progress"),
     enemyEmoji: qs("enemy-emoji"),
     enemyName: qs("enemy-name"),
     enemyHpFill: qs("enemy-hp-fill"),
@@ -69,9 +89,11 @@ function cacheElements() {
     battleMessage: qs("battle-message"),
     tapToContinue: qs("tap-to-continue"),
     retireDialog: qs("retire-confirm-dialog"),
+    retireConfirmText: qs("retire-confirm-text"),
     retireYesBtn: qs("retire-confirm-yes"),
     retireNoBtn: qs("retire-confirm-no"),
     damageFlash: qs("damage-flash"),
+    dangerOverlay: qs("danger-overlay"),
     dragGhost: qs("drag-ghost"),
     screenBattle: qs("screen-battle"),
 
@@ -84,6 +106,10 @@ function cacheElements() {
     resultRank: qs("result-rank"),
     resultHighscore: qs("result-highscore"),
     resultNewRecord: qs("result-newrecord"),
+    resultTrainingCategory: qs("result-training-category"),
+    resultTrainingCompleted: qs("result-training-completed"),
+    resultTrainingFirstTry: qs("result-training-firsttry"),
+    resultTrainingWrongCount: qs("result-training-wrongcount"),
     retryBtn: qs("retry-btn"),
     toTitleBtn: qs("to-title-btn"),
     historyList: qs("history-list")
@@ -102,7 +128,21 @@ export function showScreen(name) {
 
 // ============== タイトル画面 ==============
 
+/**
+ * タイトル画面の「右へスクロールし、左から出現してループする」エネミー一覧を、
+ * js/enemy-list.js の ENEMY_LIST から動的に生成する。継ぎ目の無いループにするため、
+ * 一覧をそのまま2セット分並べる（詳しくは css/style.css の .enemy-preview-track を参照）。
+ * エネミーを追加・変更しても、このファイルや index.html を書き換える必要はない。
+ */
+function populateEnemyPreview() {
+  if (!els.enemyPreviewTrack) return;
+  const doubled = [...ENEMY_LIST, ...ENEMY_LIST];
+  els.enemyPreviewTrack.innerHTML = doubled.map((enemy) => `<span>${escapeHtml(enemy.emoji)}</span>`).join("");
+}
+
 function setupTitleScreen() {
+  populateEnemyPreview();
+
   els.soundToggleBtn.addEventListener("click", () => {
     callbacks.onSoundToggle && callbacks.onSoundToggle();
   });
@@ -121,10 +161,50 @@ function setupTitleScreen() {
     btn.classList.add("selected");
   });
 
+  els.modeSelect.addEventListener("click", (e) => {
+    const btn = e.target.closest(".mode-btn");
+    if (!btn) return;
+    selectMode(btn.dataset.mode);
+    saveLastMode(btn.dataset.mode);
+  });
+
+  els.trainingGradeTermSelect.addEventListener("click", (e) => {
+    const btn = e.target.closest(".gradeterm-btn");
+    if (!btn) return;
+    selectTrainingGradeTermButton(btn);
+    saveLastTrainingGradeTerm(btn.dataset.gradeterm);
+    populateTrainingCategorySelect(btn.dataset.gradeterm);
+  });
+
+  els.trainingCategorySelect.addEventListener("click", (e) => {
+    const btn = e.target.closest(".category-btn");
+    if (!btn) return;
+    selectTrainingCategoryButton(btn);
+    saveLastTrainingCategoryId(btn.dataset.categoryId);
+  });
+
   els.startBtn.addEventListener("click", () => {
+    if (getSelectedMode() === "training") {
+      const categoryBtn = els.trainingCategorySelect.querySelector(".category-btn.selected");
+      if (!categoryBtn) {
+        shakeElement(els.startBtn);
+        return;
+      }
+      const gradeTermBtn = els.trainingGradeTermSelect.querySelector(".gradeterm-btn.selected");
+      const settings = {
+        mode: "training",
+        gradeTerm: gradeTermBtn ? gradeTermBtn.dataset.gradeterm : null,
+        categoryId: categoryBtn.dataset.categoryId,
+        categoryLabel: categoryBtn.textContent
+      };
+      callbacks.onStart && callbacks.onStart(settings);
+      return;
+    }
+
     const rangeBtn = els.rangeSelect.querySelector(".range-btn.selected");
     const levelBtn = els.levelSelect.querySelector(".level-btn.selected");
     const settings = {
+      mode: "battle",
       gradeTerm: rangeBtn ? rangeBtn.dataset.range : "4-1",
       level: levelBtn ? Number.parseInt(levelBtn.dataset.level, 10) : 1
     };
@@ -136,6 +216,8 @@ function setupTitleScreen() {
   }
 
   restoreSelectedGradeTerm();
+  populateTrainingGradeTermSelect();
+  restoreSelectedMode();
 }
 
 function selectRangeButton(btn) {
@@ -157,6 +239,109 @@ function restoreSelectedGradeTerm() {
   );
   if (matchingBtn) {
     selectRangeButton(matchingBtn);
+  }
+}
+
+// ============== モード選択（通常バトル／トレーニング） ==============
+
+function getSelectedMode() {
+  const btn = els.modeSelect.querySelector(".mode-btn.selected");
+  return btn ? btn.dataset.mode : "battle";
+}
+
+/**
+ * モードを切り替える。#app 要素に mode-training クラスを付け外しすることで、
+ * タイトル画面の設定ブロックの出し分けと、バトル画面・結果画面の
+ * バトル専用要素／トレーニング専用要素（.battle-only / .training-only）の
+ * 出し分けの両方を、CSS側でまとめて行う（js/ui.js に個別のif分岐を増やさないため）。
+ */
+export function setMode(mode) {
+  const isTraining = mode === "training";
+  els.appEl.classList.toggle("mode-training", isTraining);
+  els.startBtn.textContent = isTraining ? "トレーニング スタート！" : "バトル スタート！";
+}
+
+function selectMode(mode) {
+  els.modeSelect.querySelectorAll(".mode-btn").forEach((b) => b.classList.remove("selected"));
+  const target = els.modeSelect.querySelector(`.mode-btn[data-mode="${mode}"]`) || els.modeSelect.querySelector(".mode-btn");
+  target.classList.add("selected");
+  setMode(target.dataset.mode);
+}
+
+function restoreSelectedMode() {
+  const saved = loadLastMode();
+  selectMode(saved === "training" ? "training" : "battle");
+}
+
+// ============== トレーニング：学年学期・カテゴリ選択（category-registry.js から動的生成） ==============
+
+function selectTrainingGradeTermButton(btn) {
+  els.trainingGradeTermSelect.querySelectorAll(".gradeterm-btn").forEach((b) => b.classList.remove("selected"));
+  btn.classList.add("selected");
+}
+
+function selectTrainingCategoryButton(btn) {
+  els.trainingCategorySelect.querySelectorAll(".category-btn").forEach((b) => b.classList.remove("selected"));
+  btn.classList.add("selected");
+}
+
+/**
+ * data/category-registry.js の getGradeTermGroups() から、トレーニングで選べる
+ * 学年・学期ボタンを動的に生成する。個別の学期をここにハードコードしない。
+ */
+function populateTrainingGradeTermSelect() {
+  const groups = getGradeTermGroups();
+  els.trainingGradeTermSelect.innerHTML = "";
+  for (const group of groups) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "range-btn gradeterm-btn";
+    btn.dataset.gradeterm = group.gradeTerm;
+    btn.textContent = formatShortGradeTermLabel(group.gradeTerm);
+    els.trainingGradeTermSelect.appendChild(btn);
+  }
+
+  const savedGradeTerm = loadLastTrainingGradeTerm();
+  const matching = groups.find((g) => g.gradeTerm === savedGradeTerm);
+  const initialGradeTerm = matching ? matching.gradeTerm : groups.length > 0 ? groups[0].gradeTerm : null;
+  if (initialGradeTerm) {
+    const btn = els.trainingGradeTermSelect.querySelector(`.gradeterm-btn[data-gradeterm="${initialGradeTerm}"]`);
+    if (btn) selectTrainingGradeTermButton(btn);
+    populateTrainingCategorySelect(initialGradeTerm);
+  }
+}
+
+/**
+ * gradeTerm キー（例: "4-1"）から、タイトル画面ボタン向けの短い表示名を作る
+ * （例: "4-1" → "4年1学期"）。既存の #range-select ボタン表記に合わせている。
+ */
+function formatShortGradeTermLabel(gradeTerm) {
+  const match = /^(\d+)-(\d+)$/.exec(gradeTerm);
+  return match ? `${match[1]}年${match[2]}学期` : gradeTerm;
+}
+
+/**
+ * data/category-registry.js の getCategoriesForGradeTerm() から、選択中の学年学期に
+ * 属するカテゴリ選択ボタンを動的に生成する。個別のカテゴリ名をここにハードコードしない。
+ */
+function populateTrainingCategorySelect(gradeTerm) {
+  const categories = getCategoriesForGradeTerm(gradeTerm);
+  els.trainingCategorySelect.innerHTML = "";
+  for (const category of categories) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "level-btn category-btn";
+    btn.dataset.categoryId = category.id;
+    btn.textContent = category.label;
+    els.trainingCategorySelect.appendChild(btn);
+  }
+
+  const savedCategoryId = loadLastTrainingCategoryId();
+  const matching = categories.find((c) => c.id === savedCategoryId);
+  const initialCategoryId = matching ? matching.id : categories.length > 0 ? categories[0].id : null;
+  if (initialCategoryId) {
+    const btn = els.trainingCategorySelect.querySelector(`.category-btn[data-category-id="${initialCategoryId}"]`);
+    if (btn) selectTrainingCategoryButton(btn);
   }
 }
 
@@ -191,7 +376,9 @@ export function setCountdownText(text) {
 // ============== バトル画面：基本表示 ==============
 
 export function setEnemy(enemy) {
-  els.enemyEmoji.classList.remove("enemy-shake", "enemy-defeated");
+  els.enemyEmoji.classList.remove("enemy-shake", "enemy-defeated", "enemy-danger");
+  els.enemyEmoji.style.filter = "";
+  setDangerOverlayIntensity(0);
   els.enemyEmoji.textContent = enemy.emoji;
   els.enemyName.textContent = enemy.name;
 }
@@ -199,6 +386,47 @@ export function setEnemy(enemy) {
 export function updateEnemyHp(percent) {
   const clamped = Math.max(0, Math.min(100, percent));
   els.enemyHpFill.style.width = `${clamped}%`;
+}
+
+/**
+ * 画面全体をうっすら赤く点滅させる演出（.danger-overlay）の強さを更新する。
+ * intensity が 0 のときは演出を止め、0より大きいときは点滅アニメーションを有効にし、
+ * 点滅の最小/最大の不透明度を intensity に応じてCSS変数で指定する。
+ */
+function setDangerOverlayIntensity(intensity) {
+  if (!els.dangerOverlay) return;
+  if (intensity <= 0) {
+    els.dangerOverlay.classList.remove("pulse");
+    els.dangerOverlay.style.removeProperty("--danger-overlay-min");
+    els.dangerOverlay.style.removeProperty("--danger-overlay-max");
+    return;
+  }
+  els.dangerOverlay.classList.add("pulse");
+  els.dangerOverlay.style.setProperty("--danger-overlay-min", (0.04 + intensity * 0.1).toFixed(3));
+  els.dangerOverlay.style.setProperty("--danger-overlay-max", (0.12 + intensity * 0.28).toFixed(3));
+}
+
+/**
+ * 解答時間ゲージの残量比率（0〜1）に応じて、エネミーを赤く光らせる演出と、
+ * それに合わせた画面全体の赤い点滅演出（.danger-overlay）を更新する。
+ * 残量が50%を下回ったときだけ発動し、0%に近づくほど強く（にじみ・点滅が濃く）なる。
+ * 50%以上に回復した場合は、両方とも通常の見た目に戻す。
+ */
+export function updateEnemyDangerGlow(ratio) {
+  if (!els.enemyEmoji) return;
+  if (ratio >= 0.5) {
+    els.enemyEmoji.classList.remove("enemy-danger");
+    els.enemyEmoji.style.filter = "";
+    setDangerOverlayIntensity(0);
+    return;
+  }
+  const intensity = Math.min(1, Math.max(0, 1 - ratio / 0.5));
+  els.enemyEmoji.classList.add("enemy-danger");
+  const blur = Math.round(6 + intensity * 16);
+  const alpha = (0.45 + intensity * 0.5).toFixed(2);
+  els.enemyEmoji.style.filter =
+    `drop-shadow(0 0 ${blur}px rgba(255, 45, 45, ${alpha})) drop-shadow(0 6px 6px rgba(0, 0, 0, 0.4))`;
+  setDangerOverlayIntensity(intensity);
 }
 
 export function updateHearts(current, max) {
@@ -217,9 +445,93 @@ export function updateTimer(percent) {
   els.timerFill.classList.toggle("timer-warning", clamped <= 25);
 }
 
-export function updateScoreboard(score, rank) {
+// ランクの並び（H が最低、SS が最高）。score.js の RANK_TABLE + TOP_RANK と対応させている。
+const RANK_ORDER = ["H", "G", "F", "E", "D", "C", "B", "A", "S", "SS"];
+// S・SS ランクのときだけ、ランクカードを光らせる。
+const RANK_GLOW_THRESHOLD_INDEX = RANK_ORDER.indexOf("S");
+
+/**
+ * ランク文字列（"S+" のようにノーミス表示の "+" が付いている場合はそれを除いた基準ランク）から、
+ * ランクカードの背景色を求める。H(青)→中間(緑〜黄緑)→A(黄)にかけて色相を連続的に変化させ、
+ * 最高位のSSだけは金色で固定する。
+ */
+function getRankBadgeColor(baseRank) {
+  const idx = RANK_ORDER.indexOf(baseRank);
+  if (idx === -1) return null;
+  if (idx >= RANK_GLOW_THRESHOLD_INDEX) {
+    // S・SS は金色（SSはより明るい金色のグラデーションにする）。
+    return baseRank === "SS" ? "linear-gradient(180deg, #fff2b0, #ffd700)" : "#ffcb3d";
+  }
+  // 色相: H(idx0)=215(青) → A(idx7)=48(黄) にかけて線形に変化させる。
+  const hue = 215 - ((215 - 48) * idx) / (RANK_GLOW_THRESHOLD_INDEX - 1);
+  return `hsl(${hue}, 78%, 55%)`;
+}
+
+/**
+ * ランクカードの色・光る演出を、現在のランクに応じて更新する。
+ */
+function applyRankBadgeStyle(rank) {
+  if (!els.rankDisplay) return;
+  const baseRank = String(rank).replace("+", "");
+  const color = getRankBadgeColor(baseRank);
+  if (color) {
+    els.rankDisplay.style.background = color;
+  }
+  const idx = RANK_ORDER.indexOf(baseRank);
+  els.rankDisplay.classList.toggle("rank-badge-glow", idx >= RANK_GLOW_THRESHOLD_INDEX);
+}
+
+// スコア表示のカウントアップ演出用。
+let scoreAnimationHandle = null;
+const SCORE_COUNTUP_DURATION_MS = 700;
+
+function setScoreDisplayInstant(score) {
+  if (scoreAnimationHandle !== null) {
+    cancelAnimationFrame(scoreAnimationHandle);
+    scoreAnimationHandle = null;
+  }
   els.scoreDisplay.textContent = String(score);
+}
+
+/**
+ * スコア表示を fromScore から toScore まで、滑らかにカウントアップさせながら変化させる
+ * （easeOutQuad：はじめは速く、終わりにかけてゆっくり止まる）。
+ */
+function animateScoreDisplay(fromScore, toScore) {
+  if (scoreAnimationHandle !== null) {
+    cancelAnimationFrame(scoreAnimationHandle);
+  }
+  const startTime = performance.now();
+  const step = (now) => {
+    const elapsed = now - startTime;
+    const t = Math.min(1, elapsed / SCORE_COUNTUP_DURATION_MS);
+    const eased = 1 - (1 - t) * (1 - t);
+    const currentValue = Math.round(fromScore + (toScore - fromScore) * eased);
+    els.scoreDisplay.textContent = String(currentValue);
+    if (t < 1) {
+      scoreAnimationHandle = requestAnimationFrame(step);
+    } else {
+      scoreAnimationHandle = null;
+      els.scoreDisplay.textContent = String(toScore);
+    }
+  };
+  scoreAnimationHandle = requestAnimationFrame(step);
+}
+
+/**
+ * スコア・ランク表示を更新する。
+ * スコアが増える場合（正解時）はカウントアップ演出で表示し、
+ * 増えない場合（新しいゲーム開始時のリセットなど）は即座に反映する。
+ */
+export function updateScoreboard(score, rank) {
+  const currentDisplayed = Number.parseInt(els.scoreDisplay.textContent, 10) || 0;
+  if (score > currentDisplayed) {
+    animateScoreDisplay(currentDisplayed, score);
+  } else {
+    setScoreDisplayInstant(score);
+  }
   els.rankDisplay.textContent = rank;
+  applyRankBadgeStyle(rank);
 }
 
 /**
@@ -232,6 +544,32 @@ export function showScoreDelta(addedScore) {
   els.scoreDelta.classList.remove("show");
   void els.scoreDelta.offsetWidth;
   els.scoreDelta.classList.add("show");
+}
+
+/**
+ * トレーニング画面のヘッダー（カテゴリ名）と、問題番号（例: "問題 2／5"）を更新する。
+ * 2段階問題のときは、既存の #step-indicator（"式 1／2"）と同時に表示される。
+ */
+export function updateTrainingHeader(categoryLabel, questionNumber, totalQuestions) {
+  if (els.trainingCategoryDisplay) {
+    els.trainingCategoryDisplay.textContent = categoryLabel;
+  }
+  if (els.trainingProgress) {
+    els.trainingProgress.textContent = `問題 ${questionNumber}／${totalQuestions}`;
+    els.trainingProgress.classList.add("show");
+  }
+}
+
+/**
+ * トレーニングの不正解時に、バトルのダメージ演出（画面全体の赤フラッシュ＋シェイク）よりも
+ * 控えめな、解答欄まわりだけの軽いシェイク演出を行う。
+ */
+export function triggerTrainingIncorrectEffect() {
+  const target = els.answerSlots[0] ? els.answerSlots[0].closest(".answer-area") : null;
+  if (!target) return;
+  target.classList.remove("mini-shake");
+  void target.offsetWidth;
+  target.classList.add("mini-shake");
 }
 
 // ============== 問題表示・カード ==============
@@ -272,13 +610,26 @@ export function renderStepChoices(problem) {
   els.resultBox.textContent = "";
 }
 
+/**
+ * 「式 N／M」の進行表示を更新する。2段階目以降は、直前に正解した式
+ * （例: "22+138=160"）を、進行表示の右側に添えて表示する。
+ */
 function updateStepIndicator(problem) {
   if (problem.questionType === "multiStep" && problem.multiStep) {
-    els.stepIndicator.textContent = `式 ${problem.multiStep.currentStepIndex + 1}／${problem.multiStep.totalSteps}`;
+    const state = problem.multiStep;
+    let html = escapeHtml(`式 ${state.currentStepIndex + 1}／${state.totalSteps}`);
+    const prevStep = state.completedSteps.find((s) => s.stepIndex === state.currentStepIndex - 1);
+    if (prevStep) {
+      const formulaHtml =
+        `${renderValueHtml(prevStep.left)}${escapeHtml(prevStep.operator)}${renderValueHtml(prevStep.right)}` +
+        `＝${renderValueHtml(prevStep.result)}`;
+      html += `<span class="step-indicator-prev">${formulaHtml}</span>`;
+    }
+    els.stepIndicator.innerHTML = html;
     els.stepIndicator.classList.add("show");
   } else {
     els.stepIndicator.classList.remove("show");
-    els.stepIndicator.textContent = "";
+    els.stepIndicator.innerHTML = "";
   }
 }
 
@@ -293,7 +644,9 @@ function isCardPlaced(cardId) {
  */
 function getValueCardSizeClass(value) {
   if (isFractionValue(value)) return "choice-value-fraction";
-  const displayText = formatNumber(value);
+  // カード・解答欄は桁区切りカンマを付けずに表示するため、実際に表示される文字列の
+  // 長さ（カンマ無し）を基準にサイズクラスを決める。
+  const displayText = formatNumber(value, { useSeparator: false });
   if (displayText.length >= 8) return "choice-value-xlong";
   if (displayText.length >= 6) return "choice-value-long";
   return "";
@@ -312,7 +665,8 @@ function renderChoices() {
     btn.className = `choice-card choice-${card.type}${placed ? " placed" : ""}${isIntermediate ? " choice-intermediate" : ""}${sizeClass ? ` ${sizeClass}` : ""}`;
     btn.dataset.cardId = card.cardId;
     if (card.type === "number") {
-      btn.innerHTML = renderValueHtml(card.value);
+      // 選択肢カードの数字は桁区切りカンマを付けずに表示する（例: "3,900" ではなく "3900"）。
+      btn.innerHTML = renderValueHtml(card.value, { useSeparator: false });
     } else {
       btn.textContent = String(card.value);
     }
@@ -330,7 +684,8 @@ function renderSlots() {
     el.classList.remove(...SIZE_CLASS_NAMES);
     if (card) {
       if (card.type === "number") {
-        el.innerHTML = renderValueHtml(card.value);
+        // 解答欄も選択肢カードと同じく、桁区切りカンマを付けずに表示する。
+        el.innerHTML = renderValueHtml(card.value, { useSeparator: false });
       } else {
         el.textContent = String(card.value);
       }
@@ -460,7 +815,8 @@ function moveDrag(cardData, source, destIndex, destIsPool) {
 
 function showGhost(x, y, card) {
   if (card.type === "number") {
-    els.dragGhost.innerHTML = renderValueHtml(card.value);
+    // ドラッグ中のカードも、選択肢カード・解答欄と同じくカンマ無しで表示する。
+    els.dragGhost.innerHTML = renderValueHtml(card.value, { useSeparator: false });
   } else {
     els.dragGhost.textContent = String(card.value);
   }
@@ -693,6 +1049,12 @@ function setupRetireDialog() {
 }
 
 export function showRetireDialog() {
+  const isTraining = els.appEl.classList.contains("mode-training");
+  if (els.retireConfirmText) {
+    els.retireConfirmText.textContent = isTraining ? "トレーニングを終了しますか？" : "バトルをリタイアしますか？";
+  }
+  els.retireYesBtn.textContent = isTraining ? "終了する" : "リタイアする";
+  els.retireNoBtn.textContent = isTraining ? "続ける" : "バトルに戻る";
   els.retireDialog.classList.add("show");
 }
 
@@ -729,6 +1091,36 @@ export function showResultScreen(data) {
   els.resultRank.textContent = data.rank;
   els.resultHighscore.textContent = String(data.highScore);
   els.resultNewRecord.classList.toggle("show", Boolean(data.isNewRecord));
+
+  renderHistory(data.history);
+}
+
+/**
+ * トレーニング結果画面を表示する。バトル結果画面（showResultScreen）と同じ
+ * #screen-result / #history-list を再利用しつつ、score/rank/highscore/hearts等の
+ * バトル専用項目は .battle-only クラス（#app.mode-training 適用時にCSSで非表示）に
+ * まかせ、ここではトレーニング専用項目（カテゴリ・完了数・1回で正解・ミス）だけを設定する。
+ * スコア・ランク・ハイスコア・残りハート・敵HP・ゲームオーバー状態は一切表示しない。
+ */
+export function showTrainingResultScreen(data) {
+  els.resultTitle.textContent = data.title;
+  els.resultTitle.className = `result-title ${data.variant || ""}`;
+  qs("screen-result").classList.toggle("result-bright", data.variant === "clear");
+  qs("screen-result").classList.toggle("result-dark", data.variant === "gameover");
+
+  if (els.resultTrainingCategory) {
+    els.resultTrainingCategory.textContent = data.categoryLabel;
+  }
+  if (els.resultTrainingCompleted) {
+    els.resultTrainingCompleted.textContent = `${data.completedQuestions}／${data.totalQuestions}問`;
+  }
+  if (els.resultTrainingFirstTry) {
+    els.resultTrainingFirstTry.textContent = `${data.firstTryCorrectCount}問`;
+  }
+  if (els.resultTrainingWrongCount) {
+    els.resultTrainingWrongCount.textContent = `${data.totalWrongCount}回`;
+  }
+  els.resultNewRecord.classList.remove("show");
 
   renderHistory(data.history);
 }
@@ -773,7 +1165,7 @@ function buildSingleStepHistoryHtml(entry, index) {
       <span class="history-category">${escapeHtml(entry.category)}</span>
     </div>
     <p class="history-text">${questionTextHtml}</p>
-    <p class="history-formula">正解式：${renderValueHtml(entry.left)}${entry.operator}${renderValueHtml(entry.right)} = ${renderValueHtml(entry.result)}${escapeHtml(entry.answerUnit || "")}</p>
+    <p class="history-formula">正解式：${renderValueHtml(entry.left, { useSeparator: false })}${entry.operator}${renderValueHtml(entry.right, { useSeparator: false })} = ${renderValueHtml(entry.result, { useSeparator: false })}${escapeHtml(entry.answerUnit || "")}</p>
     ${buildHistoryCountsHtml(entry.incorrectCount, entry.timeoutCount)}
   `;
 }
@@ -782,8 +1174,8 @@ function buildMultiStepHistoryHtml(entry, index) {
   const stepsHtml = entry.steps
     .map((step) => {
       if (step.completed) {
-        // step.formula は multi-step-engine.js 側で既に formatNumber 済みの文字列。
-        return `<p class="history-step">式${step.stepNumber}：${step.formula}＝${formatNumber(step.result)}</p>`;
+        // step.formula は multi-step-engine.js 側で既に桁区切り無しで整形済みの文字列。
+        return `<p class="history-step">式${step.stepNumber}：${step.formula}＝${formatNumber(step.result, { useSeparator: false })}</p>`;
       }
       if (step.lastAttemptFormula) {
         return `<p class="history-step history-step-incomplete">式${step.stepNumber}：${step.lastAttemptFormula}（解答途中）</p>`;
@@ -793,7 +1185,7 @@ function buildMultiStepHistoryHtml(entry, index) {
     .join("");
 
   const answerLine = entry.isComplete
-    ? `<p class="history-final">答え：${renderValueHtml(entry.finalAnswer)}${escapeHtml(entry.answerUnit || "")}</p>`
+    ? `<p class="history-final">答え：${renderValueHtml(entry.finalAnswer, { useSeparator: false })}${escapeHtml(entry.answerUnit || "")}</p>`
     : `<p class="history-final history-step-incomplete">状態：解答途中</p>`;
 
   return `

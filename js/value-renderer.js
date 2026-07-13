@@ -28,9 +28,12 @@ export function buildFractionAriaLabel(fraction) {
 /**
  * 値1つを、画面表示用のHTML文字列に変換します。
  * - 分数: 縦型分数のHTML（aria-label付き、読み上げにも対応）
- * - 整数・小数: number-utils.js の formatNumber() でカンマ区切り・末尾0除去した上でエスケープ
+ * - 整数・小数: number-utils.js の formatNumber() で末尾0除去（既定では桁区切りカンマも付与）した上でエスケープ
+ * @param {number|{type:"fraction",numerator:number,denominator:number}} value
+ * @param {{useSeparator?: boolean}} options - useSeparator: false で桁区切りカンマを付けずに表示する
+ *   （選択肢カード・解答欄・ドラッグ中のカードは「3900」のようにカンマ無しで表示するために使う）。
  */
-export function renderValueHtml(value) {
+export function renderValueHtml(value, { useSeparator = true } = {}) {
   if (isFractionValue(value)) {
     const s = simplifyFraction(value);
     const label = buildFractionAriaLabel(value);
@@ -41,7 +44,7 @@ export function renderValueHtml(value) {
       `</span>`
     );
   }
-  return escapeHtml(formatNumber(value));
+  return escapeHtml(formatNumber(value, { useSeparator }));
 }
 
 /**
