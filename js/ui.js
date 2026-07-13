@@ -51,6 +51,7 @@ function cacheElements() {
     retireBtn: qs("retire-btn"),
     scoreDisplay: qs("score-display"),
     rankDisplay: qs("rank-display"),
+    scoreDelta: qs("score-delta"),
     enemyEmoji: qs("enemy-emoji"),
     enemyName: qs("enemy-name"),
     enemyHpFill: qs("enemy-hp-fill"),
@@ -219,6 +220,18 @@ export function updateTimer(percent) {
 export function updateScoreboard(score, rank) {
   els.scoreDisplay.textContent = String(score);
   els.rankDisplay.textContent = rank;
+}
+
+/**
+ * 正解した瞬間に、スコア表示のすぐ下に「+1000」のような加算スコアをポップアップ表示する。
+ * 前回のアニメーションが残っていても、reflow を挟んで再生し直すことで毎回きちんと表示させる。
+ */
+export function showScoreDelta(addedScore) {
+  if (!els.scoreDelta) return;
+  els.scoreDelta.textContent = `+${addedScore}`;
+  els.scoreDelta.classList.remove("show");
+  void els.scoreDelta.offsetWidth;
+  els.scoreDelta.classList.add("show");
 }
 
 // ============== 問題表示・カード ==============
@@ -696,10 +709,10 @@ const RANGE_LABELS = {
   "4-multi-step": "2段階問題・整数（開発版）"
 };
 
-// 内部レベル（レベルMAXの計算には8を使う）を、タイトル画面のボタンと同じ表示ラベルに変換する。
-// 8だけが「レベルMAX」の内部値のため、8のときだけ "MAX" と表示する。
+// 内部レベル（レベルMAXの計算には6を使う）を、タイトル画面のボタンと同じ表示ラベルに変換する。
+// 6だけが「レベルMAX」の内部値のため、6のときだけ "MAX" と表示する。
 function formatLevelLabel(level) {
-  return level === 8 ? "MAX" : String(level);
+  return level === 6 ? "MAX" : String(level);
 }
 
 export function showResultScreen(data) {
@@ -733,6 +746,23 @@ function renderHistory(history) {
   });
 }
 
+/**
+ * 不正解・時間切れの回数表示を組み立てる。
+ * どちらも0回の問題では、この行自体を表示しない（空文字を返す）。
+ * 片方だけ発生している場合は、発生した方だけを表示する。
+ */
+function buildHistoryCountsHtml(incorrectCount, timeoutCount) {
+  const parts = [];
+  if (incorrectCount > 0) {
+    parts.push(`<span>不正解 ${incorrectCount}回</span>`);
+  }
+  if (timeoutCount > 0) {
+    parts.push(`<span>時間切れ ${timeoutCount}回</span>`);
+  }
+  if (parts.length === 0) return "";
+  return `<div class="history-counts">${parts.join("")}</div>`;
+}
+
 function buildSingleStepHistoryHtml(entry, index) {
   // 分数を含む問題文は entry.textParts（value-renderer.js で縦型分数として描画）を使う。
   // 整数・小数のみの問題は textParts を持たないため、entry.text をそのまま表示する。
@@ -744,11 +774,7 @@ function buildSingleStepHistoryHtml(entry, index) {
     </div>
     <p class="history-text">${questionTextHtml}</p>
     <p class="history-formula">正解式：${renderValueHtml(entry.left)}${entry.operator}${renderValueHtml(entry.right)} = ${renderValueHtml(entry.result)}${escapeHtml(entry.answerUnit || "")}</p>
-    <p class="history-final">さいごに作った式：${entry.lastAttemptText}</p>
-    <div class="history-counts">
-      <span>不正解 ${entry.incorrectCount}回</span>
-      <span>時間切れ ${entry.timeoutCount}回</span>
-    </div>
+    ${buildHistoryCountsHtml(entry.incorrectCount, entry.timeoutCount)}
   `;
 }
 
@@ -778,10 +804,7 @@ function buildMultiStepHistoryHtml(entry, index) {
     <p class="history-text">${escapeHtml(entry.text)}</p>
     ${stepsHtml}
     ${answerLine}
-    <div class="history-counts">
-      <span>不正解 ${entry.incorrectCount}回</span>
-      <span>時間切れ ${entry.timeoutCount}回</span>
-    </div>
+    ${buildHistoryCountsHtml(entry.incorrectCount, entry.timeoutCount)}
   `;
 }
 

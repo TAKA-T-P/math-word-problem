@@ -45,7 +45,7 @@
         <button class="level-btn" type="button" data-level="3">レベル3</button>
         <button class="level-btn" type="button" data-level="4">レベル4</button>
         <button class="level-btn" type="button" data-level="5">レベル5</button>
-        <button class="level-btn" type="button" data-level="8">レベルMAX</button>
+        <button class="level-btn" type="button" data-level="6">レベルMAX</button>
       </div>
     </div>
 
@@ -68,6 +68,7 @@
         <span class="status-label">スコア</span>
         <span id="score-display" class="status-value">0</span>
         <span id="rank-display" class="rank-badge">H</span>
+        <span id="score-delta" class="score-delta" aria-hidden="true"></span>
       </div>
       <button id="retire-btn" class="retire-btn" type="button">リタイア</button>
     </header>
@@ -131,13 +132,13 @@
       <h2 id="result-title" class="result-title">クリア！</h2>
 
       <div class="result-summary">
-        <div class="result-row"><span>しゅつだいはんい</span><strong id="result-range">小学4年生・1学期</strong></div>
-        <div class="result-row"><span>レベル</span><strong id="result-level">1</strong></div>
-        <div class="result-row"><span>せいかい数</span><strong id="result-correct-count">0問</strong></div>
-        <div class="result-row"><span>のこりハート</span><strong id="result-hearts-remaining">3</strong></div>
-        <div class="result-row highlight"><span>今回のスコア</span><strong id="result-score">0</strong></div>
-        <div class="result-row highlight"><span>今回のランク</span><strong id="result-rank">H</strong></div>
-        <div class="result-row"><span>ハイスコア</span><strong id="result-highscore">0</strong></div>
+        <div class="result-item"><span class="result-item-label">しゅつだいはんい</span><strong id="result-range" class="result-item-value">小学4年生・1学期</strong></div>
+        <div class="result-item"><span class="result-item-label">レベル</span><strong id="result-level" class="result-item-value">1</strong></div>
+        <div class="result-item"><span class="result-item-label">せいかい数</span><strong id="result-correct-count" class="result-item-value">0問</strong></div>
+        <div class="result-item"><span class="result-item-label">のこりハート</span><strong id="result-hearts-remaining" class="result-item-value">3</strong></div>
+        <div class="result-item highlight"><span class="result-item-label">今回のスコア</span><strong id="result-score" class="result-item-value">0</strong></div>
+        <div class="result-item highlight"><span class="result-item-label">今回のランク</span><strong id="result-rank" class="result-item-value">H</strong></div>
+        <div class="result-item result-item-full"><span class="result-item-label">ハイスコア</span><strong id="result-highscore" class="result-item-value">0</strong></div>
         <p id="result-newrecord" class="new-record" aria-hidden="true">✨ ハイスコア こうしん！ ✨</p>
       </div>
 

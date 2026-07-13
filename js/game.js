@@ -134,6 +134,24 @@ function resumeTimer() {
   timerHandle = requestAnimationFrame(timerLoop);
 }
 
+/**
+ * 解答時間ゲージを、指定した割合（0〜1）まで回復させてから再開します
+ * （すでにその割合より残量が多い場合は減らさない＝「回復」なので下げる方向には作用しません）。
+ * 2段階問題の途中式（第1段階）に正解したときに、ゲージを50%まで回復させるために使います。
+ */
+function resumeTimerWithPartialRecovery(recoverToRatio) {
+  if (timerDurationMs > 0) {
+    const currentRatio = timerRemainingMs / timerDurationMs;
+    if (currentRatio < recoverToRatio) {
+      timerRemainingMs = timerDurationMs * recoverToRatio;
+      lastTimerRatio = recoverToRatio;
+      gameState.timerRemainingRatio = recoverToRatio;
+      ui.updateTimer(recoverToRatio * 100);
+    }
+  }
+  resumeTimer();
+}
+
 function stopTimer() {
   timerActive = false;
   cancelTimerLoop();
@@ -155,13 +173,12 @@ function speedMultiplier(questionNumber, totalQuestions) {
 }
 
 /**
- * 内部レベル（レベルMAXは8として扱う）から、初期ハート数を求めます。
- * レベル1〜4は3個、レベル5は2個、それ以上（レベルMAX=8）は1個。
+ * 内部レベル（レベルMAXは6として扱う）から、初期ハート数を求めます。
+ * レベル1〜4は3個、レベル5・レベルMAX（=6）は2個。
  */
 function heartsForLevel(level) {
   if (level <= 4) return 3;
-  if (level === 5) return 2;
-  return 1;
+  return 2;
 }
 
 // value-renderer.js の renderValueHtml() を使うことで、分数を含む式でも
@@ -581,12 +598,15 @@ function handleMultiStepJudge(problem, answer) {
   handleIntermediateStepCorrect(problem, outcome.stepResult);
 }
 
+// 途中式（第1段階）に正解したときに、解答時間ゲージを回復させる割合。
+const INTERMEDIATE_STEP_TIMER_RECOVERY_RATIO = 0.5;
+
 /**
  * 2段階問題で、1つ目の式に正解したときの処理。
  * 敵HP・スコア・正解数・履歴は変更しない（最終式に正解したときだけ変更する）。
- * 短い演出の間はタイマーを止めたままにし、演出後に残り時間から再開する
- * （＝タイマーは全回復しない）。演出中は「＝」連打で2問目まで自動的に
- * 進んでしまわないよう、入力ロックを維持したままにする。
+ * 短い演出の間はタイマーを止めたままにし、演出後に解答時間ゲージを50%まで回復してから
+ * 再開する（すでに50%より多く残っている場合は減らさない）。演出中は「＝」連打で
+ * 2問目まで自動的に進んでしまわないよう、入力ロックを維持したままにする。
  */
 function handleIntermediateStepCorrect(problem, stepResult) {
   audio.playCorrect();
@@ -596,7 +616,7 @@ function handleIntermediateStepCorrect(problem, stepResult) {
   window.setTimeout(() => {
     ui.hideIntermediateStepEffect();
     ui.renderStepChoices(problem);
-    resumeTimer();
+    resumeTimerWithPartialRecovery(INTERMEDIATE_STEP_TIMER_RECOVERY_RATIO);
     ui.unlockInput();
     isBusy = false;
   }, INTERMEDIATE_STEP_DELAY_MS);
@@ -642,6 +662,7 @@ function handleCorrect(resultValue) {
   gameState.score += addedScore;
   gameState.rank = calculateRank(gameState.score, gameState.level);
   ui.updateScoreboard(gameState.score, gameState.rank);
+  ui.showScoreDelta(addedScore);
 
   gameState.solvedQuestions += 1;
   pushCurrentRecordToHistory();

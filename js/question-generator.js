@@ -389,15 +389,24 @@ export function makeCard(type, value, source = "variable") {
   };
 }
 
+// 数値カードの表示枠数（上段）。演算記号カードは常に4枚（下段）なので、
+// 4×2＝8枚のグリッドがちょうど埋まる。
+const NUMBER_ROW_SLOTS = 4;
+
 /**
- * 選択肢カード（最大8枚）を生成する汎用関数。
+ * 選択肢カード（8枚固定：上段が数値カード4枚、下段が演算記号カード4枚）を生成する汎用関数。
  * 1段階問題・2段階問題の両方から使われます（2段階問題は multi-step-engine.js 経由）。
+ *
+ * 演算記号カードは、常に4枚すべて（+ - × ÷）を、この順番の固定位置で表示します
+ * （正解として認める記号は本物のカード、それ以外はダミーカードになりますが、
+ * 見た目の並び順・位置は常に同じです）。数値カードは上段に配置し、
+ * 実際の数値の後にダミー数値を追加して4枚に揃えます（上段内の並び順はシャッフルします）。
  *
  * @param {Array<{value:number, source:string}>} realNumbers - 実際に見えている数値（重複は事前に排除しておくこと）
  * @param {string|string[]} correctOperators - 今回正解として認める演算記号（複数解法で1つ目の式の演算子が
  *   ルートによって異なる場合は配列で複数渡せる。例: ["+","-"]）
  * @param {number|number[]} resultsToExclude - ダミー数値として出現させてはいけない値（その式の答え・最終的な答えなど）
- * @returns {Array} シャッフル済みのカード配列
+ * @returns {Array} 上段（数値・シャッフル済み）→下段（演算記号・固定順）の順のカード配列
  */
 export function buildChoiceCards(realNumbers, correctOperators, resultsToExclude) {
   const uniqueCorrectOps = [...new Set(Array.isArray(correctOperators) ? correctOperators : [correctOperators])];
@@ -407,32 +416,22 @@ export function buildChoiceCards(realNumbers, correctOperators, resultsToExclude
     ...excludedResults.filter((v) => v !== undefined && v !== null).map((v) => valueKey(v))
   ]);
 
-  const cards = [];
+  // 下段：演算記号は常に4枚、"+" "-" "×" "÷" の順で固定位置。
+  const operatorCards = OPERATORS.map((op) =>
+    uniqueCorrectOps.includes(op) ? makeCard("operator", op, "operator") : makeCard("operator", op, "dummyOperator")
+  );
 
-  for (const entry of realNumbers) {
-    cards.push(makeCard("number", entry.value, entry.source));
-  }
-
-  for (const op of uniqueCorrectOps) {
-    cards.push(makeCard("operator", op, "operator"));
-  }
-
-  const remainingOperatorCandidates = OPERATORS.filter((op) => !uniqueCorrectOps.includes(op));
-  const dummyOperatorCount = Math.max(0, Math.min(remainingOperatorCandidates.length, 8 - cards.length - 1));
-  for (const op of shuffleArray(remainingOperatorCandidates).slice(0, dummyOperatorCount)) {
-    cards.push(makeCard("operator", op, "dummyOperator"));
-  }
-
-  const remainingSlots = Math.max(0, 8 - cards.length);
+  // 上段：実際の数値カードの後に、4枚になるまでダミー数値を追加する。
+  const numberCards = realNumbers.map((entry) => makeCard("number", entry.value, entry.source));
   const referenceValues = realNumbers.map((n) => n.value);
-  for (let i = 0; i < remainingSlots; i++) {
-    const reference = referenceValues.length > 0 ? referenceValues[i % referenceValues.length] : 10;
+  while (numberCards.length < NUMBER_ROW_SLOTS) {
+    const reference = referenceValues.length > 0 ? referenceValues[numberCards.length % referenceValues.length] : 10;
     const dummy = generateDummyValue(reference, excludedKeys);
     excludedKeys.add(valueKey(dummy));
-    cards.push(makeCard("number", dummy, "dummy"));
+    numberCards.push(makeCard("number", dummy, "dummy"));
   }
 
-  return shuffleArray(cards);
+  return [...shuffleArray(numberCards), ...operatorCards];
 }
 
 /**

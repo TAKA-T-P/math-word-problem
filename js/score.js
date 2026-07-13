@@ -22,10 +22,10 @@ export function calculateQuestionScore(questionNumber, timeRatioPercent) {
 
 /**
  * 現在のスコアとレベルから、ランク（+ なし）を求めます。
- * ランク値 = floor(スコア ÷ (1000 × レベル))
+ * ランク値 = floor(スコア ÷ (800 × レベル))
  */
 export function calculateRank(score, level) {
-  const divisor = 1000 * Math.max(1, level);
+  const divisor = 800 * Math.max(1, level);
   const rankValue = Math.floor(Math.max(0, score) / divisor);
   if (rankValue >= RANK_TABLE.length) {
     return TOP_RANK;
