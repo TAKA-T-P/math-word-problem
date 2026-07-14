@@ -101,7 +101,6 @@ function cacheElements() {
     resultRange: qs("result-range"),
     resultLevel: qs("result-level"),
     resultCorrectCount: qs("result-correct-count"),
-    resultHeartsRemaining: qs("result-hearts-remaining"),
     resultScore: qs("result-score"),
     resultRank: qs("result-rank"),
     resultHighscore: qs("result-highscore"),
@@ -1112,7 +1111,6 @@ export function showResultScreen(data) {
   els.resultRange.textContent = RANGE_LABELS[data.gradeTerm] || data.gradeTerm;
   els.resultLevel.textContent = `レベル${formatLevelLabel(data.level)}`;
   els.resultCorrectCount.textContent = `${data.correctCount}問`;
-  els.resultHeartsRemaining.textContent = `${data.heartsRemaining} / ${data.maxHearts}`;
   els.resultScore.textContent = String(data.score);
   els.resultRank.textContent = data.rank;
   els.resultHighscore.textContent = String(data.highScore);

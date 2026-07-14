@@ -64,7 +64,11 @@ const gameState = {
   isInputLocked: false,
   isNoMiss: true,
   resultType: null,
-  pendingOutcome: null // 正解演出後の遷移先: "next" | "clear"
+  pendingOutcome: null, // 正解演出後の遷移先: "next" | "clear"
+  // 正解した瞬間に回復させた解答時間ゲージの割合（0〜1）。次の問題の開始時にこの割合から
+  // タイマーを始める（以前は毎回100%から始めていたが、正解のタイミングで回復する方式に変更）。
+  // 不正解・時間切れで同じ問題を再挑戦する場合はこの値を使わず、常に100%に戻す。
+  nextQuestionStartRatio: 1
 };
 
 let templateSets = {};
@@ -128,15 +132,22 @@ function timerLoop(ts) {
   timerHandle = requestAnimationFrame(timerLoop);
 }
 
-function startTimer(durationSec) {
+/**
+ * 解答時間タイマーを開始します。startRatio（既定1=100%）を指定すると、
+ * その割合からタイマーを始めます。正解のタイミングで回復させた割合を引き継いで
+ * 次の問題を始めるときに使います（不正解・時間切れ後に同じ問題を再挑戦する場合は、
+ * 呼び出し側が startRatio を指定せず常に100%から始めます）。
+ */
+function startTimer(durationSec, startRatio = 1) {
   cancelTimerLoop();
   timerDurationMs = durationSec * 1000;
-  timerRemainingMs = timerDurationMs;
+  const clampedRatio = Math.max(0, Math.min(1, startRatio));
+  timerRemainingMs = timerDurationMs * clampedRatio;
   timerLastTs = null;
-  lastTimerRatio = 1;
+  lastTimerRatio = clampedRatio;
   timerActive = true;
-  ui.updateTimer(100);
-  ui.updateEnemyDangerGlow(1);
+  ui.updateTimer(clampedRatio * 100);
+  ui.updateEnemyDangerGlow(clampedRatio);
   timerHandle = requestAnimationFrame(timerLoop);
   startTickSound();
 }
@@ -152,7 +163,8 @@ function resumeTimer() {
 /**
  * 解答時間ゲージを、指定した割合（0〜1）分だけ上乗せして回復させてから再開します
  * （現在の残量に加算するため、すでに残量が多い場合はその分さらに多く回復し、100%を超える分は切り捨てます）。
- * 2段階問題の途中式（第1段階）に正解したときに、ゲージを50%分回復させるために使います。
+ * 2段階問題の途中式（第1段階）に正解したときに、レベルに応じた割合だけゲージを回復させる
+ * ために使います（recoveryAmountForLevel()参照）。
  */
 function resumeTimerWithPartialRecovery(recoveryRatio) {
   if (timerDurationMs > 0) {
@@ -194,6 +206,15 @@ function pickRandomEnemy(level) {
 function speedMultiplier(questionNumber, totalQuestions) {
   if (totalQuestions <= 1) return 1;
   return 1 + (questionNumber - 1) / (totalQuestions - 1);
+}
+
+/**
+ * 正解時に解答時間ゲージへ上乗せする回復量（0〜1の割合）を、内部レベル（レベルMAXは6）から求めます。
+ * 回復量(%) = 90 − 10×レベル（レベルMAXは 90−10×6=30%）。
+ * 2段階問題の途中式（第1段階）正解時は、この半分の量を使います（handleIntermediateStepCorrect参照）。
+ */
+function recoveryAmountForLevel(level) {
+  return Math.max(0, 90 - 10 * level) / 100;
 }
 
 /**
@@ -420,6 +441,7 @@ export function startNewGame(settings) {
   gameState.isNoMiss = true;
   gameState.resultType = null;
   gameState.pendingOutcome = null;
+  gameState.nextQuestionStartRatio = 1;
   gameState.screen = "countdown";
   gameState.currentSlot = null;
   gameState.usedQuestionTexts = new Set();
@@ -543,7 +565,10 @@ function beginQuestion() {
   ui.renderProblem(problem);
   ui.unlockInput();
   isBusy = false;
-  startTimer(gameState.currentQuestionDurationSec);
+  // 1問目は100%（gameState.nextQuestionStartRatioの初期値）から、2問目以降は
+  // 直前の正解で回復させた割合から始める（handleCorrect()参照）。
+  startTimer(gameState.currentQuestionDurationSec, gameState.nextQuestionStartRatio);
+  gameState.nextQuestionStartRatio = 1;
   logDebugInfo();
 }
 
@@ -601,13 +626,14 @@ function handleMultiStepJudge(problem, answer) {
   handleIntermediateStepCorrect(problem, outcome.stepResult);
 }
 
-// 途中式（第1段階）に正解したときに、解答時間ゲージへ上乗せする回復量（現在の残量に加算）。
-const INTERMEDIATE_STEP_TIMER_RECOVERY_AMOUNT = 0.5;
+// 2段階問題の途中式（第1段階）正解時の回復量は、正解時の回復量のこの割合とする。
+const INTERMEDIATE_STEP_RECOVERY_RATIO_OF_FULL = 0.75;
 
 /**
  * 2段階問題で、1つ目の式に正解したときの処理。
  * 敵HP・スコア・正解数・履歴は変更しない（最終式に正解したときだけ変更する）。
- * 短い演出の間はタイマーを止めたままにし、演出後に解答時間ゲージへ50%分を上乗せして回復してから
+ * 短い演出の間はタイマーを止めたままにし、演出後に解答時間ゲージへ、正解時の回復量の
+ * 75%（recoveryAmountForLevel(level)×0.75。レベルMAXなら22.5%）を上乗せして回復してから
  * 再開する（現在の残量に加算するため、多く残っていればさらに多く回復する。100%は超えない）。
  * 演出中は「＝」連打で2問目まで自動的に進んでしまわないよう、入力ロックを維持したままにする。
  */
@@ -623,7 +649,7 @@ function handleIntermediateStepCorrect(problem, stepResult) {
   window.setTimeout(() => {
     ui.hideIntermediateStepEffect();
     ui.renderStepChoices(problem);
-    resumeTimerWithPartialRecovery(INTERMEDIATE_STEP_TIMER_RECOVERY_AMOUNT);
+    resumeTimerWithPartialRecovery(recoveryAmountForLevel(gameState.level) * INTERMEDIATE_STEP_RECOVERY_RATIO_OF_FULL);
     ui.unlockInput();
     isBusy = false;
   }, INTERMEDIATE_STEP_DELAY_MS);
@@ -653,26 +679,38 @@ function onTimerExpired() {
 
 function handleCorrect(resultValue) {
   const questionNumber = gameState.solvedQuestions + 1;
+  const isFinalQuestion = questionNumber >= gameState.totalQuestions;
 
   audio.playCorrect();
-  // 正解した時点で、解答時間ゲージ低下による危険演出（エネミーの赤いグロー・画面の点滅）を
-  // 即座に止める（次の問題が始まるまで演出が残り続けないようにするため）。
-  ui.updateEnemyDangerGlow(1);
   ui.triggerEnemyShake();
 
   const damagePerQuestion = 100 / gameState.totalQuestions;
   gameState.enemyHp = Math.max(0, gameState.enemyHp - damagePerQuestion);
-  if (questionNumber >= gameState.totalQuestions) {
+  if (isFinalQuestion) {
     gameState.enemyHp = 0;
   }
   ui.updateEnemyHp(gameState.enemyHp);
 
+  // スコアは、ゲージを回復させる前（正解した瞬間）の残量を必ず参照する
+  // （lastTimerRatio は handleJudge() の stopTimer() 時点で固定されており、
+  //  この後で行うゲージ回復の影響を受けない）。
   const timeRatioPercent = gameState.currentQuestionPenalized ? 0 : toTimeRatioPercent(lastTimerRatio);
-  const addedScore = calculateQuestionScore(questionNumber, timeRatioPercent);
+  let addedScore = calculateQuestionScore(questionNumber, timeRatioPercent);
+  if (isFinalQuestion) {
+    // 最終問題に正解したときだけ、残りハート数に応じたボーナスを加算する。
+    addedScore += 2000 * gameState.hearts;
+  }
   gameState.score += addedScore;
   gameState.rank = calculateRank(gameState.score, gameState.level);
   ui.updateScoreboard(gameState.score, gameState.rank);
   ui.showScoreDelta(addedScore);
+
+  // 解答時間ゲージは、以前は次の問題の開始時に毎回全回復させていたが、
+  // 正解してスコアが加算されるこのタイミングでレベルに応じた割合だけ回復させる方式に変更した。
+  // 次の問題は、この回復後の割合から始まる（beginQuestion() 参照）。
+  gameState.nextQuestionStartRatio = Math.min(1, lastTimerRatio + recoveryAmountForLevel(gameState.level));
+  ui.updateTimer(gameState.nextQuestionStartRatio * 100);
+  ui.updateEnemyDangerGlow(gameState.nextQuestionStartRatio);
 
   gameState.solvedQuestions += 1;
   pushCurrentRecordToHistory();
@@ -760,8 +798,6 @@ function finishGame(type) {
       gradeTerm: gameState.gradeTerm,
       level: gameState.level,
       correctCount: gameState.solvedQuestions,
-      heartsRemaining: gameState.hearts,
-      maxHearts: gameState.maxHearts,
       score: gameState.score,
       rank: finalRank,
       highScore,
