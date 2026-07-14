@@ -12,10 +12,10 @@
 // モードの切り替え（バトルかトレーニングか）は js/app.js の1箇所だけが判断し、
 // このファイルの内部には「if (mode === ...)」のような分岐を持たせません。
 
-import { generateQuestion } from "./question-generator.js";
+import { generateQuestion, shouldDisplayFractionsUnsimplified } from "./question-generator.js";
 import { checkAnswer } from "./answer-checker.js";
 import { filterValidTemplateSets } from "./question-validator.js";
-import { valueKey, formatValue } from "./value-utils.js";
+import { valueKey, formatValue, computeUnsimplifiedFractionResult } from "./value-utils.js";
 import { renderValueHtml } from "./value-renderer.js";
 import * as multiStepEngine from "./multi-step-engine.js";
 import * as audio from "./audio.js";
@@ -241,6 +241,11 @@ export function startTraining(settings) {
 
 function beginTrainingQuestion() {
   const problem = trainingState.questions[trainingState.currentIndex];
+  // 同分母分数のたし算・ひき算を、約分をまだ学習していない学期（4-3・5-1）で練習している場合は、
+  // 問題文・カード・答えを約分しない状態で表示する（詳しくは question-generator.js の
+  // shouldDisplayFractionsUnsimplified() を参照。トレーニングはカテゴリ単体でしか出題しないため、
+  // trainingState.gradeTerm は常にそのカテゴリ本来の学期＝"4-3" になる）。
+  problem.simplifyFractions = !shouldDisplayFractionsUnsimplified(problem.template, trainingState.gradeTerm);
   trainingState.currentProblem = problem;
   trainingState.currentQuestionWrongCount = 0;
   trainingState.currentQuestionHadMistake = false;
@@ -260,6 +265,7 @@ function beginTrainingQuestion() {
       right: problem.right,
       result: problem.result,
       answerUnit: problem.answerUnit,
+      simplifyFractions: problem.simplifyFractions,
       incorrectCount: 0,
       timeoutCount: 0,
       lastAttemptText: "（未回答）"
@@ -401,7 +407,13 @@ function handleTrainingCorrect(resultValue) {
 
   trainingState.pendingOutcome =
     trainingState.completedQuestions >= trainingState.totalQuestions ? "complete" : "next";
-  ui.showCorrectEffect(resultValue);
+  const problem = trainingState.currentProblem;
+  const simplify = !problem || problem.simplifyFractions !== false;
+  const displayResultValue =
+    simplify || !problem
+      ? resultValue
+      : computeUnsimplifiedFractionResult(problem.left, problem.operator, problem.right) ?? resultValue;
+  ui.showCorrectEffect(displayResultValue, { simplify });
   // isBusy は「タップして次へ」が押されるまで true のまま維持し、連続タップを防ぐ
   logTrainingDebugInfo();
 }
@@ -481,17 +493,25 @@ export function returnToTitle() {
 // バトルの js/game.js の formatSolutionRoutes() と同じ考え方で、正解式をデバッグ表示用に整形する。
 function formatSolutionRoutesForDebug(problem) {
   if (!problem) return "(なし)";
+  const simplify = problem.simplifyFractions !== false;
   if (problem.questionType === "multiStep") {
     return (problem.solutionRoutes || [])
       .map(
         (route) =>
           `[${route.id}] ` +
-          route.steps.map((s) => `${formatValue(s.left)}${s.operator}${formatValue(s.right)}=${formatValue(s.result)}`).join(" → ")
+          route.steps
+            .map((s) => `${formatValue(s.left, { simplify })}${s.operator}${formatValue(s.right, { simplify })}=${formatValue(s.result, { simplify })}`)
+            .join(" → ")
       )
       .join(" / ");
   }
   const routes = problem.solutionRoutes && problem.solutionRoutes.length > 0 ? problem.solutionRoutes : [problem];
-  return routes.map((r) => `${formatValue(r.left)}${r.operator}${formatValue(r.right)} = ${formatValue(r.result)}`).join(" / ");
+  return routes
+    .map((r) => {
+      const displayResult = simplify ? r.result : computeUnsimplifiedFractionResult(r.left, r.operator, r.right) ?? r.result;
+      return `${formatValue(r.left, { simplify })}${r.operator}${formatValue(r.right, { simplify })} = ${formatValue(displayResult, { simplify })}`;
+    })
+    .join(" / ");
 }
 
 function logTrainingDebugInfo() {

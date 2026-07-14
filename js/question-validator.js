@@ -18,7 +18,14 @@ const MAX_REASONABLE_FRACTION_DENOMINATOR = 12;
 // 現在 data/index.js に登録されている出題範囲キー。新しい学期を追加したら、
 // ここにも追加してください（data/index.js から自動取得すると循環参照になりやすいため、
 // 検証専用の一覧として独立させています）。
-const VALID_GRADE_TERMS = ["4-1", "4-2", "4-3", "4-multi-step", "5-1"];
+const VALID_GRADE_TERMS = ["4-1", "4-2", "4-3", "4-multi-step", "5-1", "5-2"];
+
+// generatorType がこの集合に含まれるときだけ、生成された分数の分母が一致しているかを確認する
+// （異分母分数のたし算・ひき算には適用しない。第8段階で追加）。
+const SAME_DENOMINATOR_GENERATOR_TYPES = new Set([
+  "sameDenominatorFractionAddition",
+  "sameDenominatorFractionSubtraction"
+]);
 
 export const VALID_OPERATORS = ["+", "-", "×", "÷"];
 export const VALID_QUESTION_TYPES = ["singleStep", "multiStep"];
@@ -117,6 +124,51 @@ const GENERATOR_TYPE_RULES = {
     requiredVariableKeys: [],
     computedVariables: [],
     requiresQuantityRelation: true
+  },
+  // 異分母分数のたし算・ひき算（小学5年生2学期）は、a・bという名前の分数型変数を直接使う点は
+  // 同分母分数と同じですが、分母が異なる必要があるため requiresUnlikeDenominators で
+  // 個別に検証します（同分母のときのような isFractionGenerator フラグは使いません。
+  // これは validateSameDenominatorFractionRanges が「分母が同じであること」を要求するため、
+  // 異分母のテンプレートに適用すると誤ってエラーになってしまうからです）。
+  unlikeDenominatorFractionAddition: {
+    requiredVariableKeys: ["a", "b"],
+    computedVariables: [],
+    requiresUnlikeDenominators: true
+  },
+  unlikeDenominatorFractionSubtraction: {
+    requiredVariableKeys: ["a", "b"],
+    computedVariables: [],
+    requiresUnlikeDenominators: true,
+    requiresNonNegativeUnlikeDenominatorSubtraction: true
+  },
+  // 平均（小学5年生2学期）は、小数倍・もとの量と同じ理由（キー名がテンプレートごとに
+  // quantityRelation で指定される）で requiresQuantityRelation を使います。
+  averageFromTotal: {
+    requiredVariableKeys: [],
+    computedVariables: [],
+    requiresQuantityRelation: true
+  },
+  totalFromAverage: {
+    requiredVariableKeys: [],
+    computedVariables: [],
+    requiresQuantityRelation: true
+  },
+  // 2つの数の平均（小学5年生2学期、2段階問題）。multiStepSumToDivisible と全く同じ形の
+  // ルール（divisor・quotient・a を必須とし、b・sum が自動計算される）です。
+  averageOfTwoValues: {
+    requiredVariableKeys: ["divisor", "quotient", "a"],
+    computedVariables: ["b", "sum"]
+  },
+  // 単位量あたり・混み具合（小学5年生2学期）。
+  unitRate: {
+    requiredVariableKeys: [],
+    computedVariables: [],
+    requiresQuantityRelation: true
+  },
+  totalFromUnitRate: {
+    requiredVariableKeys: [],
+    computedVariables: [],
+    requiresQuantityRelation: true
   }
 };
 
@@ -134,69 +186,111 @@ function getGeneratorRule(generatorType) {
   return GENERATOR_TYPE_RULES[generatorType] || { requiredVariableKeys: [], computedVariables: [] };
 }
 
+// quantityRelation.type ごとに、「既知（生成元）の値を指すフィールド名」2つと
+// 「自動計算される値を指すフィールド名」1つ、そして unknown に許される値を定義します
+// （第8段階で average・unit-rate を追加し、汎用化しました）。
+//   - "multiplicative-comparison"（小数倍・もとの量）: base×multiplier=compared
+//   - "average"（平均）                              : count×average=total
+//   - "unit-rate"（単位量あたり・混み具合）            : unitCount×perUnit=total
+const QUANTITY_RELATION_TYPE_CONFIG = {
+  "multiplicative-comparison": {
+    knownKeyFields: ["baseKey", "multiplierKey"],
+    computedKeyField: "comparedKey",
+    unknownValues: ["base", "compared", "multiplier"]
+  },
+  average: {
+    knownKeyFields: ["countKey", "averageKey"],
+    computedKeyField: "totalKey",
+    unknownValues: ["total", "count", "average"]
+  },
+  "unit-rate": {
+    knownKeyFields: ["unitCountKey", "perUnitKey"],
+    computedKeyField: "totalKey",
+    unknownValues: ["total", "unitCount", "perUnit"]
+  }
+};
+
 /**
  * テンプレート文・textParts・solutionRoutes から参照してよい「既知の変数名」の集合を求めます。
  * variables のキー・generatorType が自動計算する変数（rule.computedVariables）に加えて、
- * 小数倍・もとの量（quantityRelation を持つテンプレート）では、quantityRelation.comparedKey
- * （generateDecimalMultiplicativeComparisonValues() が動的に計算する比較量のキー名）も
- * 「既知」として扱います。comparedKey はテンプレートごとに名前が異なる（例: "blueLength"）ため、
- * GENERATOR_TYPE_RULES の computedVariables のような固定リストでは表現できません。
+ * quantityRelation を持つテンプレート（小数倍・もとの量・平均・単位量あたり・混み具合）では、
+ * その「自動計算される値」を指すフィールド（例: comparedKey、totalKey）が指す変数名も
+ * 「既知」として扱います。このフィールドが指す実際のキー名（例: "blueLength"）は
+ * テンプレートごとに異なるため、GENERATOR_TYPE_RULES の computedVariables のような
+ * 固定リストでは表現できません。
  */
 function getKnownVariableKeys(template, rule) {
   const keys = new Set([
     ...(template.variables && typeof template.variables === "object" ? Object.keys(template.variables) : []),
     ...(rule ? rule.computedVariables : [])
   ]);
-  if (template.quantityRelation && typeof template.quantityRelation.comparedKey === "string") {
-    keys.add(template.quantityRelation.comparedKey);
+  const qr = template.quantityRelation;
+  if (qr && typeof qr === "object") {
+    const config = QUANTITY_RELATION_TYPE_CONFIG[qr.type];
+    const computedKeyField = config ? config.computedKeyField : "comparedKey";
+    if (typeof qr[computedKeyField] === "string") {
+      keys.add(qr[computedKeyField]);
+    }
   }
   return keys;
 }
 
 /**
- * 小数倍・もとの量テンプレートの quantityRelation を検証します。
- * baseKey・multiplierKey は variables に存在する必要があり、comparedKey は
- * （動的に計算される値のため）逆に variables に含めてはいけません。
+ * quantityRelation を持つテンプレート（小数倍・もとの量・平均・単位量あたり・混み具合）の
+ * quantityRelation を検証します。「既知（生成元）」の2つのキーは variables に存在する必要があり、
+ * 「自動計算される」1つのキーは（動的に計算される値のため）逆に variables に含めてはいけません。
  */
 function validateQuantityRelation(template, errors) {
   const qr = template.quantityRelation;
   if (!qr || typeof qr !== "object") {
+    errors.push(`generatorType="${template.generatorType}" には quantityRelation が必要です`);
+    return;
+  }
+  const config = QUANTITY_RELATION_TYPE_CONFIG[qr.type];
+  if (!config) {
     errors.push(
-      `generatorType="${template.generatorType}" には quantityRelation（baseKey/comparedKey/multiplierKey/unknown）が必要です`
+      `quantityRelation.type が不正です: ${qr.type}（"multiplicative-comparison"／"average"／"unit-rate" のいずれか）`
     );
     return;
   }
-  if (qr.type !== "multiplicative-comparison") {
-    errors.push(`quantityRelation.type が不正です: ${qr.type}（"multiplicative-comparison" である必要があります）`);
-  }
-  for (const key of ["baseKey", "comparedKey", "multiplierKey"]) {
-    if (typeof qr[key] !== "string" || qr[key].length === 0) {
-      errors.push(`quantityRelation.${key} が文字列で指定されていません`);
+
+  const allKeyFields = [...config.knownKeyFields, config.computedKeyField];
+  for (const field of allKeyFields) {
+    if (typeof qr[field] !== "string" || qr[field].length === 0) {
+      errors.push(`quantityRelation.${field} が文字列で指定されていません`);
     }
   }
-  if (!["base", "compared", "multiplier"].includes(qr.unknown)) {
-    errors.push(`quantityRelation.unknown が不正です: ${qr.unknown}（"base"／"compared"／"multiplier" のいずれか）`);
+  if (!config.unknownValues.includes(qr.unknown)) {
+    errors.push(
+      `quantityRelation.unknown が不正です: ${qr.unknown}（${config.unknownValues.map((v) => `"${v}"`).join("／")} のいずれか）`
+    );
   }
 
   const hasVariables = template.variables && typeof template.variables === "object";
-  if (hasVariables && typeof qr.baseKey === "string" && !(qr.baseKey in template.variables)) {
-    errors.push(`quantityRelation.baseKey が variables に存在しません: ${qr.baseKey}`);
+  for (const field of config.knownKeyFields) {
+    const key = qr[field];
+    if (hasVariables && typeof key === "string" && !(key in template.variables)) {
+      errors.push(`quantityRelation.${field} が variables に存在しません: ${key}`);
+    }
   }
-  if (hasVariables && typeof qr.multiplierKey === "string" && !(qr.multiplierKey in template.variables)) {
-    errors.push(`quantityRelation.multiplierKey が variables に存在しません: ${qr.multiplierKey}`);
-  }
-  if (hasVariables && typeof qr.comparedKey === "string" && qr.comparedKey in template.variables) {
+  const computedKey = qr[config.computedKeyField];
+  if (hasVariables && typeof computedKey === "string" && computedKey in template.variables) {
     errors.push(
-      `quantityRelation.comparedKey は生成時に自動計算される値です。variables に含めないでください: ${qr.comparedKey}`
+      `quantityRelation.${config.computedKeyField} は生成時に自動計算される値です。variables に含めないでください: ${computedKey}`
     );
   }
-  if (
-    typeof qr.baseKey === "string" &&
-    typeof qr.comparedKey === "string" &&
-    typeof qr.multiplierKey === "string" &&
-    new Set([qr.baseKey, qr.comparedKey, qr.multiplierKey]).size !== 3
-  ) {
-    errors.push("quantityRelation の baseKey・comparedKey・multiplierKey が重複しています");
+
+  const allKeyValues = allKeyFields.map((field) => qr[field]).filter((v) => typeof v === "string");
+  if (allKeyValues.length === allKeyFields.length && new Set(allKeyValues).size !== allKeyFields.length) {
+    errors.push(`quantityRelation の${allKeyFields.map((f) => `${f}`).join("・")}が重複しています`);
+  }
+
+  // 平均の「個数」は、必ず正の整数である必要があります（0.5人のような値は不自然なため）。
+  if (qr.type === "average" && hasVariables && typeof qr.countKey === "string") {
+    const countRange = template.variables[qr.countKey];
+    if (countRange && (countRange.type === "fraction" || countRange.decimalPlaces > 0)) {
+      errors.push(`quantityRelation.countKey（個数）は整数である必要があります: ${qr.countKey}`);
+    }
   }
 }
 
@@ -292,6 +386,55 @@ function validateSameDenominatorFractionRanges(template, errors) {
 }
 
 /**
+ * 異分母分数のたし算・ひき算のテンプレートについて、a・bが分母の異なる分数型変数として
+ * 定義されているかを検証します（第8段階で追加。同分母分数の validateSameDenominatorFractionRanges
+ * とは逆に、分母が「異なる」ことを要求します）。
+ */
+function validateUnlikeDenominators(template, errors) {
+  const variables = template.variables || {};
+  const a = variables.a;
+  const b = variables.b;
+  if (!a || !b || a.type !== "fraction" || b.type !== "fraction") {
+    errors.push(`generatorType="${template.generatorType}" には、a と b が分数型の変数として必要です`);
+    return;
+  }
+  if (a.denominator === b.denominator) {
+    errors.push(`異分母分数の問題なのに、a と b の分母が同じです: ${a.denominator}`);
+  }
+}
+
+/**
+ * 異分母分数のひき算のテンプレートについて、a の取りうる最小値が b の取りうる最大値を
+ * 常に上回っているか（答えが負にならないか）を、クロス乗算（浮動小数点を経由しない整数比較）で
+ * 検証します（第8段階で追加）。分母が異なるため、同分母のときのような numerator の
+ * 直接比較（validateSameDenominatorFractionRanges）は使えません。
+ * a.numeratorMin/a.denominator ≥ b.numeratorMax/b.denominator
+ * ⇔ a.numeratorMin×b.denominator ≥ b.numeratorMax×a.denominator
+ */
+function validateNonNegativeUnlikeDenominatorSubtraction(template, errors) {
+  const variables = template.variables || {};
+  const a = variables.a;
+  const b = variables.b;
+  if (!a || !b || a.type !== "fraction" || b.type !== "fraction") return;
+  if (
+    typeof a.numeratorMin !== "number" ||
+    typeof b.numeratorMax !== "number" ||
+    !Number.isInteger(a.denominator) ||
+    !Number.isInteger(b.denominator)
+  ) {
+    return;
+  }
+  const minA = a.numeratorMin * b.denominator;
+  const maxB = b.numeratorMax * a.denominator;
+  if (minA < maxB) {
+    errors.push(
+      `異分母のひき算の答えが負になる可能性があります: a の最小値(${a.numeratorMin}/${a.denominator})が` +
+        ` b の最大値(${b.numeratorMax}/${b.denominator})を下回っています`
+    );
+  }
+}
+
+/**
  * 問題テンプレート1件の構造を検証します（数値は生成しません）。
  * @returns {{valid: boolean, errors: string[]}}
  */
@@ -379,6 +522,13 @@ export function validateTemplate(template) {
 
   if (rule && rule.isFractionGenerator && hasVariables) {
     validateSameDenominatorFractionRanges(template, errors);
+  }
+
+  if (rule && rule.requiresUnlikeDenominators && hasVariables) {
+    validateUnlikeDenominators(template, errors);
+  }
+  if (rule && rule.requiresNonNegativeUnlikeDenominatorSubtraction && hasVariables) {
+    validateNonNegativeUnlikeDenominatorSubtraction(template, errors);
   }
 
   // 小数（decimalPlaces指定）・分数（type:"fraction"）の変数定義を検証する。
@@ -679,8 +829,16 @@ export function validateGeneratedQuestion(problem) {
     validateValueRepresentation(route.right, "right", errors);
     validateValueRepresentation(computed, "計算結果", errors);
 
-    // 同分母分数のたし算・ひき算では、実際に生成された left/right の分母が一致しているかも確認する。
-    if (isFractionValue(route.left) && isFractionValue(route.right) && (route.operator === "+" || route.operator === "-")) {
+    // 同分母分数のたし算・ひき算では、実際に生成された left/right の分母が一致しているかも確認する
+    // （generatorTypeで同分母専用のものに限定する。異分母分数のたし算・ひき算では、
+    //  分母が異なることこそが正しい状態なので、この確認は行わない）。
+    const generatorType = problem.template && problem.template.generatorType;
+    if (
+      SAME_DENOMINATOR_GENERATOR_TYPES.has(generatorType) &&
+      isFractionValue(route.left) &&
+      isFractionValue(route.right) &&
+      (route.operator === "+" || route.operator === "-")
+    ) {
       if (route.left.denominator !== route.right.denominator) {
         errors.push(`同分母分数の問題なのに、生成されたleft/rightの分母が異なります: ${route.left.denominator} / ${route.right.denominator}`);
       }

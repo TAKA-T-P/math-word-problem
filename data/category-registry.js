@@ -162,6 +162,48 @@ export const categoryRegistry = [
     gradeLabel: "小学5年生・1学期",
     enabledInTraining: true,
     order: 17
+  },
+
+  // ---- 小学5年生・2学期 ----
+  {
+    id: "unlike-fraction-addition",
+    label: "異分母分数のたし算",
+    gradeTerm: "5-2",
+    gradeLabel: "小学5年生・2学期",
+    enabledInTraining: true,
+    order: 18
+  },
+  {
+    id: "unlike-fraction-subtraction",
+    label: "異分母分数のひき算",
+    gradeTerm: "5-2",
+    gradeLabel: "小学5年生・2学期",
+    enabledInTraining: true,
+    order: 19
+  },
+  {
+    id: "average",
+    label: "平均",
+    gradeTerm: "5-2",
+    gradeLabel: "小学5年生・2学期",
+    enabledInTraining: true,
+    order: 20
+  },
+  {
+    id: "unit-rate",
+    label: "単位量あたり",
+    gradeTerm: "5-2",
+    gradeLabel: "小学5年生・2学期",
+    enabledInTraining: true,
+    order: 21
+  },
+  {
+    id: "crowdedness",
+    label: "混み具合",
+    gradeTerm: "5-2",
+    gradeLabel: "小学5年生・2学期",
+    enabledInTraining: true,
+    order: 22
   }
 ];
 

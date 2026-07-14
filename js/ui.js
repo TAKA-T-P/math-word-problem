@@ -5,7 +5,7 @@
 // （整数・小数・大きな数の表示をアプリ全体で統一するため）。
 
 import { formatNumber } from "./number-utils.js";
-import { isFractionValue } from "./value-utils.js";
+import { isFractionValue, computeUnsimplifiedFractionResult } from "./value-utils.js";
 import { renderValueHtml, renderTextPartsHtml, escapeHtml } from "./value-renderer.js";
 import {
   loadSelectedGradeTerm,
@@ -598,17 +598,24 @@ export function triggerTrainingIncorrectEffect() {
 
 // ============== 問題表示・カード ==============
 
+// 現在表示中の問題の分数を約分して表示するかどうか（第9段階で追加）。
+// renderProblem() が problem.simplifyFractions から設定し、以後 renderChoices()・renderSlots()・
+// ドラッグ中のカード表示など、problem を直接受け取らない再描画関数もこのモジュール変数を参照する。
+// 既定は true（約分して表示。これまでと同じ挙動）。
+let currentSimplifyFractions = true;
+
 // 分数を含む問題文は problem.textParts（文字列/値パーツの配列）を持つため、
 // value-renderer.js の renderTextPartsHtml() で縦型分数を含むHTMLとして描画する。
 // 整数・小数のみの問題は textParts を持たないため、従来どおり problem.text を
 // そのまま（エスケープした上で）表示する。
 function renderQuestionText(problem) {
   els.questionText.innerHTML = problem.textParts
-    ? renderTextPartsHtml(problem.textParts)
+    ? renderTextPartsHtml(problem.textParts, { simplify: currentSimplifyFractions })
     : escapeHtml(problem.text);
 }
 
 export function renderProblem(problem) {
+  currentSimplifyFractions = problem.simplifyFractions !== false;
   renderQuestionText(problem);
   updateStepIndicator(problem);
   slots = [null, null, null];
@@ -693,7 +700,7 @@ function renderChoices() {
     btn.dataset.cardId = card.cardId;
     if (card.type === "number") {
       // 選択肢カードの数字は桁区切りカンマを付けずに表示する（例: "3,900" ではなく "3900"）。
-      btn.innerHTML = renderValueHtml(card.value, { useSeparator: false });
+      btn.innerHTML = renderValueHtml(card.value, { useSeparator: false, simplify: currentSimplifyFractions });
     } else {
       btn.textContent = String(card.value);
     }
@@ -712,7 +719,7 @@ function renderSlots() {
     if (card) {
       if (card.type === "number") {
         // 解答欄も選択肢カードと同じく、桁区切りカンマを付けずに表示する。
-        el.innerHTML = renderValueHtml(card.value, { useSeparator: false });
+        el.innerHTML = renderValueHtml(card.value, { useSeparator: false, simplify: currentSimplifyFractions });
       } else {
         el.textContent = String(card.value);
       }
@@ -843,7 +850,7 @@ function moveDrag(cardData, source, destIndex, destIsPool) {
 function showGhost(x, y, card) {
   if (card.type === "number") {
     // ドラッグ中のカードも、選択肢カード・解答欄と同じくカンマ無しで表示する。
-    els.dragGhost.innerHTML = renderValueHtml(card.value, { useSeparator: false });
+    els.dragGhost.innerHTML = renderValueHtml(card.value, { useSeparator: false, simplify: currentSimplifyFractions });
   } else {
     els.dragGhost.textContent = String(card.value);
   }
@@ -986,9 +993,9 @@ export function unlockInput() {
 
 // ============== 正解・不正解演出 ==============
 
-export function showCorrectEffect(resultValue) {
+export function showCorrectEffect(resultValue, { simplify = true } = {}) {
   // ■欄の答えの数字は、選択肢カード・解答欄と同じく桁区切りカンマを付けずに表示する。
-  els.resultBox.innerHTML = renderValueHtml(resultValue, { useSeparator: false });
+  els.resultBox.innerHTML = renderValueHtml(resultValue, { useSeparator: false, simplify });
   els.correctMark.classList.add("show");
   nextQuestionTapLock = false;
   window.setTimeout(() => {
@@ -1097,7 +1104,8 @@ const RANGE_LABELS = {
   "4-2": "小学4年生・2学期",
   "4-3": "小学4年生・3学期",
   "4-multi-step": "2段階問題・整数（開発版）",
-  "5-1": "小学5年生・1学期"
+  "5-1": "小学5年生・1学期",
+  "5-2": "小学5年生・2学期"
 };
 
 // 内部レベル（レベルMAXの計算には6を使う）を、タイトル画面のボタンと同じ表示ラベルに変換する。
@@ -1186,14 +1194,22 @@ function buildHistoryCountsHtml(incorrectCount, timeoutCount) {
 function buildSingleStepHistoryHtml(entry, index) {
   // 分数を含む問題文は entry.textParts（value-renderer.js で縦型分数として描画）を使う。
   // 整数・小数のみの問題は textParts を持たないため、entry.text をそのまま表示する。
-  const questionTextHtml = entry.textParts ? renderTextPartsHtml(entry.textParts) : escapeHtml(entry.text);
+  const simplify = entry.simplifyFractions !== false;
+  const questionTextHtml = entry.textParts
+    ? renderTextPartsHtml(entry.textParts, { simplify })
+    : escapeHtml(entry.text);
+  // 約分しない表示のときは、entry.result（生成時にすでに約分済みの値）ではなく、
+  // 同分母のまま計算した値を使う（value-utils.js の computeUnsimplifiedFractionResult を参照）。
+  const displayResult = simplify
+    ? entry.result
+    : computeUnsimplifiedFractionResult(entry.left, entry.operator, entry.right) ?? entry.result;
   return `
     <div class="history-item-head">
       <span class="history-index">第${index + 1}問</span>
       <span class="history-category">${escapeHtml(entry.category)}</span>
     </div>
     <p class="history-text">${questionTextHtml}</p>
-    <p class="history-formula">正解式：${renderValueHtml(entry.left, { useSeparator: false })}${entry.operator}${renderValueHtml(entry.right, { useSeparator: false })} = ${renderValueHtml(entry.result, { useSeparator: false })}${escapeHtml(entry.answerUnit || "")}</p>
+    <p class="history-formula">正解式：${renderValueHtml(entry.left, { useSeparator: false, simplify })}${entry.operator}${renderValueHtml(entry.right, { useSeparator: false, simplify })} = ${renderValueHtml(displayResult, { useSeparator: false, simplify })}${escapeHtml(entry.answerUnit || "")}</p>
     ${buildHistoryCountsHtml(entry.incorrectCount, entry.timeoutCount)}
   `;
 }

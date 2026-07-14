@@ -1,13 +1,19 @@
 // ゲーム状態の管理・問題進行・ハート管理・敵HP管理・タイマー管理・
 // 正解/不正解後の処理・クリア/ゲームオーバー判定を担当するモジュール。
 
-import { generateQuestion, planQuestionSequence, getCandidateTemplatesForSlot, getContentGroup } from "./question-generator.js";
+import {
+  generateQuestion,
+  planQuestionSequence,
+  getCandidateTemplatesForSlot,
+  getContentGroup,
+  shouldDisplayFractionsUnsimplified
+} from "./question-generator.js";
 import { checkAnswer } from "./answer-checker.js";
 import { calculateQuestionScore, calculateRank, toTimeRatioPercent, formatFinalRank } from "./score.js";
 import { loadHighScore, saveHighScoreIfBetter, loadSoundSetting, saveSoundSetting } from "./storage.js";
 import { filterValidTemplateSets } from "./question-validator.js";
 import { getDecimalPlaces } from "./number-utils.js";
-import { formatValue, isFractionValue } from "./value-utils.js";
+import { formatValue, isFractionValue, computeUnsimplifiedFractionResult } from "./value-utils.js";
 import { renderValueHtml } from "./value-renderer.js";
 import { gcd, simplifyFraction } from "./fraction-utils.js";
 import { ENEMY_LIST } from "./enemy-list.js";
@@ -21,8 +27,8 @@ import * as ui from "./ui.js";
 const DEBUG_MODE = new URLSearchParams(window.location.search).get("debug") === "true";
 
 // 出題プラン（新内容/復習内容がおよそ半分ずつになる仕組み）を使うモード。
-// 4-2（小学4年生2学期）・4-3（小学4年生3学期）・5-1（小学5年生1学期）が対象。
-const PLANNED_GRADE_TERMS = new Set(["4-2", "4-3", "5-1"]);
+// 4-2（小学4年生2学期）・4-3（小学4年生3学期）・5-1（小学5年生1学期）・5-2（小学5年生2学期）が対象。
+const PLANNED_GRADE_TERMS = new Set(["4-2", "4-3", "5-1", "5-2"]);
 
 const DAMAGE_ANIMATION_MS = 480;
 const CLEAR_MESSAGE_DELAY_MS = 1400;
@@ -255,17 +261,25 @@ function formatSolutionRoutes(problem) {
   // 2段階問題のルートは {id, steps:[...]} という形で、1段階問題の {left,operator,right,result} とは
   // 構造が異なるため、questionType に応じてフォーマット方法を分ける
   // （分けないと "undefinedundefinedundefined = undefined" のような表示になってしまう）。
+  const simplify = problem.simplifyFractions !== false;
   if (problem.questionType === "multiStep") {
     return (problem.solutionRoutes || [])
       .map(
         (route) =>
           `[${route.id}] ` +
-          route.steps.map((s) => `${formatValue(s.left)}${s.operator}${formatValue(s.right)}=${formatValue(s.result)}`).join(" → ")
+          route.steps
+            .map((s) => `${formatValue(s.left, { simplify })}${s.operator}${formatValue(s.right, { simplify })}=${formatValue(s.result, { simplify })}`)
+            .join(" → ")
       )
       .join(" / ");
   }
   const routes = problem.solutionRoutes && problem.solutionRoutes.length > 0 ? problem.solutionRoutes : [problem];
-  return routes.map((r) => `${formatValue(r.left)}${r.operator}${formatValue(r.right)} = ${formatValue(r.result)}`).join(" / ");
+  return routes
+    .map((r) => {
+      const displayResult = simplify ? r.result : computeUnsimplifiedFractionResult(r.left, r.operator, r.right) ?? r.result;
+      return `${formatValue(r.left, { simplify })}${r.operator}${formatValue(r.right, { simplify })} = ${formatValue(displayResult, { simplify })}`;
+    })
+    .join(" / ");
 }
 
 /**
@@ -530,6 +544,13 @@ function beginQuestion() {
 
   const problem = generateNonDuplicateQuestion(candidateTemplates);
 
+  // 同分母分数のたし算・ひき算を、約分をまだ学習していない学期（4-3・5-1）で出題している場合は、
+  // 問題文・カード・答えを約分しない状態で表示する（テンプレート自身の gradeTerm ではなく、
+  // 今のバトル全体の gradeTerm＝gameState.gradeTerm で判定するため、5-1で復習として
+  // 出題される場合も対象になる。詳しくは question-generator.js の
+  // shouldDisplayFractionsUnsimplified() を参照）。
+  problem.simplifyFractions = !shouldDisplayFractionsUnsimplified(problem.template, gameState.gradeTerm);
+
   gameState.currentProblem = problem;
   gameState.lastTemplateId = problem.templateId;
   gameState.currentQuestionPenalized = false;
@@ -552,6 +573,7 @@ function beginQuestion() {
       right: problem.right,
       result: problem.result,
       answerUnit: problem.answerUnit,
+      simplifyFractions: problem.simplifyFractions,
       incorrectCount: 0,
       timeoutCount: 0,
       lastAttemptText: "（未回答）"
@@ -678,6 +700,7 @@ function onTimerExpired() {
 }
 
 function handleCorrect(resultValue) {
+  const problem = gameState.currentProblem;
   const questionNumber = gameState.solvedQuestions + 1;
   const isFinalQuestion = questionNumber >= gameState.totalQuestions;
 
@@ -716,7 +739,11 @@ function handleCorrect(resultValue) {
   pushCurrentRecordToHistory();
 
   gameState.pendingOutcome = gameState.solvedQuestions >= gameState.totalQuestions ? "clear" : "next";
-  ui.showCorrectEffect(resultValue);
+  const simplify = problem.simplifyFractions !== false;
+  const displayResultValue = simplify
+    ? resultValue
+    : computeUnsimplifiedFractionResult(problem.left, problem.operator, problem.right) ?? resultValue;
+  ui.showCorrectEffect(displayResultValue, { simplify });
   // isBusy は「タップして次へ」が押されるまで true のまま維持し、連続タップを防ぐ
   logDebugInfo();
 }

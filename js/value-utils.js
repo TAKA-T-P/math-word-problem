@@ -170,12 +170,34 @@ export function areValuesEqual(a, b) {
  * （formatValue はデバッグ用テキスト・検証ページのテキスト表示など、
  *  縦型HTMLを使わない場所専用です）。
  */
-export function formatValue(value) {
+export function formatValue(value, { simplify = true } = {}) {
   if (isFractionValue(value)) {
-    const s = simplifyFraction(value);
+    const s = simplify ? simplifyFraction(value) : value;
     return `${s.numerator}/${s.denominator}`;
   }
   return formatNumber(value);
+}
+
+/**
+ * 同分母の分数どうしのたし算・ひき算の結果を、これ以上約分しない状態
+ * （共通の分母のまま、分子だけをたし引きした状態）で返します（第9段階で追加）。
+ * 「約分をまだ習っていない学年・学期」で同分母分数のたし算・ひき算を表示する際、
+ * 通常の calculateValues/addFractions/subtractFractions が内部で行う約分を経ずに、
+ * 表示用の値だけを求めるために使用します（正誤判定・保存されるデータそのものは
+ * 引き続き約分済みの値を使うため、この関数は表示直前にのみ呼び出してください）。
+ * 分母が異なる場合や、対応していない演算子の場合は null を返します。
+ */
+export function computeUnsimplifiedFractionResult(left, operator, right) {
+  if (!isFractionValue(left) || !isFractionValue(right) || left.denominator !== right.denominator) {
+    return null;
+  }
+  if (operator === "+") {
+    return { type: "fraction", numerator: left.numerator + right.numerator, denominator: left.denominator };
+  }
+  if (operator === "-") {
+    return { type: "fraction", numerator: left.numerator - right.numerator, denominator: left.denominator };
+  }
+  return null;
 }
 
 /**

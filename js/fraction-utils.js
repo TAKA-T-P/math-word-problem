@@ -3,9 +3,14 @@
 // 浮動小数点数（0.6 など）に変換してから計算することはありません
 // （fractionToNumber は表示・数値比較の補助にのみ使用してください）。
 //
-// 今回のバージョンで実際に使用するのは「同分母分数のたし算・ひき算」のみですが、
-// 将来の小学5・6年生対応（異分母分数・分数のかけ算/わり算）を見据えて、
-// かけ算・わり算の基礎処理もここに用意しています。
+// 小学4年生3学期では「同分母分数のたし算・ひき算」のみを使用していましたが、
+// addFractions/subtractFractions 自体は最初からクロス乗算（a.numerator×b.denominator±...）で
+// 計算しており、分母が異なる（異分母）場合でも正しく計算できる設計でした。そのため、
+// 小学5年生2学期の異分母分数のたし算・ひき算（第8段階）でも、これらの関数を無改造のまま
+// 使用しています。lcm() / convertToCommonDenominator() は、通分そのものを児童に
+// 入力させる必要は無いものの、開発者用検証ページのデバッグ表示（通分前・通分後の分数）
+// のために第8段階で追加しました。
+// かけ算・わり算の基礎処理は、将来の小学6年生対応を見据えて用意しています。
 
 /**
  * 2つの整数の最大公約数を求めます（ユークリッドの互除法）。
@@ -18,6 +23,32 @@ export function gcd(a, b) {
     [x, y] = [y, x % y];
   }
   return x === 0 ? 1 : x;
+}
+
+/**
+ * 2つの正の整数の最小公倍数を求めます（第8段階で追加）。
+ */
+export function lcm(a, b) {
+  const x = Math.abs(Math.trunc(a));
+  const y = Math.abs(Math.trunc(b));
+  if (x === 0 || y === 0) return 0;
+  return (x / gcd(x, y)) * y;
+}
+
+/**
+ * 2つの分数を、共通の分母（最小公倍数）に通分します（第8段階で追加）。
+ * 実際の正誤判定・答えの計算には使用しません（addFractions/subtractFractions が
+ * クロス乗算で直接計算するため）。開発者用検証ページで「通分前・通分後」を
+ * 表示する用途、および将来の解説機能のために用意しています。
+ * @returns {{denominator:number, a:{type:"fraction",numerator,denominator}, b:{type:"fraction",numerator,denominator}}}
+ */
+export function convertToCommonDenominator(a, b) {
+  const commonDenominator = lcm(a.denominator, b.denominator);
+  return {
+    denominator: commonDenominator,
+    a: { type: "fraction", numerator: a.numerator * (commonDenominator / a.denominator), denominator: commonDenominator },
+    b: { type: "fraction", numerator: b.numerator * (commonDenominator / b.denominator), denominator: commonDenominator }
+  };
 }
 
 /**

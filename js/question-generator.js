@@ -204,10 +204,54 @@ function generateDecimalMultiplicativeComparisonValues(variables, quantityRelati
     throw new Error("quantityRelation が指定されていないテンプレートです（小数倍・もとの量には必須です）。");
   }
   const { baseKey, comparedKey, multiplierKey } = quantityRelation;
-  const baseValue = pickValueForRange(variables[baseKey]);
-  const multiplierValue = pickValueForRange(variables[multiplierKey]);
-  const comparedValue = normalizeNumber(multiplyDecimal(baseValue, multiplierValue));
-  return { [baseKey]: baseValue, [multiplierKey]: multiplierValue, [comparedKey]: comparedValue };
+  return generateProportionalValues(variables, baseKey, multiplierKey, comparedKey);
+}
+
+/**
+ * 「aKey × bKey = productKey」という関係を持つ2つの値を独立に生成し、積を
+ * 誤差の出ない multiplyDecimal で計算する、汎用の生成ロジックです（第8段階で追加）。
+ * 小数倍・もとの量（base×multiplier=compared）、平均（count×average=total）、
+ * 単位量あたり・混み具合（unitCount×perUnit=total）は、いずれも「2つの既知の値から
+ * 積にあたる3つ目の値を求める」という同じ構造を持つため、この1つの関数を共有しています。
+ * 「どれが未知（答え）か」は各テンプレートの solutionRoutes 側が決めるため、
+ * この関数は常に3つの値をすべて生成するだけです。
+ */
+function generateProportionalValues(variables, aKey, bKey, productKey) {
+  const aValue = pickValueForRange(variables[aKey]);
+  const bValue = pickValueForRange(variables[bKey]);
+  const productValue = normalizeNumber(multiplyDecimal(aValue, bValue));
+  return { [aKey]: aValue, [bKey]: bValue, [productKey]: productValue };
+}
+
+/**
+ * 平均専用の生成ルール（小学5年生2学期）。
+ * quantityRelation（countKey・averageKey・totalKey）が指す変数名を使って、
+ * generateProportionalValues() に委譲します（count×average=total）。
+ * 平均を求める問題（合計÷個数）・合計を求める問題（平均×個数）のどちらも、
+ * 生成ロジック自体は同じで、「何が未知か」は solutionRoutes 側が決めます。
+ */
+function generateAverageValues(variables, quantityRelation) {
+  if (!quantityRelation) {
+    throw new Error("quantityRelation が指定されていないテンプレートです（平均には必須です）。");
+  }
+  const { countKey, averageKey, totalKey } = quantityRelation;
+  return generateProportionalValues(variables, countKey, averageKey, totalKey);
+}
+
+/**
+ * 単位量あたり・混み具合専用の生成ルール（小学5年生2学期）。
+ * quantityRelation（unitCountKey・perUnitKey・totalKey）が指す変数名を使って、
+ * generateProportionalValues() に委譲します（unitCount×perUnit=total）。
+ * 混み具合（1㎡あたりの人数など）も、数量関係としては単位量あたりと全く同じ構造
+ * （全体量＝単位数×1単位あたりの量）のため、同じ関数を共有しています
+ * （カテゴリとしての区別は categoryId・問題文のテーマだけで行います）。
+ */
+function generateUnitRateValues(variables, quantityRelation) {
+  if (!quantityRelation) {
+    throw new Error("quantityRelation が指定されていないテンプレートです（単位量あたり・混み具合には必須です）。");
+  }
+  const { unitCountKey, perUnitKey, totalKey } = quantityRelation;
+  return generateProportionalValues(variables, unitCountKey, perUnitKey, totalKey);
 }
 
 const GENERATOR_TYPE_HANDLERS = {
@@ -237,6 +281,22 @@ const GENERATOR_TYPE_HANDLERS = {
     generateDecimalMultiplicativeComparisonValues(variables, template.quantityRelation),
   decimalOriginalQuantity: (variables, template) =>
     generateDecimalMultiplicativeComparisonValues(variables, template.quantityRelation),
+  // 異分母分数のたし算・ひき算（小学5年生2学期）。standard と同じ独立生成戦略のエイリアス。
+  // a・b の分母は、テンプレート側で異なる固定値として定義するため（例: a=denom5, b=denom4）、
+  // ここで動的に「異分母になるよう調整する」処理は不要です。
+  unlikeDenominatorFractionAddition: (variables) => generateStandardValues(variables),
+  unlikeDenominatorFractionSubtraction: (variables) => generateStandardValues(variables),
+  // 平均（小学5年生2学期）。count×average=total の関係を持つ2つのカテゴリ
+  // （averageFromTotal: 平均を求める／totalFromAverage: 合計を求める）で共有します。
+  averageFromTotal: (variables, template) => generateAverageValues(variables, template.quantityRelation),
+  totalFromAverage: (variables, template) => generateAverageValues(variables, template.quantityRelation),
+  // 2つの数の平均（小学5年生2学期、2段階問題）。既存の「たし算→わり算」の2段階生成ルールを
+  // そのまま再利用します（divisorを常に2に固定したテンプレートにするだけで実現できます）。
+  averageOfTwoValues: (variables) => generateMultiStepSumToDivisibleValues(variables),
+  // 単位量あたり・混み具合（小学5年生2学期）。unitCount×perUnit=total の関係を持つ
+  // 2つのカテゴリ（unitRate: 1単位あたりを求める／totalFromUnitRate: 全体量を求める）で共有します。
+  unitRate: (variables, template) => generateUnitRateValues(variables, template.quantityRelation),
+  totalFromUnitRate: (variables, template) => generateUnitRateValues(variables, template.quantityRelation),
   multiStepDivideFirst: (variables) => generateMultiStepDivideFirstValues(variables),
   multiStepSumToDivisible: (variables) => generateMultiStepSumToDivisibleValues(variables)
 };
@@ -250,7 +310,17 @@ const DIVISION_GENERATOR_TYPES = new Set([
 ]);
 
 // getVisibleNumbers で「quantityRelation の参照先から見えている数値を判定する」対象のgeneratorType。
-const QUANTITY_RELATION_GENERATOR_TYPES = new Set(["decimalMultiplicativeComparison", "decimalOriginalQuantity"]);
+// （小数倍・もとの量・平均・単位量あたり・混み具合。いずれも quantityRelation を持ち、
+//  solutionRoutes[0].left/right が実際に参照している2つの変数だけを見せる、という
+//  同じ汎用ロジックで正しく判定できます。）
+const QUANTITY_RELATION_GENERATOR_TYPES = new Set([
+  "decimalMultiplicativeComparison",
+  "decimalOriginalQuantity",
+  "averageFromTotal",
+  "totalFromAverage",
+  "unitRate",
+  "totalFromUnitRate"
+]);
 
 function generateValuesForTemplate(template) {
   const handler = GENERATOR_TYPE_HANDLERS[template.generatorType] || GENERATOR_TYPE_HANDLERS.standard;
@@ -703,6 +773,12 @@ const GRADE_TERM_PLAN_CONFIG = {
   "5-1": {
     newContentGradeTerms: ["5-1"],
     reviewGradeTerms: ["4-1", "4-2", "4-3", "4-multi-step"]
+  },
+  // 小学5年生2学期（第8段階）：新内容は5-2の5カテゴリ、復習内容は4年生1〜3学期
+  // （整数の2段階文章題を含む）・5年生1学期から偏りなく選ぶ。
+  "5-2": {
+    newContentGradeTerms: ["5-2"],
+    reviewGradeTerms: ["4-1", "4-2", "4-3", "4-multi-step", "5-1"]
   }
 };
 
@@ -723,6 +799,35 @@ export function getContentGroup(template) {
     return template.contentGroup;
   }
   return template.gradeTerm === "4-1" ? "review" : "new";
+}
+
+// 「約分をまだ学習していない学年・学期」で同分母分数のたし算・ひき算を出題する場合、
+// 問題文・選択肢カード・答えを約分しない状態で表示するためのカテゴリ・学期の組み合わせ
+// （第9段階で追加）。対象は同分母分数のたし算・ひき算の2カテゴリのみで、判定に使うのは
+// テンプレート自身の gradeTerm（常に "4-3"）ではなく、"今その問題が出題されている
+// バトル/トレーニングセッション全体の gradeTerm" です。これにより、4-3モードで新内容として
+// 出題される場合だけでなく、5-1モードの復習内容として同じテンプレートが出題される場合も
+// 同様に約分なしで表示されます。5-2モード（異分母分数を学習し、約分の意味を理解した段階）
+// では、同じ4-3のテンプレートが復習内容として出てきても、通常どおり約分して表示します。
+const UNSIMPLIFIED_FRACTION_DISPLAY_CATEGORY_IDS = new Set([
+  "same-denominator-fraction-addition",
+  "same-denominator-fraction-subtraction"
+]);
+const UNSIMPLIFIED_FRACTION_DISPLAY_GRADE_TERMS = new Set(["4-3", "5-1"]);
+
+/**
+ * 問題文・選択肢カード・答えを約分しない状態で表示すべきかどうかを判定します。
+ * @param {object} template - 出題された問題のテンプレート（problem.template）
+ * @param {string} currentGradeTerm - 今そのバトル/トレーニングセッション全体で選ばれている
+ *   gradeTerm（gameState.gradeTerm または trainingState.gradeTerm。テンプレート自身の
+ *   gradeTermとは異なる場合がある＝復習内容として出題されている場合）
+ */
+export function shouldDisplayFractionsUnsimplified(template, currentGradeTerm) {
+  return (
+    !!template &&
+    UNSIMPLIFIED_FRACTION_DISPLAY_CATEGORY_IDS.has(template.categoryId) &&
+    UNSIMPLIFIED_FRACTION_DISPLAY_GRADE_TERMS.has(currentGradeTerm)
+  );
 }
 
 /**
