@@ -88,22 +88,45 @@ let timerRemainingMs = 0;
 let timerLastTs = null;
 let lastTimerRatio = 1;
 
-// 解答時間ゲージが減っている間、0.5秒ごとに「カチカチ」と時計の秒針のような音を鳴らす。
+// 解答時間ゲージが減っている間、「カチカチ」と時計の秒針のような音を鳴らす。
+// ゲージ残量が50%以上のときは1秒おき、50%未満のときは0.5秒おきに鳴らす
+// （残り時間が少なくなるほど鳴る間隔が短くなり、焦りを演出する）。
 // 正解・不正解・時間切れ・リタイアなど、タイマーが止まるタイミングと連動して必ず止める。
-const TICK_INTERVAL_MS = 500;
+const TICK_INTERVAL_FAST_MS = 500;
+const TICK_INTERVAL_SLOW_MS = 1000;
+const TICK_INTERVAL_RATIO_THRESHOLD = 0.5;
 let tickIntervalHandle = null;
+let currentTickIntervalMs = null;
 
-function startTickSound() {
+function tickIntervalMsForRatio(ratio) {
+  return ratio >= TICK_INTERVAL_RATIO_THRESHOLD ? TICK_INTERVAL_SLOW_MS : TICK_INTERVAL_FAST_MS;
+}
+
+function startTickSound(ratio = lastTimerRatio) {
   stopTickSound();
+  currentTickIntervalMs = tickIntervalMsForRatio(ratio);
   tickIntervalHandle = window.setInterval(() => {
     audio.playTick();
-  }, TICK_INTERVAL_MS);
+  }, currentTickIntervalMs);
 }
 
 function stopTickSound() {
   if (tickIntervalHandle !== null) {
     window.clearInterval(tickIntervalHandle);
     tickIntervalHandle = null;
+  }
+  currentTickIntervalMs = null;
+}
+
+/**
+ * タイマーが動いている間、毎フレーム呼び出して、ゲージ残量が50%のしきい値をまたいだら
+ * カチカチ音の間隔（0.5秒⇔1秒）を切り替えます。タイマーが止まっている間は何もしません。
+ */
+function updateTickSoundIntervalForRatio(ratio) {
+  if (tickIntervalHandle === null) return;
+  const desiredIntervalMs = tickIntervalMsForRatio(ratio);
+  if (desiredIntervalMs !== currentTickIntervalMs) {
+    startTickSound(ratio);
   }
 }
 
@@ -127,6 +150,7 @@ function timerLoop(ts) {
   gameState.timerRemainingRatio = ratio;
   ui.updateTimer(ratio * 100);
   ui.updateEnemyDangerGlow(ratio);
+  updateTickSoundIntervalForRatio(ratio);
 
   if (timerRemainingMs <= 0) {
     timerActive = false;
@@ -720,8 +744,9 @@ function handleCorrect(resultValue) {
   const timeRatioPercent = gameState.currentQuestionPenalized ? 0 : toTimeRatioPercent(lastTimerRatio);
   let addedScore = calculateQuestionScore(questionNumber, timeRatioPercent);
   if (isFinalQuestion) {
-    // 最終問題に正解したときだけ、残りハート数に応じたボーナスを加算する。
-    addedScore += 2000 * gameState.hearts;
+    // 最終問題に正解したときだけ、レベル・残りハート数に応じたボーナスを加算する
+    // （ボーナス＝80×レベル×レベル×残りハート数。レベルMAXは内部レベル6として計算する）。
+    addedScore += 80 * gameState.level * gameState.level * gameState.hearts;
   }
   gameState.score += addedScore;
   gameState.rank = calculateRank(gameState.score, gameState.level);
