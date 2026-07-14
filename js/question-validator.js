@@ -18,7 +18,7 @@ const MAX_REASONABLE_FRACTION_DENOMINATOR = 12;
 // 現在 data/index.js に登録されている出題範囲キー。新しい学期を追加したら、
 // ここにも追加してください（data/index.js から自動取得すると循環参照になりやすいため、
 // 検証専用の一覧として独立させています）。
-const VALID_GRADE_TERMS = ["4-1", "4-2", "4-3", "4-multi-step"];
+const VALID_GRADE_TERMS = ["4-1", "4-2", "4-3", "4-multi-step", "5-1"];
 
 export const VALID_OPERATORS = ["+", "-", "×", "÷"];
 export const VALID_QUESTION_TYPES = ["singleStep", "multiStep"];
@@ -92,6 +92,31 @@ const GENERATOR_TYPE_RULES = {
     requiredVariableKeys: ["a", "b"],
     computedVariables: [],
     isFractionGenerator: true
+  },
+  // 小数×小数（小学5年生1学期）。standard と同じ独立生成戦略のエイリアス。
+  decimalTimesDecimal: {
+    requiredVariableKeys: [],
+    computedVariables: []
+  },
+  // 小数÷小数（小学5年生1学期）。わる数(divisor)・商(quotient)から、わられる数(dividend)を
+  // 自動計算する点は exactDecimalDivisionByInteger と同じ（わる数も小数になる点だけが異なる）。
+  exactDecimalDivisionByDecimal: {
+    requiredVariableKeys: ["divisor", "quotient"],
+    computedVariables: ["dividend"]
+  },
+  // 小数倍・もとの量（小学5年生1学期）は、必要な変数キーがテンプレートごとに異なる
+  // （quantityRelation.baseKey / multiplierKey で指定される）ため、GENERATOR_TYPE_RULES の
+  // 固定リストでは表現できない。requiresQuantityRelation フラグを立て、
+  // validateQuantityRelation() で個別に検証する。
+  decimalMultiplicativeComparison: {
+    requiredVariableKeys: [],
+    computedVariables: [],
+    requiresQuantityRelation: true
+  },
+  decimalOriginalQuantity: {
+    requiredVariableKeys: [],
+    computedVariables: [],
+    requiresQuantityRelation: true
   }
 };
 
@@ -110,6 +135,72 @@ function getGeneratorRule(generatorType) {
 }
 
 /**
+ * テンプレート文・textParts・solutionRoutes から参照してよい「既知の変数名」の集合を求めます。
+ * variables のキー・generatorType が自動計算する変数（rule.computedVariables）に加えて、
+ * 小数倍・もとの量（quantityRelation を持つテンプレート）では、quantityRelation.comparedKey
+ * （generateDecimalMultiplicativeComparisonValues() が動的に計算する比較量のキー名）も
+ * 「既知」として扱います。comparedKey はテンプレートごとに名前が異なる（例: "blueLength"）ため、
+ * GENERATOR_TYPE_RULES の computedVariables のような固定リストでは表現できません。
+ */
+function getKnownVariableKeys(template, rule) {
+  const keys = new Set([
+    ...(template.variables && typeof template.variables === "object" ? Object.keys(template.variables) : []),
+    ...(rule ? rule.computedVariables : [])
+  ]);
+  if (template.quantityRelation && typeof template.quantityRelation.comparedKey === "string") {
+    keys.add(template.quantityRelation.comparedKey);
+  }
+  return keys;
+}
+
+/**
+ * 小数倍・もとの量テンプレートの quantityRelation を検証します。
+ * baseKey・multiplierKey は variables に存在する必要があり、comparedKey は
+ * （動的に計算される値のため）逆に variables に含めてはいけません。
+ */
+function validateQuantityRelation(template, errors) {
+  const qr = template.quantityRelation;
+  if (!qr || typeof qr !== "object") {
+    errors.push(
+      `generatorType="${template.generatorType}" には quantityRelation（baseKey/comparedKey/multiplierKey/unknown）が必要です`
+    );
+    return;
+  }
+  if (qr.type !== "multiplicative-comparison") {
+    errors.push(`quantityRelation.type が不正です: ${qr.type}（"multiplicative-comparison" である必要があります）`);
+  }
+  for (const key of ["baseKey", "comparedKey", "multiplierKey"]) {
+    if (typeof qr[key] !== "string" || qr[key].length === 0) {
+      errors.push(`quantityRelation.${key} が文字列で指定されていません`);
+    }
+  }
+  if (!["base", "compared", "multiplier"].includes(qr.unknown)) {
+    errors.push(`quantityRelation.unknown が不正です: ${qr.unknown}（"base"／"compared"／"multiplier" のいずれか）`);
+  }
+
+  const hasVariables = template.variables && typeof template.variables === "object";
+  if (hasVariables && typeof qr.baseKey === "string" && !(qr.baseKey in template.variables)) {
+    errors.push(`quantityRelation.baseKey が variables に存在しません: ${qr.baseKey}`);
+  }
+  if (hasVariables && typeof qr.multiplierKey === "string" && !(qr.multiplierKey in template.variables)) {
+    errors.push(`quantityRelation.multiplierKey が variables に存在しません: ${qr.multiplierKey}`);
+  }
+  if (hasVariables && typeof qr.comparedKey === "string" && qr.comparedKey in template.variables) {
+    errors.push(
+      `quantityRelation.comparedKey は生成時に自動計算される値です。variables に含めないでください: ${qr.comparedKey}`
+    );
+  }
+  if (
+    typeof qr.baseKey === "string" &&
+    typeof qr.comparedKey === "string" &&
+    typeof qr.multiplierKey === "string" &&
+    new Set([qr.baseKey, qr.comparedKey, qr.multiplierKey]).size !== 3
+  ) {
+    errors.push("quantityRelation の baseKey・comparedKey・multiplierKey が重複しています");
+  }
+}
+
+/**
  * textParts（{type:"text", value:string} と {type:"value", ref:変数名} の配列）の
  * 構造を検証します。ref は variables（または generatorType が計算する変数）の
  * キー名と一致している必要があります。
@@ -123,8 +214,7 @@ function validateTextParts(template, rule, errors) {
     errors.push("textPartsが空です");
   }
   const hasVariables = template.variables && typeof template.variables === "object";
-  const knownVariableKeys =
-    rule && hasVariables ? new Set([...Object.keys(template.variables), ...rule.computedVariables]) : null;
+  const knownVariableKeys = rule && hasVariables ? getKnownVariableKeys(template, rule) : null;
 
   template.textParts.forEach((part, i) => {
     if (!part || typeof part !== "object") {
@@ -250,7 +340,7 @@ export function validateTemplate(template) {
   const hasVariables = template.variables && typeof template.variables === "object";
 
   if (hasStringTemplate && hasVariables && rule) {
-    const knownVariableKeys = new Set([...Object.keys(template.variables), ...rule.computedVariables]);
+    const knownVariableKeys = getKnownVariableKeys(template, rule);
     for (const key of extractPlaceholders(template.template)) {
       if (!knownVariableKeys.has(key)) {
         errors.push(`未定義の変数が問題文で使われています: {${key}}`);
@@ -266,6 +356,10 @@ export function validateTemplate(template) {
         errors.push(`generatorType="${template.generatorType}" に必要な変数がありません: ${requiredKey}`);
       }
     }
+  }
+
+  if (rule && rule.requiresQuantityRelation) {
+    validateQuantityRelation(template, errors);
   }
 
   if (rule && rule.divisorRange && hasVariables && template.variables.divisor) {
@@ -329,7 +423,7 @@ function validateSingleStepSolutionRoutes(template, rule, errors) {
     if (typeof route.left !== "string" || typeof route.right !== "string") {
       errors.push(`solutionRoutes[${i}] のleft/rightは変数名(文字列)で指定してください`);
     } else if (rule) {
-      const knownVariableKeys = new Set([...Object.keys(template.variables), ...rule.computedVariables]);
+      const knownVariableKeys = getKnownVariableKeys(template, rule);
       if (!knownVariableKeys.has(route.left)) {
         errors.push(`solutionRoutes[${i}].left が未定義の変数です: ${route.left}`);
       }
@@ -357,7 +451,7 @@ function validateMultiStepSolutionRoutes(template, rule, errors) {
     errors.push(`solutionRoutes内でルートIDが重複しています: ${[...new Set(duplicateRouteIds)].join(", ")}`);
   }
 
-  const knownVariableKeys = rule ? new Set([...Object.keys(template.variables || {}), ...rule.computedVariables]) : null;
+  const knownVariableKeys = rule ? getKnownVariableKeys(template, rule) : null;
 
   template.solutionRoutes.forEach((route, routeIndex) => {
     if (!route || typeof route !== "object") {

@@ -489,7 +489,7 @@ button {
 }
 
 /* トレーニングの問題番号表示（例: "問題 2／5"）。2段階問題では、既存の
-   .step-indicator（"式 1／2"）と同時に表示される。 */
+   .step-indicator（"式を2つ答えよう！"）と同時に表示される。 */
 .training-progress {
   display: none;
   margin: 4px auto 0;
@@ -654,7 +654,7 @@ button {
   font-size: 0.95rem;
 }
 
-/* 2段階問題の「式 1／2」のような進行表示。1段階問題では非表示のまま。 */
+/* 2段階問題の「式を2つ答えよう！」のような進行表示。1段階問題では非表示のまま。 */
 .step-indicator {
   display: none;
   margin: 4px auto 0;
@@ -675,9 +675,9 @@ button {
   display: block;
 }
 
-/* 式2/2に進んだあと、式1/2で正解した式を「式 2／2」の右側に添える表示。 */
+/* 2つ目の式に進んだあと、1つ目の式で正解した式を「の続きを答えよう」の左側に添える表示。 */
 .step-indicator-prev {
-  margin-left: 6px;
+  margin-right: 6px;
   font-weight: 500;
   opacity: 0.8;
 }

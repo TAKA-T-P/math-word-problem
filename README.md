@@ -3,11 +3,13 @@
 小学4年生〜6年生を対象とした、算数の文章題学習アプリです。
 敵キャラクターとのバトル形式で、文章題の式をカードで組み立てながら学習します。
 
-**現在のバージョンは第6段階です。** 小学4年生・1学期（整数の四則計算）・2学期（小数のたし算/ひき算・
+**現在のバージョンは第7段階です。** 小学4年生・1学期（整数の四則計算）・2学期（小数のたし算/ひき算・
 大きな数・2けたでわるわり算・整数の2段階文章題）・3学期（小数×整数、小数÷整数、同分母分数のたし算・ひき算）
-の**通常バトル**に加えて、**タイマー・ハート・敵HP・スコアの無い「トレーニングモード」を追加**しました。
-トレーニングでは、13種類のカテゴリ（単元）から1つを選び、そのカテゴリだけを5問、時間を気にせず
-何度でも解き直しながら練習できます（詳しくは[18. トレーニングモード（第6段階）](#18-トレーニングモード第6段階)）。
+に加えて、**小学5年生・1学期（小数×小数、小数÷小数、小数倍、もとの量）を通常バトルの正式モードとして追加**しました。
+タイマー・ハート・敵HP・スコアの無い「トレーニングモード」では、17種類のカテゴリ（単元）から1つを選び、
+そのカテゴリだけを5問、時間を気にせず何度でも解き直しながら練習できます
+（詳しくは[18. トレーニングモード（第6段階）](#18-トレーニングモード第6段階)、
+5年1学期の内容は[19. 小学5年生・1学期（第7段階）](#19-小学5年生1学期第7段階)）。
 
 3学期モードでは、分数を**教科書と同じ縦型（横線の上に分子、下に分母）**で表示します。整数・小数・分数は
 `js/value-utils.js` が用意する共通の関数（`calculateValues` `areValuesEqual` など）を通じて扱うため、
@@ -53,6 +55,7 @@
 16. [動作確認用チェックリスト](#16-動作確認用チェックリスト)
 17. [問題データ追加時のチェック項目](#17-問題データ追加時のチェック項目)
 18. [トレーニングモード（第6段階）](#18-トレーニングモード第6段階)
+19. [小学5年生・1学期（第7段階）](#19-小学5年生1学期第7段階)
 
 ## 1. ファイル構成
 
@@ -80,11 +83,12 @@ math-word-battle/
 │  └─ storage.js                 … ハイスコア・効果音設定・選択中の出題範囲の保存/読み込み
 ├─ data/
 │  ├─ index.js                  … 問題データ読み込みの一元窓口。ゲーム本体はここ経由でのみ取得する
-│  ├─ category-registry.js      … トレーニングで選べる13カテゴリの単一の情報源（id/表示名/学期/表示可否/表示順。新規）
+│  ├─ category-registry.js      … トレーニングで選べる17カテゴリの単一の情報源（id/表示名/学期/表示可否/表示順。第7段階で4カテゴリ追加）
 │  ├─ grade4-term1.js           … 小学4年生・1学期の問題テンプレート（24種類、1段階問題）
 │  ├─ grade4-term2.js           … 小学4年生・2学期の問題テンプレート（24種類、小数のたし算/ひき算・大きな数・2けたでわるわり算）
-│  ├─ grade4-term3.js           … 小学4年生・3学期の問題テンプレート（24種類、小数×整数・小数÷整数・同分母分数のたし算/ひき算。新規）
-│  └─ multi-step-integer.js     … 整数のみの2段階問題テンプレート（12種類。開発版モード「4-multi-step」、4-2モードの「2段階文章題」カテゴリ、4-3モードの復習内容の3か所から共有）
+│  ├─ grade4-term3.js           … 小学4年生・3学期の問題テンプレート（24種類、小数×整数・小数÷整数・同分母分数のたし算/ひき算）
+│  ├─ grade5-term1.js           … 小学5年生・1学期の問題テンプレート（32種類、小数×小数・小数÷小数・小数倍・もとの量。第7段階で新規）
+│  └─ multi-step-integer.js     … 整数のみの2段階問題テンプレート（12種類。開発版モード「4-multi-step」、4-2モードの「2段階文章題」カテゴリ、4-3モードと5-1モードの復習内容から共有）
 └─ tools/
    └─ question-validator.html   … 開発者用の問題データ検証ページ（1段階・2段階・整数/小数/分数、出題範囲/カテゴリ等でフィルタ可能）
 ```
@@ -109,6 +113,7 @@ math-word-battle/
 | `solutionRoutes` | array | 正解として認める式のパターンの配列（`singleStep`と`multiStep`で形が異なる。後述） |
 | `answerUnit` | string | 答えの単位 |
 | `contentGroup` | `"new"` \| `"review"`（省略可） | その出題範囲内での「新しく習う内容」か「前の学期までの復習内容」かの区分。4-2の出題プラン（新内容/復習内容をおよそ半々で出題）が使う。**省略した場合は自動判定**され、`gradeTerm` が `"4-1"` なら `"review"`、それ以外は `"new"` として扱われる（`js/question-generator.js` の `getContentGroup()`）。このため既存の `grade4-term1.js` は変更不要 |
+| `quantityRelation` | object（省略可、第7段階で追加） | 「基準量の何倍が比較量である」という倍の数量関係を持つテンプレート（小数倍・もとの量）専用のメタデータ。`{ type:"multiplicative-comparison", baseKey, comparedKey, multiplierKey, unknown }` の形式（詳しくは[19章](#19-小学5年生1学期第7段階)） |
 
 ### 小数を扱う変数（`decimalPlaces`）
 
@@ -137,6 +142,9 @@ variables: {
 | `"exactDivision"` | 1段階のわり算（1けたでわる、整数） | `variables.divisor`（わる数・1〜9）と `variables.quotient`（商）を別々に決めてから `dividend`(=divisor×quotient) を自動計算する。わり算が必ずあまりなく割り切れることを保証する |
 | `"exactDivisionTwoDigit"` | 1段階のわり算（2けたでわる、整数） | `exactDivision` と同じアルゴリズムで、`variables.divisor` の範囲が10〜99になる点だけが異なる |
 | `"exactDecimalDivisionByInteger"` | 小数÷整数 | `exactDivision` と同様に、先に `variables.quotient`（小数第1〜2位）と `variables.divisor`（整数・2〜9）を決めてから `dividend`(=quotient×divisor) を自動計算する。必ず有限小数で割り切れることを保証する |
+| `"decimalTimesDecimal"`（第7段階） | 小数×小数 | `"standard"` の別名。`variables` の両方の変数に `decimalPlaces` を指定するだけで作れる。積の小数点以下の桁数が2桁を超えないよう、両変数の `decimalPlaces` の合計が2以下になるように範囲を設計する |
+| `"exactDecimalDivisionByDecimal"`（第7段階） | 小数÷小数 | `exactDecimalDivisionByInteger` と同じ考え方で、`variables.divisor`・`variables.quotient` をどちらも小数として先に決めてから `dividend`(=divisor×quotient) を自動計算する。必ず有限小数で割り切れることを保証する |
+| `"decimalMultiplicativeComparison"` / `"decimalOriginalQuantity"`（第7段階） | 小数倍・もとの量 | `template.quantityRelation` の `baseKey`・`multiplierKey` が指す変数を独立に生成し、`comparedKey`(=base×multiplier) を自動計算する。どちらが「未知（答え）」かは `solutionRoutes` 側が決めるため、小数倍（比較量を求める／何倍かを求める）・もとの量（基準量を求める）のすべてで同じ生成関数を共有する（詳しくは[19章](#19-小学5年生1学期第7段階)） |
 | `"multiStepDivideFirst"` | 2段階「わり算 → 何か」 | `exactDivision` と同様に `divisor`・`quotient` から `dividend` を計算し、それ以外の変数は独立に生成する |
 | `"multiStepSumToDivisible"` | 2段階「たし算 → わり算」 | `divisor`・`quotient`・`a` を定義すると、`sum`(=divisor×quotient) と `b`(=sum-a) が自動計算される。1つ目の式の答え（a+b）が必ず割り切れることを保証する |
 
@@ -773,9 +781,9 @@ http://localhost:8000/index.html?debug=true
 | `js/game.js` | 通常バトルの `gameState` オブジェクトでゲーム状態を一元管理。起動時に問題テンプレートを `question-validator.js` の `filterValidTemplateSets()`（トレーニングと共通）で検証・フィルタします。問題の進行、ハート管理、敵HP管理、タイマー管理、正解/不正解後の処理、クリア/ゲームオーバー判定、`?debug=true` 時のデバッグ出力を行います。2段階問題の判定・進行自体は `multi-step-engine.js` に委譲し、その結果（正解/不正解、最終正解かどうか）を受け取って既存の共通フロー（ハート減少・タイマー・スコア加算など）に橋渡しするだけに留めています。4-2・4-3モードでは、ゲーム開始時に `question-generator.js` の `planQuestionSequence()` で出題計画を作り（[6章](#6-小学4年生2学期3学期の出題プラン新内容復習内容の比率とカテゴリ配分)）、各問題はその計画に沿って生成します。同一ゲーム内での問題文・式の重複を避ける仕組み（`generateNonDuplicateQuestion()`）、分数を含む問題文（`textParts`）の履歴への保存、分数の分子・分母・約分後の値などを含む詳細なデバッグ出力もここにあります。カウントダウン演出（`runCountdown()`）は `training-mode.js` からも再利用されるため export しています。トレーニングモードの状態（`trainingState`）や `training-mode.js` を参照することは一切ありません。 |
 | `js/training-mode.js` | トレーニングモード専用の状態（`trainingState`）・進行管理（新規、第6段階）。`gameState` とは完全に独立しており、タイマー・ハート・敵HP・スコア・ランク・ハイスコアを一切参照しません。`generateTrainingQuestions(categoryId, templates, count)` が、指定カテゴリのテンプレートだけから（新内容/復習内容の比率処理は使わず）ちょうど5問を、問題文・式の重複を避けながら生成します。1問ごとの正解/不正解処理は、ハート減少・ゲームオーバーの代わりに「同じ問題（2段階なら同じ式）を解答欄をクリアしたまま再挑戦させる」処理になっており、`answer-checker.js`・`multi-step-engine.js`・`ui.js` のカード生成/正誤判定/分数表示はすべて通常バトルと同じ関数をそのまま再利用します。開発者用検証ページ向けの `validateTrainingSetGeneration()`（指定カテゴリで20回生成し、5問ちょうどか・他カテゴリが混ざらないか・重複が無いかを検証）もここにあります。 |
 | `js/ui.js` | 画面の表示切り替え、問題文・選択肢カード・解答欄の表示、HP/ハート/時間ゲージの更新、正解/不正解演出、カードのタップ操作・ドラッグ操作（Pointer Events）、結果画面の表示、デバッグパネルの表示を行います。2段階問題用に、進行表示（「式 1／2」）・中間結果カードの見た目・途中式正解の演出・`?debug=true` 時の開発版モードボタンの動的追加も担当します。数値・分数の表示は必ず `js/value-renderer.js` の `renderValueHtml()` / `renderTextPartsHtml()` を経由し（問題文・カード・解答欄・結果ボックス・履歴）、分数を含むカード・解答欄には専用のクラス（`choice-value-fraction`）で高さを確保します。タイトル画面で最後に選んだ出題範囲・モード・トレーニングの学期/カテゴリの保存・復元も担当します。**第6段階で追加**: モード選択ボタン（`setMode()`）、`data/category-registry.js` から動的に生成する学年学期/カテゴリ選択ボタン、トレーニング画面のヘッダー更新（`updateTrainingHeader()`）、トレーニング専用の軽い誤答演出（`triggerTrainingIncorrectEffect()`）、トレーニング結果画面（`showTrainingResultScreen()`）。バトル画面・結果画面のバトル専用/トレーニング専用要素の出し分けは、`#app` 要素への `mode-training` クラスの付け外し（CSS側の `.battle-only` / `.training-only`）にまとめており、`ui.js` 自体には要素ごとの表示切り替えロジックをほとんど書いていません。 |
-| `js/question-generator.js` | テンプレートから値を生成し、問題文（`text` またはHTML描画用の `textParts`）・選択肢カード（最大8枚）・`solutionRoutes`（解決済みの正解ルート）を作成します。生成直後に `question-validator.js` で検証し、不正な場合はコンソールにエラーを出力した上で再生成します。`questionType: "multiStep"` の場合は、値の生成とルートの数値解決までを行い、進行状態の初期化・最初のカード生成は `multi-step-engine.js` に委譲します。小数変数（`decimalPlaces`）・分数変数（`type:"fraction"`）の生成、4-2/4-3の出題計画生成（`planQuestionSequence()` `getCandidateTemplatesForSlot()` `getContentGroup()`）もここが担当します。ダミーカード生成・重複排除は、数値と分数のどちらの値にも対応した `value-utils.js` の `valueKey()` を使って値の型を意識せず行います。 |
+| `js/question-generator.js` | テンプレートから値を生成し、問題文（`text` またはHTML描画用の `textParts`）・選択肢カード（最大8枚）・`solutionRoutes`（解決済みの正解ルート）を作成します。生成直後に `question-validator.js` で検証し、不正な場合はコンソールにエラーを出力した上で再生成します。`questionType: "multiStep"` の場合は、値の生成とルートの数値解決までを行い、進行状態の初期化・最初のカード生成は `multi-step-engine.js` に委譲します。小数変数（`decimalPlaces`）・分数変数（`type:"fraction"`）の生成、4-2/4-3/5-1の出題計画生成（`planQuestionSequence()` `getCandidateTemplatesForSlot()` `getContentGroup()`、`GRADE_TERM_PLAN_CONFIG` にモードを1件追加するだけで新しい学期にも適用できる）もここが担当します。ダミーカード生成・重複排除は、数値と分数のどちらの値にも対応した `value-utils.js` の `valueKey()` を使って値の型を意識せず行います。**第7段階で追加**: `quantityRelation` を持つテンプレート（小数倍・もとの量）専用の値生成（`generateDecimalMultiplicativeComparisonValues()`）と、そのテンプレートの「見えている数値」を `solutionRoutes[0]` から動的に判定する `getVisibleNumbers()` の分岐。 |
 | `js/multi-step-engine.js` | 2段階問題専用の進行管理。現在の途中式番号、正解候補となる解法ルートの絞り込み、途中式・最終式の判定、中間結果の保存、中間結果カードの生成、次の途中式への移行、複数解法の管理、結果画面用の履歴データの作成を担当します。開発者用検証ページから使う「全ルート完答シミュレーション」もここにあります。式の文字列表示は `js/value-renderer.js` の `renderValueHtml()` を使っており、今回のバージョンの2段階問題はすべて整数のみですが、将来分数の2段階問題を追加した場合にも対応できる下地になっています。 |
-| `js/question-validator.js` | 問題テンプレート（構造）と生成済み問題（数値確定後）を検証します。1段階問題・2段階問題の両方に対応し、2段階問題については「式が2つ登録されているか」「ルートID・resultKeyの重複」「存在しない変数/中間結果の参照や循環参照が無いか」「各ルートの最終結果が一致するか」なども検証します。加えて、`gradeTerm`／`contentGroup` の値の妥当性、`template`/`textParts` のどちらかが存在するか、`textParts` の構造・参照先の妥当性、小数の桁数が多すぎないか、分数の分母・分子の範囲や同分母性、`exactDivision`系のわる数が想定範囲内か、`formatNumber()`/`parseFormattedNumber()` の往復変換が元の値と一致するか、分数の表示用HTML・`aria-label`が正しく生成できるか、なども検証します。ゲーム本体（`game.js`・`training-mode.js`）と `tools/question-validator.html` の両方から使われます。**第6段階で追加**: `filterValidTemplateSets()`（不正なテンプレートを出題プールから除外する処理を`game.js`から移設し、通常バトル・トレーニング共通で使う）、`validateCategoryRegistry()`（カテゴリレジストリ自体のID重複・必須項目チェック）、`validateCategoryRegistryAgainstTemplates()`（レジストリとテンプレートの対応関係。孤立した`categoryId`・テンプレート0件のカテゴリが無いかを検証）。 |
+| `js/question-validator.js` | 問題テンプレート（構造）と生成済み問題（数値確定後）を検証します。1段階問題・2段階問題の両方に対応し、2段階問題については「式が2つ登録されているか」「ルートID・resultKeyの重複」「存在しない変数/中間結果の参照や循環参照が無いか」「各ルートの最終結果が一致するか」なども検証します。加えて、`gradeTerm`／`contentGroup` の値の妥当性、`template`/`textParts` のどちらかが存在するか、`textParts` の構造・参照先の妥当性、小数の桁数が多すぎないか、分数の分母・分子の範囲や同分母性、`exactDivision`系のわる数が想定範囲内か、`formatNumber()`/`parseFormattedNumber()` の往復変換が元の値と一致するか、分数の表示用HTML・`aria-label`が正しく生成できるか、なども検証します。ゲーム本体（`game.js`・`training-mode.js`）と `tools/question-validator.html` の両方から使われます。**第6段階で追加**: `filterValidTemplateSets()`（不正なテンプレートを出題プールから除外する処理を`game.js`から移設し、通常バトル・トレーニング共通で使う）、`validateCategoryRegistry()`（カテゴリレジストリ自体のID重複・必須項目チェック）、`validateCategoryRegistryAgainstTemplates()`（レジストリとテンプレートの対応関係。孤立した`categoryId`・テンプレート0件のカテゴリが無いかを検証）。**第7段階で追加**: `validateQuantityRelation()`（小数倍・もとの量テンプレートの `quantityRelation` の構造検証）と、`comparedKey` のような動的な変数名も「既知の変数」として扱う `getKnownVariableKeys()` ヘルパー。 |
 | `js/answer-checker.js` | `eval()` を使わずに、値（数値または分数）と演算記号から安全に式を計算します。1つの式が正解ステップと一致するかを判定する共通ロジック（`matchesStep`）を持ち、1段階問題の `checkAnswer` と、2段階問題の `multi-step-engine.js` の両方から使われます。実際の計算・比較は自分では行わず、`value-utils.js` の `calculateValues()` / `areValuesEqual()` にすべて委譲しています。 |
 | `js/number-utils.js` | 浮動小数点誤差の出ない小数の加減乗除（整数にスケールしてから計算し戻す方式）、整数のわる数による安全なわり算（`divideExactByInteger()`。小数÷整数にも対応）、桁区切り・小数のトリム表示（`formatNumber()`）、表示文字列から数値へ戻す変換（`parseFormattedNumber()`）、誤差を許容した数値比較（`areNumbersEqual()`）を提供します。数値（整数・小数）専用のユーティリティで、分数は扱いません（分数は `fraction-utils.js`）。 |
 | `js/fraction-utils.js` | 分数専用の計算処理（新規）。最大公約数（`gcd`）、約分（`simplifyFraction`）、たし算・ひき算・かけ算・わり算（`addFractions` など）、同値判定（`areFractionsEqual`）を、分子・分母だけを使って正確に行います（浮動小数点数を経由しません）。 |
@@ -784,12 +792,13 @@ http://localhost:8000/index.html?debug=true
 | `js/score.js` | 問題ごとの加算スコア、現在のランクを計算します（1段階・2段階共通）。 |
 | `js/audio.js` | Web Audio API でカウントダウン音・正解音・不正解音・敵撃破音・ゲームオーバー音を生成します。 |
 | `js/storage.js` | ハイスコア・効果音設定・タイトル画面で最後に選んだ出題範囲（`gradeTerm`）を `localStorage` に保存/読み込みします。`localStorage` が使えない環境でもエラーにならないようにしています。**第6段階で追加**: `lastMode`（前回選んだモード）・`lastTrainingGradeTerm`・`lastTrainingCategoryId` の保存/読み込み。トレーニングのスコア・進捗・ハイスコアは保存しません。既存のハイスコア用キーとは別のキーを使っており、既存データには一切触れません。 |
-| `data/index.js` | 出題範囲（学年・学期）ごとの問題テンプレートを一元管理するレジストリ。ゲーム本体はここ経由でのみデータを取得します。`"4-3"` は `data/grade4-term3.js` に登録し、`"4-multi-step"` の `data/multi-step-integer.js` を4-2の「2段階文章題」カテゴリ・4-3の復習内容としても共有します。 |
-| `data/category-registry.js` | トレーニングモードで選べる13カテゴリの単一の情報源（新規、第6段階）。各カテゴリは `{ id, label, gradeTerm, gradeLabel, enabledInTraining, order }` を持ち、`getCategoriesForGradeTerm()` `getGradeTermGroups()` `getCategoryById()` のヘルパーを提供します。`js/ui.js` はこのレジストリからタイトル画面のカテゴリ選択ボタンを動的に生成するだけで、カテゴリ名を個別にハードコードしていません。詳しくは[18章](#18-トレーニングモード第6段階)。 |
+| `data/index.js` | 出題範囲（学年・学期）ごとの問題テンプレートを一元管理するレジストリ。ゲーム本体はここ経由でのみデータを取得します。`"4-3"` は `data/grade4-term3.js`、`"5-1"` は `data/grade5-term1.js`（第7段階）に登録し、`"4-multi-step"` の `data/multi-step-integer.js` を4-2の「2段階文章題」カテゴリ・4-3と5-1の復習内容としても共有します。 |
+| `data/category-registry.js` | トレーニングモードで選べる17カテゴリの単一の情報源（第6段階で新規導入、第7段階で4カテゴリ追加）。各カテゴリは `{ id, label, gradeTerm, gradeLabel, enabledInTraining, order }` を持ち、`getCategoriesForGradeTerm()` `getGradeTermGroups()` `getCategoryById()` のヘルパーを提供します。`js/ui.js` はこのレジストリからタイトル画面のカテゴリ選択ボタンを動的に生成するだけで、カテゴリ名を個別にハードコードしていません。詳しくは[18章](#18-トレーニングモード第6段階)。 |
 | `data/grade4-term1.js` | 小学4年生・1学期の1段階問題テンプレートのデータのみを定義（ゲーム処理は含みません）。 |
 | `data/grade4-term2.js` | 小学4年生・2学期の1段階問題テンプレートのデータのみを定義（小数のたし算・ひき算、大きな数、2けたでわるわり算、各6種類・計24種類）。 |
-| `data/grade4-term3.js` | 小学4年生・3学期の1段階問題テンプレートのデータのみを定義（小数×整数・小数÷整数・同分母分数のたし算・同分母分数のひき算、各6種類・計24種類。新規）。分数のテンプレートは `textParts` を使用します。 |
-| `data/multi-step-integer.js` | 整数のみの2段階問題テンプレートのデータのみを定義。開発版モード（`4-multi-step`）専用のデータであると同時に、4-2モードの「2段階文章題」カテゴリ、4-3モードの復習内容からも同じデータをそのまま参照します（複製はしていません）。 |
+| `data/grade4-term3.js` | 小学4年生・3学期の1段階問題テンプレートのデータのみを定義（小数×整数・小数÷整数・同分母分数のたし算・同分母分数のひき算、各6種類・計24種類）。分数のテンプレートは `textParts` を使用します。 |
+| `data/grade5-term1.js` | 小学5年生・1学期の1段階問題テンプレートのデータのみを定義（小数×小数・小数÷小数・小数倍・もとの量、各8種類・計32種類。第7段階で新規）。小数倍・もとの量のテンプレートは `quantityRelation` メタデータを持ちます。詳しくは[19章](#19-小学5年生1学期第7段階)。 |
+| `data/multi-step-integer.js` | 整数のみの2段階問題テンプレートのデータのみを定義。開発版モード（`4-multi-step`）専用のデータであると同時に、4-2モードの「2段階文章題」カテゴリ、4-3モードと5-1モードの復習内容からも同じデータをそのまま参照します（複製はしていません）。 |
 
 ## 12. ローカルでの起動方法
 
@@ -916,25 +925,44 @@ npx serve .
   - 「もう一度」で同じカテゴリの新しい5問を再生成、「タイトルに戻る」でタイトル画面へ
   - リタイア機能（確認ダイアログの文言・ボタンがトレーニング向けに変わる）
   - 詳しくは[18章](#18-トレーニングモード第6段階)
+- **小学5年生・1学期（第7段階、正式モード、`gradeTerm: "5-1"`）**
+  - 小数×小数（かけ算なので順序を問わず正解）
+  - 小数÷小数（必ず有限小数で割り切れる。循環小数・あまりのあるわり算は出題しない）
+  - 小数倍（基準量・何倍から比較量を求める／基準量・比較量から何倍かを求める、の両方に対応）
+  - もとの量（比較量・何倍から基準量＝もとの量を求める）
+  - 「基準量の何倍が比較量である」という数量関係を `quantityRelation` メタデータで表現し、
+    小数倍・もとの量の両カテゴリで同じ値生成ロジックを共有（詳しくは[19章](#19-小学5年生1学期第7段階)）
+  - 小数×小数・小数÷小数は、`js/value-utils.js` の `calculateValues()` の `"÷"` 判定を
+    「わる数が整数か小数か」で分岐させることで、既存の整数÷整数の判定を壊さずに対応
+  - 1〜3学期の復習内容（整数の2段階文章題を含む）と5年1学期の新出内容をおよそ半々の比率で出題
+  - 新内容側は4カテゴリに均等に近い頻度で配分。復習内容は4-1/4-2/4-3/4-multi-stepから偏りなく選ばれる
+  - この段階の新内容（小数×小数・小数÷小数・小数倍・もとの量）はすべて1段階問題（既存の整数2段階文章題は復習として引き続き出題）
+  - 同じ問題文・同じ式が1回のゲーム内で繰り返し出題されないようにする重複回避
+  - ハイスコアは出題範囲＋レベルの組み合わせごとに保存（5-1にも独立したハイスコア枠がある）
+  - 32種類の新規テンプレート（小数×小数・小数÷小数・小数倍・もとの量、各8種類）
+  - トレーニングモードの4新規カテゴリにも対応（`decimal-times-decimal` `decimal-divided-by-decimal`
+    `decimal-multiplicative-comparison` `decimal-original-quantity`）
 
 ## 15. 今回対応していない内容／今後追加予定の機能
 
 ### 今回のバージョンで対応していない分数・小数の内容
 
-分数データの正確性・既存機能の維持を優先するため、次の内容は今回意図的に対象外としています。
+分数・小数データの正確性・既存機能の維持を優先するため、次の内容は今回意図的に対象外としています。
 
 - 異分母分数のたし算・ひき算
 - 分数×整数・分数×分数
 - 分数÷整数・分数÷分数
-- 小数×小数・小数÷小数
 - 帯分数への変換（仮分数はそのまま表示します）
-- 分数・小数を使った2段階文章題（2段階問題は整数のみのまま）
+- 分数・小数を使った2段階文章題（2段階問題は整数のみのまま。小数倍・小数×小数などを組み合わせた
+  2段階問題は今回追加していません）
 - 小数と分数が混在する計算・問題
+- 平均・単位量あたりの大きさ・速さ・割合・百分率・歩合・値引き（第7段階でも対象外）
+- 小学5年生2学期以降・小学6年生の内容（比、拡大図・縮図、円の面積、角柱・円柱の体積 など）
 
 ### 今後追加予定の機能
 
-- 小学5年生・6年生の問題データ（異分母分数、分数の四則演算、割合・速さ・比 など）
-- 2段階問題の独立した出題範囲としての公開（現在は4-2モードの1カテゴリ・4-3モードの復習内容と、開発版モードのみ）
+- 小学5年生2学期以降・6年生の問題データ（異分母分数、分数の四則演算、割合・速さ・比 など）
+- 2段階問題の独立した出題範囲としての公開（現在は4-2モードの1カテゴリ・4-3/5-1モードの復習内容と、開発版モードのみ）
 - 3つ以上の式が必要な問題、括弧を使う式
 - `difficulty` を使った出題フィルタ
 - 効果音・演出のバリエーション追加
@@ -1045,6 +1073,35 @@ npx serve .
       すべてOK（NGが無い）と表示される。「値の種類」フィルターで分数・小数それぞれ12件ずつ表示される
 - [ ] `4-1`・`4-2`（既存モード）が、4-3追加後もこれまでと全く同じように動作する（回帰確認）
 
+### 小学5年生・1学期（5-1モード、第7段階）
+
+- [ ] タイトル画面の出題範囲に「5年1学期」ボタンが表示され、選択できる（disabledではない）
+- [ ] 5-1モードを選ぶと、小数×小数・小数÷小数・小数倍・もとの量・（復習として）4年生1〜3学期の内容
+      （整数の2段階文章題を含む）が出題される
+- [ ] 小数×小数の答えが正しい（例: `2.4×3.5=8.4`）。順序を入れ替えても正解
+- [ ] 小数÷小数の答えが正しい（例: `4.8÷1.2=4`）。順序を入れ替えると不正解になる
+- [ ] 小数÷小数の答えが必ず有限小数になり、あまりのあるわり算・循環小数が出題されない
+- [ ] 小数倍で、比較量を求める問題（基準量×何倍）が正しく判定される。順序を入れ替えても正解
+- [ ] 小数倍で、何倍かを求める問題（比較量÷基準量）が正しく判定される。順序を入れ替えると不正解になる
+- [ ] もとの量（比較量÷何倍＝基準量）が正しく判定される。順序を入れ替えると不正解になる
+- [ ] 小数倍・もとの量の問題で、答えにあたる数値（基準量・比較量・何倍のいずれか）が選択肢カードに
+      紛れ込んでいない（`getVisibleNumbers()` が正しく「見えている2つの数値」だけをカードにしている）
+- [ ] 10問（デフォルト出題数）を通しで見たとき、新内容（5年1学期の新出内容）と復習内容（4年生1〜3学期の内容）が
+      およそ半々になっている（`?debug=true` のデバッグパネルで確認できる）
+- [ ] 新内容の4カテゴリ（小数×小数・小数÷小数・小数倍・もとの量）に極端な偏りがない
+      （特にレベルMAXの新内容6問で、特定のカテゴリが0件のまま別のカテゴリに3件以上偏らない）
+- [ ] 復習内容が4年生1〜3学期（整数の2段階文章題を含む）から偏りなく出題される
+- [ ] 同じカテゴリの問題（復習内容全体も1つのまとまりとして）が3問以上連続しない
+- [ ] レベルMAXでハート数が2個になっている（レベル5と同じ。5-1追加でこの仕様は変更していない）
+- [ ] ページ全体が横スクロールしない。スマートフォン縦画面でも崩れずに表示される
+- [ ] ハイスコアが5-1＋レベルの組み合わせごとに独立して保存・表示される
+- [ ] 一度タイトル画面で5-1を選んでページを再読み込みすると、5-1が選択された状態で復元される
+- [ ] `tools/question-validator.html` で `gradeTerm` フィルターを `5-1` にすると、32件のテンプレートが
+      すべてOK（NGが無い）と表示される
+- [ ] トレーニングモードの「がくねん・がっき」に「小学5年生・1学期」が表示され、4カテゴリ
+      （小数×小数・小数÷小数・小数倍・もとの量）をそれぞれ選んで5問練習できる
+- [ ] `4-1`・`4-2`・`4-3`（既存モード）が、5-1追加後もこれまでと全く同じように動作する（回帰確認）
+
 ## 17. 問題データ追加時のチェック項目
 
 ### 共通（1段階・2段階どちらでも）
@@ -1076,6 +1133,25 @@ npx serve .
       順序を問わない問題は `commutative: true` になっている
 - [ ] ひき算の場合、`variables` の範囲設定により、答えが必ず正の数になる（`a` の最小値 > `b` の最大値、など。
       小数のひき算でも同じ考え方で範囲を設計する）
+
+### 小数倍・もとの量のテンプレート（quantityRelationを持つテンプレート、第7段階）
+
+- [ ] `quantityRelation` の `type` が `"multiplicative-comparison"` になっている
+- [ ] `quantityRelation.baseKey` / `multiplierKey` が `variables` に存在するキー名と一致している
+- [ ] `quantityRelation.comparedKey` は `variables` に**含めない**（生成時に自動計算される値のため）
+- [ ] `quantityRelation.unknown` が `"base"` `"compared"` `"multiplier"` のいずれかになっている
+      （小数倍カテゴリは `"compared"` または `"multiplier"`、もとの量カテゴリは `"base"` を使う）
+- [ ] `solutionRoutes` の `left`/`right` が、`unknown` に応じて正しい2変数を参照している
+      （`unknown:"compared"` なら `base×multiplier`、`unknown:"multiplier"` なら `compared÷base`、
+      `unknown:"base"` なら `compared÷multiplier`）
+- [ ] `template`（または `textParts`）の `{compared}` のようなプレースホルダーが、`unknown` が
+      `"compared"` 以外のときだけ使われている（`compared` は答えのときは問題文に出してはいけない）
+- [ ] `generatorType` が `"decimalMultiplicativeComparison"`（小数倍）または
+      `"decimalOriginalQuantity"`（もとの量）になっている
+- [ ] `base`・`multiplier` の `decimalPlaces` の組み合わせにより、逆算（割り算）した際の商が
+      2桁を超える小数にならない（`base`・`multiplier` それぞれの `decimalPlaces` を2桁以内にしておけば、
+      積・商のどちらを逆算しても安全）
+- [ ] 検証ページで、生成された問題の`quantityRelation`関連のエラー（`validateQuantityRelation()`）が出ていない
 
 ### 分数のテンプレート（同分母分数のたし算・ひき算）
 
@@ -1146,13 +1222,15 @@ onJudge: (answer) => (currentMode === "training" ? training.handleJudge(answer) 
 }
 ```
 
-現在13カテゴリ登録されています。
+第6段階時点では13カテゴリでしたが、第7段階で5年1学期の4カテゴリを追加し、現在17カテゴリ登録されています
+（5年1学期の内訳は[19章](#19-小学5年生1学期第7段階)を参照）。
 
 | 学期 | カテゴリ（categoryId） |
 |---|---|
 | 4-1 | `integer-addition` `integer-subtraction` `integer-multiplication` `integer-division-one-digit` |
 | 4-2 | `decimal-addition` `decimal-subtraction` `large-numbers` `integer-division-two-digit` `multi-step-integer` |
 | 4-3 | `decimal-times-integer` `decimal-division-by-integer` `same-denominator-fraction-addition` `same-denominator-fraction-subtraction` |
+| 5-1 | `decimal-times-decimal` `decimal-divided-by-decimal` `decimal-multiplicative-comparison` `decimal-original-quantity` |
 
 `js/ui.js` はタイトル画面の「がくねん・がっき」「もんだいの しゅるい」ボタンを、
 `getGradeTermGroups()` / `getCategoriesForGradeTerm()` を使って**このレジストリから動的に生成**します。
@@ -1181,6 +1259,7 @@ onJudge: (answer) => (currentMode === "training" ? training.handleJudge(answer) 
 
 新しいテンプレートを追加する場合も、既存の[3章](#3-1段階問題のテンプレート追加方法)・
 [4章](#4-2段階問題questiontype-multistepについて)の手順に加えて、`categoryId` を必ず追加してください。
+第7段階で追加した `data/grade5-term1.js` の32テンプレートは、最初から `categoryId` を持つ形で作成しています。
 
 ### 問題抽出方法（js/training-mode.js）
 
@@ -1310,3 +1389,165 @@ onJudge: (answer) => (currentMode === "training" ? training.handleJudge(answer) 
 - [ ] コンソールにJavaScriptエラーが出ていない（バトル・トレーニングどちらのフローでも）
 - [ ] スマートフォン縦画面で、トレーニングのモード選択・カテゴリ選択・バトル画面・結果画面が
       崩れずに操作できる
+
+## 19. 小学5年生・1学期（第7段階）
+
+小学4年生・1〜3学期に続く、**通常バトルの正式モード**として `gradeTerm: "5-1"` を追加しました。
+新出内容は「小数×小数」「小数÷小数」「小数倍」「もとの量」の4カテゴリで、すべて1段階問題
+（`questionType: "singleStep"`）です。2段階問題との組み合わせ（例: 小数倍を含む2段階問題）は
+今回は追加していません（既存の整数の2段階文章題は、引き続き復習内容として出題されます）。
+
+### 安全な小数×小数・小数÷小数の計算（number-utils.js / value-utils.js）
+
+小数×整数・小数÷整数（4年3学期）と同じ「整数にスケーリングしてから計算し、戻す」方式を、
+小数×小数・小数÷小数にも拡張しました。
+
+- `multiplyDecimal(a, b)`（既存）: 両方の小数点以下の桁数ぶんスケーリングしてから掛け合わせるため、
+  小数×整数と全く同じ関数が小数×小数にもそのまま使えます（`multiplyDecimal(2.4, 3.5) === 8.4`）。
+- `divideExactByDecimal(dividend, divisor, maxDecimalPlaces = 2)`（新規）: わる数が小数の場合の
+  安全な「割り切れる場合だけ商を返す」わり算です。わられる数・わる数の両方を、小数点以下の桁数が
+  大きい方に合わせてスケーリングして整数どうしの比に変換してから、既存の `divideExactByInteger()`
+  （桁数を増やしながら割り切れるか試すロジック）にそのまま委譲します。
+  `divideExactByDecimal(4.8, 1.2) === 4`、`divideExactByDecimal(12, 1.5) === 8`、
+  `divideExactByDecimal(12, 0.4) === 30`、`divideExactByDecimal(1, 3) === null`（循環小数は拒否）。
+
+これに伴い、`js/value-utils.js` の `calculateValues()` の `"÷"` ケースを、わる数が整数かどうかで
+`divideExactByInteger()` / `divideExactByDecimal()` を使い分けるように変更しました。
+**この変更前は、わる数が小数の場合に常に `null` を返していた**ため（`divideExactByInteger()` は
+整数以外のわる数を明示的に拒否する設計だった）、この修正が無いと小数÷小数・小数倍・もとの量の
+「わり算で答えを求める」パターンが一切成立しませんでした。`calculateValues()` は問題生成時の
+`solutionRoutes` の解決と、`answer-checker.js` 経由の正誤判定の両方から呼ばれる共通の1か所のため、
+この1つの修正で生成・判定の両方が同時に正しく動くようになっています。
+
+### 小数倍・もとの量の数量関係（quantityRelation）
+
+「基準量(base)の何倍(multiplier)が比較量(compared)である」という関係を、テンプレートの
+`quantityRelation` フィールドで表現します。
+
+```js
+quantityRelation: {
+  type: "multiplicative-comparison",
+  baseKey: "base",          // variables内の、基準量の変数名
+  comparedKey: "compared",   // 生成時に base×multiplier として自動計算される変数名（variablesには含めない）
+  multiplierKey: "multiplier", // variables内の、何倍の変数名
+  unknown: "compared"        // "base" | "compared" | "multiplier" のうち、どれが答えか
+}
+```
+
+- `unknown: "compared"`（比較量を求める。小数倍カテゴリ）: 基準量・何倍が問題文に示され、
+  `solutionRoutes` は `base × multiplier = compared`。かけ算なので `commutative: true`。
+- `unknown: "multiplier"`（何倍かを求める。小数倍カテゴリ）: 基準量・比較量が問題文に示され、
+  `solutionRoutes` は `compared ÷ base = multiplier`。わり算なので `commutative: false`
+  （順序を逆にすると不正解）。
+- `unknown: "base"`（もとの量＝基準量を求める。もとの量カテゴリ）: 比較量・何倍が問題文に示され、
+  `solutionRoutes` は `compared ÷ multiplier = base`。同じく `commutative: false`。
+
+値の生成は、`unknown` の値にかかわらず**常に同じ関数**（`js/question-generator.js` の
+`generateDecimalMultiplicativeComparisonValues()`）で行います。`baseKey`・`multiplierKey` が指す
+変数を独立に生成し、`comparedKey` の値は `multiplyDecimal(base, multiplier)` で自動計算するだけで、
+「どれが答えか」は `solutionRoutes` 側だけが決めます。小数倍・もとの量という2つのカテゴリ
+（`generatorType: "decimalMultiplicativeComparison"` / `"decimalOriginalQuantity"`）も、
+このテンプレート単位の `quantityRelation`/`solutionRoutes` の違いだけで表現しており、
+生成ロジック自体を分岐させていません。
+
+`comparedKey` は生成時にしか存在しない値のため、`variables` には**含めません**。一方で、
+`unknown` が `"multiplier"` や `"base"` のときは `comparedKey`（例: `"compared"`）が問題文
+（`template`/`textParts`）や `solutionRoutes` の中で「既知の変数」として参照されます。
+`js/question-validator.js` はこれを許可するため、`variables` のキー・`generatorType` の
+`computedVariables` に加えて `quantityRelation.comparedKey` も「既知の変数名」として扱う
+`getKnownVariableKeys()` ヘルパーを用意しています。
+
+### 選択肢カードの「見えている数値」の判定（getVisibleNumbers）
+
+小数倍・もとの量の問題では、`base`・`multiplier`・`compared` の3つの値が生成されますが、
+そのうち「答え」にあたる1つは選択肢カードに含めてはいけません。`Object.keys(template.variables)`
+のような固定リストでは、`unknown` によって答えが変わることを表現できない
+（`compared` は `variables` に存在しないため、`unknown:"multiplier"`/`"base"` のときに
+本来「見えている」はずの `compared` を見落としてしまう）ため、`js/question-generator.js` の
+`getVisibleNumbers()` は、テンプレートの `solutionRoutes[0].left`/`.right` が実際に参照している
+2つの変数だけを「見えている数値」として使う、データ駆動の判定にしています。
+
+### 出題比率（新内容/復習内容）への統合
+
+5-1モードの出題プランも、既存の4-2/4-3モードと**全く同じ仕組み**（[6章](#6-小学4年生2学期3学期の出題プラン新内容復習内容の比率とカテゴリ配分)の
+`planQuestionSequence()` / `GRADE_TERM_PLAN_CONFIG`）で実現しています。新しいバランス調整コードは
+追加しておらず、`GRADE_TERM_PLAN_CONFIG` に次の1エントリを追加しただけです。
+
+```js
+"5-1": {
+  newContentGradeTerms: ["5-1"],
+  reviewGradeTerms: ["4-1", "4-2", "4-3", "4-multi-step"]
+}
+```
+
+これにより、新内容（5-1の4カテゴリ）・復習内容（4年生1〜3学期＋整数の2段階文章題）が
+およそ半々の比率で、それぞれのカテゴリ・学期に偏りなく、同じキーが3問以上連続しないように
+自動的に出題されます（レベルMAX＝12問のとき、新内容6問・復習内容6問）。
+
+### トレーニングモードへの統合
+
+`data/category-registry.js` に4カテゴリを追加しただけで、トレーニングモードのカテゴリ選択UI・
+問題生成・検証ページのすべてに自動的に反映されました（`js/training-mode.js` `js/ui.js`
+`tools/question-validator.html` は、いずれもレジストリから動的に読み込むため、コードの変更は
+一切不要でした）。
+
+```js
+{ id: "decimal-times-decimal", label: "小数×小数", gradeTerm: "5-1", gradeLabel: "小学5年生・1学期", enabledInTraining: true, order: 14 },
+{ id: "decimal-divided-by-decimal", label: "小数÷小数", gradeTerm: "5-1", gradeLabel: "小学5年生・1学期", enabledInTraining: true, order: 15 },
+{ id: "decimal-multiplicative-comparison", label: "小数倍", gradeTerm: "5-1", gradeLabel: "小学5年生・1学期", enabledInTraining: true, order: 16 },
+{ id: "decimal-original-quantity", label: "もとの量", gradeTerm: "5-1", gradeLabel: "小学5年生・1学期", enabledInTraining: true, order: 17 }
+```
+
+### レベルMAXのハート数・スコア/ランク計算式（既存の設計を維持）
+
+第7段階の依頼内容には「レベルMAXのハート数は1個」「スコア加算は現在値の半分の式」といった、
+本アプリの現在の実装とは異なる古い数値が含まれていましたが、**これらはこのアプリの開発の中で
+既に意図的に変更済みの仕様**のため、5-1追加にあたって変更していません。
+
+| 項目 | 現在の実装 | 備考 |
+|---|---|---|
+| レベルMAXのハート数 | 2個（レベル5と同じ） | `js/game.js` の `heartsForLevel()`。以前の開発段階で1個から2個へ変更済み |
+| 正解時の加算スコア | `(10+せいかい数)×(50+ゲージ残量%)×4` | `js/score.js` の `calculateQuestionScore()`。以前の開発段階で×2から×4へ変更済み |
+| ランク係数 | `現在のスコア÷(1600×レベル)` | `js/score.js` の `calculateRank()`。以前の開発段階で800→1000→1600へ変更済み |
+| 解答時間ゲージの加速倍率 | 1.0倍→2.0倍（問題が進むほど加速） | `js/game.js` の `speedMultiplier()`。以前の開発段階で1.5倍から2.0倍へ変更済み |
+
+これらは `gradeTerm`（学年・学期）に依存しないレベル・スコア共通の仕組みのため、5-1モードにも
+そのままの値で自然に適用されています（5-1専用の特別な計算式は用意していません）。
+
+### 既存機能への影響
+
+5-1追加にあたって変更したのは、次のファイル・箇所だけです。それ以外の既存ファイル
+（`js/training-mode.js` `js/storage.js` `js/enemy-list.js` `js/multi-step-engine.js`
+`js/answer-checker.js` `js/value-renderer.js` `css/style.css` など）は無改造です。
+
+| ファイル | 変更内容 |
+|---|---|
+| `js/number-utils.js` | `divideExactByDecimal()` を新規追加 |
+| `js/value-utils.js` | `calculateValues()` の `"÷"` ケースを、わる数の整数/小数で分岐するよう修正 |
+| `js/question-generator.js` | 新しい `generatorType` 4種・`quantityRelation` 対応の値生成・`getVisibleNumbers()` の分岐・`GRADE_TERM_PLAN_CONFIG` に `"5-1"` を追加 |
+| `js/question-validator.js` | `VALID_GRADE_TERMS` に `"5-1"` を追加・新しい `generatorType` 4種のルール・`validateQuantityRelation()`・`getKnownVariableKeys()` を追加 |
+| `data/grade5-term1.js` | 新規ファイル（32テンプレート） |
+| `data/index.js` | `grade5-term1.js` の import・`TEMPLATE_SETS_BY_GRADE_TERM` への登録 |
+| `data/category-registry.js` | 4カテゴリを追加（order 14〜17） |
+| `js/game.js` | `PLANNED_GRADE_TERMS` に `"5-1"` を追加（出題プランを使うモードとして登録するだけ） |
+| `js/ui.js` | `RANGE_LABELS` に `"5-1": "小学5年生・1学期"` を追加 |
+| `index.html` | 「5年1学期」ボタンの `disabled` を解除し、`data-range="5-1"` を設定 |
+
+ハイスコアの保存キー（`js/storage.js` の `buildHighScoreKey(gradeTerm, level)`）は
+`gradeTerm` と `level` から動的に文字列を組み立てる汎用的な実装のため、`"5-1"` を渡しても
+`highScore_5-1_level1` のようなキーが自動的に使われます。レベルMAXは既存モードと同じ
+`level: 6` を使う設計のため（`level: 10` のような特別な値は使っていません）、ハイスコアキーの
+移行処理は不要でした。
+
+### 動作確認・検証の進め方
+
+- Node.js での単体検証: `js/question-generator.js` の `generateQuestion()` を、32テンプレート
+  それぞれについて30回ずつ、レベル1〜MAXの出題プランを20回ずつ、トレーニングの5問セットを
+  4カテゴリそれぞれ20回ずつ生成し、`js/question-validator.js` の `validateGeneratedQuestion()`
+  ですべて検証（ブラウザ・DOM無しで `js/question-generator.js` 等を直接importして実行できます）。
+- ブラウザでの回帰確認: [問題検証ページ](#8-問題検証ページの使い方toolsquestion-validatorhtml)で
+  `gradeTerm` を `5-1` に絞り込み、32件すべてOKになっているか、カテゴリレジストリが17件すべてOKに
+  なっているかを確認。実際にバトル画面・トレーニング画面でレベル1〜MAX、4カテゴリすべてを一通り
+  プレイし、コンソールにエラーが出ていないかを確認。
+- 詳しいチェック項目は[16章の「小学5年生・1学期（5-1モード、第7段階）」](#16-動作確認用チェックリスト)、
+  テンプレート追加時のチェック項目は[17章の「小数倍・もとの量のテンプレート」](#17-問題データ追加時のチェック項目)を参照してください。

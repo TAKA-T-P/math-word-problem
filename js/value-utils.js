@@ -17,6 +17,7 @@ import {
   subtractDecimal,
   multiplyDecimal,
   divideExactByInteger,
+  divideExactByDecimal,
   normalizeNumber,
   areNumbersEqual,
   formatNumber,
@@ -92,7 +93,9 @@ export function isValueNegative(value) {
  * 型の組み合わせが今回未対応 など）は null を返します。
  *
  * 今回のバージョンで対応している組み合わせ:
- *   - 数値 + 数値 / 数値 - 数値 / 数値 × 数値 / 数値 ÷ 数値（わる数は整数、割り切れる場合のみ）
+ *   - 数値 + 数値 / 数値 - 数値 / 数値 × 数値
+ *   - 数値 ÷ 数値（わる数が整数なら divideExactByInteger、小数なら divideExactByDecimal。
+ *     どちらも割り切れる場合のみ）
  *   - 分数 + 分数 / 分数 - 分数（分子・分母を使った正確な計算。異分母も数式としては正しく計算する）
  * 分数と数値が混在する計算（分数×整数 など）は今回のデータには存在しませんが、
  * 呼び出された場合は null を返します（今回未対応のため）。
@@ -126,9 +129,17 @@ export function calculateValues(left, operator, right) {
       return subtractDecimal(left, right);
     case "×":
       return multiplyDecimal(left, right);
-    case "÷":
+    case "÷": {
       if (right === 0) return null;
-      return divideExactByInteger(normalizeNumber(left), normalizeNumber(right));
+      const normalizedLeft = normalizeNumber(left);
+      const normalizedRight = normalizeNumber(right);
+      // わる数が整数か小数かで、既存の divideExactByInteger（小学4年生・5年生の整数÷わり算）と
+      // 小数対応の divideExactByDecimal（小学5年生1学期の小数÷小数、小数倍・もとの量の「÷」）を
+      // 使い分ける。どちらも「割り切れる場合だけ商を返す」という安全性は共通。
+      return Number.isInteger(normalizedRight)
+        ? divideExactByInteger(normalizedLeft, normalizedRight)
+        : divideExactByDecimal(normalizedLeft, normalizedRight);
+    }
     default:
       return null;
   }

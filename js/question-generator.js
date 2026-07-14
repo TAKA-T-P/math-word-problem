@@ -75,25 +75,31 @@ function pickFractionValue(range) {
 }
 
 /**
- * variables で定義された各変数の値を、独立にランダム生成します。
- * 変数の定義に応じて、次のいずれかとして生成します。
+ * 1つの変数の範囲定義から、その種類（分数・小数・整数）に応じた値を1つ選びます。
  *   - type: "fraction"      → 分数（pickFractionValue）
  *   - decimalPlaces あり    → 小数（pickDecimalValue）
- *   - それ以外               → 整数（pickStepped、従来どおり）
+ *   - それ以外               → 整数（pickStepped）
+ * generateStandardValues() と、小数倍・もとの量専用の生成関数の両方から使う共通処理です。
+ */
+function pickValueForRange(range) {
+  if (range.type === "fraction") {
+    return pickFractionValue(range);
+  }
+  if (range.decimalPlaces) {
+    return pickDecimalValue(range);
+  }
+  return pickStepped(range);
+}
+
+/**
+ * variables で定義された各変数の値を、独立にランダム生成します。
  * （たし算・ひき算・かけ算、小数のたし算・ひき算・かけ算、大きな数、
  *  同分母分数のたし算・ひき算、除算を含まない2段階問題で使用）
  */
 export function generateStandardValues(variables) {
   const values = {};
   for (const key of Object.keys(variables)) {
-    const range = variables[key];
-    if (range.type === "fraction") {
-      values[key] = pickFractionValue(range);
-    } else if (range.decimalPlaces) {
-      values[key] = pickDecimalValue(range);
-    } else {
-      values[key] = pickStepped(range);
-    }
+    values[key] = pickValueForRange(variables[key]);
   }
   return values;
 }
@@ -171,31 +177,84 @@ function generateExactDecimalDivisionValues(variables) {
   return { divisor, quotient, dividend };
 }
 
+/**
+ * 小数÷小数専用の生成ルール（小学5年生1学期）。
+ * exactDecimalDivisionByInteger と同じ考え方で、わる数(divisor)・商(quotient)を
+ * 両方とも小数として先に決めてから、わられる数(dividend) = divisor × quotient を
+ * 計算します（誤差の出ない multiplyDecimal を使用）。これにより、必ず有限小数で
+ * 割り切れる問題になります（循環小数・あまりのあるわり算を防止）。
+ */
+function generateExactDecimalDivisionByDecimalValues(variables) {
+  const divisor = pickDecimalValue(variables.divisor);
+  const quotient = pickDecimalValue(variables.quotient);
+  const dividend = normalizeNumber(multiplyDecimal(divisor, quotient));
+  return { divisor, quotient, dividend };
+}
+
+/**
+ * 小数倍・もとの量専用の生成ルール（小学5年生1学期）。
+ * テンプレートの quantityRelation（baseKey・comparedKey・multiplierKey）が指す
+ * 変数名を使って、基準量(base)・何倍(multiplier)を独立に生成し、
+ * 比較量(compared) = base × multiplier を誤差の出ない multiplyDecimal で計算します。
+ * 「何が未知（答え）か」はテンプレートの solutionRoutes 側が決めるため、
+ * この関数は常に3つの値をすべて生成するだけで、小数倍・もとの量の両カテゴリで共通に使えます。
+ */
+function generateDecimalMultiplicativeComparisonValues(variables, quantityRelation) {
+  if (!quantityRelation) {
+    throw new Error("quantityRelation が指定されていないテンプレートです（小数倍・もとの量には必須です）。");
+  }
+  const { baseKey, comparedKey, multiplierKey } = quantityRelation;
+  const baseValue = pickValueForRange(variables[baseKey]);
+  const multiplierValue = pickValueForRange(variables[multiplierKey]);
+  const comparedValue = normalizeNumber(multiplyDecimal(baseValue, multiplierValue));
+  return { [baseKey]: baseValue, [multiplierKey]: multiplierValue, [comparedKey]: comparedValue };
+}
+
 const GENERATOR_TYPE_HANDLERS = {
   standard: (variables) => generateStandardValues(variables),
-  // decimalAddition / decimalSubtraction / decimalTimesInteger /
+  // decimalAddition / decimalSubtraction / decimalTimesInteger / decimalTimesDecimal /
   // sameDenominatorFractionAddition / sameDenominatorFractionSubtraction は
   // すべて standard のエイリアス。生成の「戦略」（各変数を独立に生成する）は同じで、
   // 演算の種類は solutionRoutes 側が決めるため、別の生成関数を用意する必要が無いためです。
   decimalAddition: (variables) => generateStandardValues(variables),
   decimalSubtraction: (variables) => generateStandardValues(variables),
   decimalTimesInteger: (variables) => generateStandardValues(variables),
+  // 小数×小数（小学5年生1学期）。left・rightどちらも decimalPlaces 付きの変数として
+  // 定義するだけで、standardと全く同じ「各変数を独立に生成する」戦略で作れます。
+  decimalTimesDecimal: (variables) => generateStandardValues(variables),
   sameDenominatorFractionAddition: (variables) => generateStandardValues(variables),
   sameDenominatorFractionSubtraction: (variables) => generateStandardValues(variables),
   exactDivision: (variables) => generateExactDivisionValues(variables),
   // わる数が2けたになる点だけが exactDivision と異なる（variables.divisor の範囲で決まる）。
   exactDivisionTwoDigit: (variables) => generateExactDivisionValues(variables),
   exactDecimalDivisionByInteger: (variables) => generateExactDecimalDivisionValues(variables),
+  // 小数÷小数（小学5年生1学期）。
+  exactDecimalDivisionByDecimal: (variables) => generateExactDecimalDivisionByDecimalValues(variables),
+  // 小数倍・もとの量（小学5年生1学期）は、値の生成ロジック自体は同じ（基準量×何倍＝比較量）で、
+  // どちらが「未知（答え）」かはテンプレートの solutionRoutes 側が決めるため、同じ関数を使う
+  // エイリアスにしている（decimalTimesInteger と同じ考え方）。
+  decimalMultiplicativeComparison: (variables, template) =>
+    generateDecimalMultiplicativeComparisonValues(variables, template.quantityRelation),
+  decimalOriginalQuantity: (variables, template) =>
+    generateDecimalMultiplicativeComparisonValues(variables, template.quantityRelation),
   multiStepDivideFirst: (variables) => generateMultiStepDivideFirstValues(variables),
   multiStepSumToDivisible: (variables) => generateMultiStepSumToDivisibleValues(variables)
 };
 
 // getVisibleNumbers 等で「dividend/divisor を特別扱いする」対象の generatorType。
-const DIVISION_GENERATOR_TYPES = new Set(["exactDivision", "exactDivisionTwoDigit", "exactDecimalDivisionByInteger"]);
+const DIVISION_GENERATOR_TYPES = new Set([
+  "exactDivision",
+  "exactDivisionTwoDigit",
+  "exactDecimalDivisionByInteger",
+  "exactDecimalDivisionByDecimal"
+]);
+
+// getVisibleNumbers で「quantityRelation の参照先から見えている数値を判定する」対象のgeneratorType。
+const QUANTITY_RELATION_GENERATOR_TYPES = new Set(["decimalMultiplicativeComparison", "decimalOriginalQuantity"]);
 
 function generateValuesForTemplate(template) {
   const handler = GENERATOR_TYPE_HANDLERS[template.generatorType] || GENERATOR_TYPE_HANDLERS.standard;
-  return handler(template.variables);
+  return handler(template.variables, template);
 }
 
 export function renderTemplateText(template, values) {
@@ -230,10 +289,20 @@ function flattenTextPartsToPlainText(resolvedTextParts) {
  * 問題文に登場する数値（選択肢のもとになる）を、テンプレートの種類に応じて求めます。
  * 1段階問題でのみ使用します（2段階問題は multi-step-engine.js が
  * ステップごとに独自に「見えている数値」を判定します）。
+ *
+ * 小数倍・もとの量（QUANTITY_RELATION_GENERATOR_TYPES）は、generateDecimalMultiplicativeComparisonValues()
+ * が基準量・何倍・比較量の3つすべてを生成しますが、そのうち「答え」にあたる1つは
+ * 選択肢に含めてはいけません。どれが答えかはテンプレートごとに異なる（solutionRoutes[0]の
+ * left/rightが指す2つの変数名）ため、Object.keys(template.variables) のような固定リストではなく、
+ * 正解ルートが実際に参照している2つの変数だけを「見えている数値」として使います。
  */
 function getVisibleNumbers(template, values) {
   if (DIVISION_GENERATOR_TYPES.has(template.generatorType)) {
     return [values.dividend, values.divisor];
+  }
+  if (QUANTITY_RELATION_GENERATOR_TYPES.has(template.generatorType)) {
+    const route = template.solutionRoutes[0];
+    return [values[route.left], values[route.right]];
   }
   return Object.keys(template.variables).map((key) => values[key]);
 }
@@ -628,6 +697,12 @@ const GRADE_TERM_PLAN_CONFIG = {
   "4-3": {
     newContentGradeTerms: ["4-3"],
     reviewGradeTerms: ["4-1", "4-2", "4-multi-step"]
+  },
+  // 小学5年生1学期（第7段階）：新内容は5-1の4カテゴリ、復習内容は4年生1〜3学期
+  // （整数の2段階文章題を含む）から偏りなく選ぶ。
+  "5-1": {
+    newContentGradeTerms: ["5-1"],
+    reviewGradeTerms: ["4-1", "4-2", "4-3", "4-multi-step"]
   }
 };
 

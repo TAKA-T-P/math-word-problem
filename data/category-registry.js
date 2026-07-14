@@ -128,6 +128,40 @@ export const categoryRegistry = [
     gradeLabel: "小学4年生・3学期",
     enabledInTraining: true,
     order: 13
+  },
+
+  // ---- 小学5年生・1学期 ----
+  {
+    id: "decimal-times-decimal",
+    label: "小数×小数",
+    gradeTerm: "5-1",
+    gradeLabel: "小学5年生・1学期",
+    enabledInTraining: true,
+    order: 14
+  },
+  {
+    id: "decimal-divided-by-decimal",
+    label: "小数÷小数",
+    gradeTerm: "5-1",
+    gradeLabel: "小学5年生・1学期",
+    enabledInTraining: true,
+    order: 15
+  },
+  {
+    id: "decimal-multiplicative-comparison",
+    label: "小数倍",
+    gradeTerm: "5-1",
+    gradeLabel: "小学5年生・1学期",
+    enabledInTraining: true,
+    order: 16
+  },
+  {
+    id: "decimal-original-quantity",
+    label: "もとの量",
+    gradeTerm: "5-1",
+    gradeLabel: "小学5年生・1学期",
+    enabledInTraining: true,
+    order: 17
   }
 ];
 

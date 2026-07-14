@@ -53,8 +53,7 @@ export function subtractDecimal(a, b) {
 }
 
 /**
- * 誤差の出ない小数のかけ算。
- * （今回のバージョンでは「小数×整数」は出題しませんが、検証・将来の拡張のために用意しています。）
+ * 誤差の出ない小数のかけ算。小数×整数・小数×小数（小学5年生1学期）の両方で使用します。
  */
 export function multiplyDecimal(a, b) {
   const factorA = Math.pow(10, getDecimalPlaces(a));
@@ -63,8 +62,10 @@ export function multiplyDecimal(a, b) {
 }
 
 /**
- * 誤差の出ない小数のわり算。0で割る場合は null を返します。
- * （今回のバージョンでは「小数÷整数」は出題しませんが、検証・将来の拡張のために用意しています。）
+ * 小数のわり算をそのまま行います（割り切れるかどうかは確認しません）。0で割る場合は null を返します。
+ * 「必ず割り切れる問題か」を保証したい場合は、このまま使わず divideExactByInteger() /
+ * divideExactByDecimal() を使用してください（正解判定・問題生成はすべてそちらを使います）。
+ * この関数は検証・将来の拡張のために用意しています。
  */
 export function divideDecimal(a, b) {
   if (b === 0) return null;
@@ -97,7 +98,8 @@ export function areNumbersEqual(a, b, epsilon = 1e-9) {
  * そのため、dividendの見た目の桁数を最小値としつつ、maxDecimalPlacesまで桁数を1つずつ増やしながら
  * 「割り切れる桁数」を探します。これにより、上記のようなケースも正しく有限小数として認識しつつ、
  * 2桁を超えないと割り切れない（＝循環小数、または不自然に細かい）わり算は正しく除外します。
- * わる数(divisor)は必ず整数である必要があります（小数÷小数は今回未対応）。
+ * わる数(divisor)は必ず整数である必要があります。わる数が小数の場合は
+ * divideExactByDecimal() を使用してください。
  */
 export function divideExactByInteger(dividend, divisor, maxDecimalPlaces = 2) {
   if (!Number.isInteger(divisor) || divisor === 0) return null;
@@ -110,6 +112,25 @@ export function divideExactByInteger(dividend, divisor, maxDecimalPlaces = 2) {
     }
   }
   return null;
+}
+
+/**
+ * わる数が小数の場合にも対応した、安全な「割り切れる場合だけ商を返す」わり算です
+ * （小学5年生1学期の小数÷小数、小数倍・もとの量の「÷」判定に使用します）。
+ * わられる数・わる数を、両方に共通の桁数（小数点以下の桁数が大きい方）でスケーリングして
+ * 整数どうしの比に変換してから、divideExactByInteger() と全く同じ「桁数を増やしながら
+ * 割り切れるか試す」ロジックに委譲します（整数化してもdividend÷divisorの商そのものは
+ * 変わらないため、安全に置き換えられます）。
+ * 商は最大2桁の小数までしか認めません（maxDecimalPlaces）。循環小数・あまりのある
+ * わり算の場合は null を返します。わる数が0の場合も null を返します。
+ */
+export function divideExactByDecimal(dividend, divisor, maxDecimalPlaces = 2) {
+  if (!Number.isFinite(dividend) || !Number.isFinite(divisor) || divisor === 0) return null;
+  const factor = scaleFactorForPair(dividend, divisor);
+  const intDividend = Math.round(dividend * factor);
+  const intDivisor = Math.round(divisor * factor);
+  if (intDivisor === 0) return null;
+  return divideExactByInteger(intDividend, intDivisor, maxDecimalPlaces);
 }
 
 function addThousandsSeparator(integerDigitsString) {

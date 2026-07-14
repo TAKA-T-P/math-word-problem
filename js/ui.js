@@ -572,7 +572,7 @@ function setupScoreDelta() {
 
 /**
  * トレーニング画面のヘッダー（カテゴリ名）と、問題番号（例: "問題 2／5"）を更新する。
- * 2段階問題のときは、既存の #step-indicator（"式 1／2"）と同時に表示される。
+ * 2段階問題のときは、既存の #step-indicator（"式を2つ答えよう！"）と同時に表示される。
  */
 export function updateTrainingHeader(categoryLabel, questionNumber, totalQuestions) {
   if (els.trainingCategoryDisplay) {
@@ -635,19 +635,22 @@ export function renderStepChoices(problem) {
 }
 
 /**
- * 「式 N／M」の進行表示を更新する。2段階目以降は、直前に正解した式
- * （例: "22+138=160"）を、進行表示の右側に添えて表示する。
+ * 2段階問題の進行表示を更新する。1つ目の式のときは「式を2つ答えよう！」、
+ * 2つ目の式のときは、直前に正解した式（例: "22+138=160"）に続けて
+ * 「の続きを答えよう」と表示する。
  */
 function updateStepIndicator(problem) {
   if (problem.questionType === "multiStep" && problem.multiStep) {
     const state = problem.multiStep;
-    let html = escapeHtml(`式 ${state.currentStepIndex + 1}／${state.totalSteps}`);
     const prevStep = state.completedSteps.find((s) => s.stepIndex === state.currentStepIndex - 1);
+    let html;
     if (prevStep) {
       const formulaHtml =
         `${renderValueHtml(prevStep.left)}${escapeHtml(prevStep.operator)}${renderValueHtml(prevStep.right)}` +
         `＝${renderValueHtml(prevStep.result)}`;
-      html += `<span class="step-indicator-prev">${formulaHtml}</span>`;
+      html = `<span class="step-indicator-prev">${formulaHtml}</span>${escapeHtml("の続きを答えよう")}`;
+    } else {
+      html = escapeHtml("式を2つ答えよう！");
     }
     els.stepIndicator.innerHTML = html;
     els.stepIndicator.classList.add("show");
@@ -1093,7 +1096,8 @@ const RANGE_LABELS = {
   "4-1": "小学4年生・1学期",
   "4-2": "小学4年生・2学期",
   "4-3": "小学4年生・3学期",
-  "4-multi-step": "2段階問題・整数（開発版）"
+  "4-multi-step": "2段階問題・整数（開発版）",
+  "5-1": "小学5年生・1学期"
 };
 
 // 内部レベル（レベルMAXの計算には6を使う）を、タイトル画面のボタンと同じ表示ラベルに変換する。
