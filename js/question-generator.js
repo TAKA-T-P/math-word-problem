@@ -15,7 +15,7 @@ import { safeCalculate } from "./answer-checker.js";
 import { validateGeneratedQuestion } from "./question-validator.js";
 import { initializeMultiStepQuestion } from "./multi-step-engine.js";
 import { normalizeNumber, multiplyDecimal } from "./number-utils.js";
-import { valueKey, isFractionValue, isPercentValue, formatValue } from "./value-utils.js";
+import { valueKey, isFractionValue, isPercentValue, formatValue, calculateValues } from "./value-utils.js";
 import { fractionToNumber } from "./fraction-utils.js";
 import { percentToRatio, ratioToPercent, formatPercent } from "./percentage-utils.js";
 
@@ -308,6 +308,28 @@ function generatePercentageValues(variables, quantityRelation) {
   return { [baseKey]: baseValue, [rateKey]: rateValue, [comparedKey]: comparedValue };
 }
 
+/**
+ * 分数倍（比べる量・もとの量）専用の生成ルール（小学6年生1学期、第10段階で追加）。
+ * quantityRelation（baseKey・comparedKey・multiplierKey）が指す変数名を使って、
+ * もとにする量(base、整数)・分数倍(multiplier、分数)を独立に生成し、
+ * 比べる量(compared) = base × multiplier を計算します。base×multiplier の計算は
+ * 小数倍のときの multiplyDecimal ではなく、value-utils.js の calculateValues() に委譲します
+ * （左が整数・右が分数の組み合わせは value-utils.js が「整数×分数」として正確に計算するため、
+ * 分数専用の掛け算処理をここで書く必要はありません）。答えが整数になる場合（例: 6×2/3＝4）は
+ * calculateValues 自身が自動的に整数へ約分・変換します。「何が未知か」は solutionRoutes 側が
+ * 決めるため、比べる量・もとの量のどちらのカテゴリでもこの1つの関数を共有できます。
+ */
+function generateFractionMultiplicativeComparisonValues(variables, quantityRelation) {
+  if (!quantityRelation) {
+    throw new Error("quantityRelation が指定されていないテンプレートです（分数倍には必須です）。");
+  }
+  const { baseKey, comparedKey, multiplierKey } = quantityRelation;
+  const baseValue = pickValueForRange(variables[baseKey]);
+  const multiplierValue = pickValueForRange(variables[multiplierKey]);
+  const comparedValue = calculateValues(baseValue, "×", multiplierValue);
+  return { [baseKey]: baseValue, [multiplierKey]: multiplierValue, [comparedKey]: comparedValue };
+}
+
 const GENERATOR_TYPE_HANDLERS = {
   standard: (variables) => generateStandardValues(variables),
   // decimalAddition / decimalSubtraction / decimalTimesInteger / decimalTimesDecimal /
@@ -368,6 +390,21 @@ const GENERATOR_TYPE_HANDLERS = {
   // （専用の生成関数は不要）。
   discountTwoStep: (variables) => generateStandardValues(variables),
   increaseTwoStep: (variables) => generateStandardValues(variables),
+  // 分数×整数・分数×分数・分数÷整数・整数÷分数・分数÷分数（小学6年生1学期、第10段階で追加）。
+  // すべて standard のエイリアス。分数のかけ算・わり算は必ず正確な分子・分母の計算になり
+  // （小数のように「割り切れるかどうか」を事前に保証する必要が無い）、あまりが出ることも
+  // ないため、専用の生成関数は不要で、各変数を独立に生成するだけで作れます。
+  fractionTimesInteger: (variables) => generateStandardValues(variables),
+  fractionTimesFraction: (variables) => generateStandardValues(variables),
+  fractionDividedByInteger: (variables) => generateStandardValues(variables),
+  integerDividedByFraction: (variables) => generateStandardValues(variables),
+  fractionDividedByFraction: (variables) => generateStandardValues(variables),
+  // 分数倍・比べる量／分数倍・もとの量（小学6年生1学期、第10段階で追加）。
+  // もとにする量×分数倍＝比べる量の関係を持つ2つのカテゴリで共有します。
+  fractionMultiplierFindCompared: (variables, template) =>
+    generateFractionMultiplicativeComparisonValues(variables, template.quantityRelation),
+  fractionMultiplierFindBase: (variables, template) =>
+    generateFractionMultiplicativeComparisonValues(variables, template.quantityRelation),
   multiStepDivideFirst: (variables) => generateMultiStepDivideFirstValues(variables),
   multiStepSumToDivisible: (variables) => generateMultiStepSumToDivisibleValues(variables)
 };
@@ -396,7 +433,9 @@ const QUANTITY_RELATION_GENERATOR_TYPES = new Set([
   "findTime",
   "percentageFindCompared",
   "percentageFindRate",
-  "percentageFindBase"
+  "percentageFindBase",
+  "fractionMultiplierFindCompared",
+  "fractionMultiplierFindBase"
 ]);
 
 function generateValuesForTemplate(template) {
@@ -936,6 +975,12 @@ const GRADE_TERM_PLAN_CONFIG = {
   "5-3": {
     newContentGradeTerms: ["5-3"],
     reviewGradeTerms: ["4-1", "4-2", "4-3", "4-multi-step", "5-1", "5-2"]
+  },
+  // 小学6年生1学期（第10段階）：新内容は6-1の7カテゴリ、復習内容は4年生1〜3学期
+  // （整数の2段階文章題を含む）・5年生1〜3学期から偏りなく選ぶ。
+  "6-1": {
+    newContentGradeTerms: ["6-1"],
+    reviewGradeTerms: ["4-1", "4-2", "4-3", "4-multi-step", "5-1", "5-2", "5-3"]
   }
 };
 

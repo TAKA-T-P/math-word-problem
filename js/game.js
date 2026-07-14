@@ -28,8 +28,8 @@ const DEBUG_MODE = new URLSearchParams(window.location.search).get("debug") === 
 
 // 出題プラン（新内容/復習内容がおよそ半分ずつになる仕組み）を使うモード。
 // 4-2（小学4年生2学期）・4-3（小学4年生3学期）・5-1（小学5年生1学期）・5-2（小学5年生2学期）・
-// 5-3（小学5年生3学期）が対象。
-const PLANNED_GRADE_TERMS = new Set(["4-2", "4-3", "5-1", "5-2", "5-3"]);
+// 5-3（小学5年生3学期）・6-1（小学6年生1学期）が対象。
+const PLANNED_GRADE_TERMS = new Set(["4-2", "4-3", "5-1", "5-2", "5-3", "6-1"]);
 
 const DAMAGE_ANIMATION_MS = 480;
 const CLEAR_MESSAGE_DELAY_MS = 1400;

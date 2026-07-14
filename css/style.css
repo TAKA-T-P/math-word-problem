@@ -316,6 +316,18 @@ button {
   cursor: not-allowed;
 }
 
+/* トレーニング画面の「学年・学期」「問題の しゅるい」ボタン。
+   カテゴリ数が多く（最大8個）、通常の .range-btn/.level-btn の高さ（44px）のままだと
+   スタートボタンが画面からはみ出すため、この2つのグリッドだけ縦を詰める。
+   .gradeterm-btn/.category-btn は .range-btn/.level-btn と併用されるクラスのため、
+   ここで min-height 等だけを上書きし、バトル画面側のボタンには影響させない。 */
+.gradeterm-btn,
+.category-btn {
+  min-height: 34px;
+  padding: 4px 3px;
+  font-size: 0.76rem;
+}
+
 /* ?debug=true のときだけ表示される開発版モード用ボタン */
 .dev-range-btn {
   grid-column: 1 / -1;

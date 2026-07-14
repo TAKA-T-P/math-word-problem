@@ -270,6 +270,64 @@ export const categoryRegistry = [
     gradeLabel: "小学5年生・3学期",
     enabledInTraining: true,
     order: 30
+  },
+
+  // ---- 小学6年生・1学期 ----
+  {
+    id: "fraction-times-integer",
+    label: "分数×整数",
+    gradeTerm: "6-1",
+    gradeLabel: "小学6年生・1学期",
+    enabledInTraining: true,
+    order: 31
+  },
+  {
+    id: "fraction-times-fraction",
+    label: "分数×分数",
+    gradeTerm: "6-1",
+    gradeLabel: "小学6年生・1学期",
+    enabledInTraining: true,
+    order: 32
+  },
+  {
+    id: "fraction-divided-by-integer",
+    label: "分数÷整数",
+    gradeTerm: "6-1",
+    gradeLabel: "小学6年生・1学期",
+    enabledInTraining: true,
+    order: 33
+  },
+  {
+    id: "integer-divided-by-fraction",
+    label: "整数÷分数",
+    gradeTerm: "6-1",
+    gradeLabel: "小学6年生・1学期",
+    enabledInTraining: true,
+    order: 34
+  },
+  {
+    id: "fraction-divided-by-fraction",
+    label: "分数÷分数",
+    gradeTerm: "6-1",
+    gradeLabel: "小学6年生・1学期",
+    enabledInTraining: true,
+    order: 35
+  },
+  {
+    id: "fraction-multiplier-compared-amount",
+    label: "分数倍・比べる量",
+    gradeTerm: "6-1",
+    gradeLabel: "小学6年生・1学期",
+    enabledInTraining: true,
+    order: 36
+  },
+  {
+    id: "fraction-multiplier-base-amount",
+    label: "分数倍・もとの量",
+    gradeTerm: "6-1",
+    gradeLabel: "小学6年生・1学期",
+    enabledInTraining: true,
+    order: 37
   }
 ];
 

@@ -31,7 +31,7 @@ export function buildFractionAriaLabel(fraction, { simplify = true } = {}) {
 /**
  * 値1つを、画面表示用のHTML文字列に変換します。
  * - 分数: 縦型分数のHTML（aria-label付き、読み上げにも対応）
- * - 百分率: 比率（小数）に変換してから表示します（例: 20% → "0.2"。第10段階で変更）。
+ * - 百分率: 比率（小数）に変換してから表示します（例: 20% → "0.2"）。
  *   割合の計算は小数で行うという教科書の指導に合わせ、選択肢カード・解答欄・正解演出・
  *   問題履歴など、値として扱う場面ではすべて小数表記に統一します。
  *   問題文中の「20%」のような自然な言い回しは、この関数を経由せず
@@ -47,6 +47,14 @@ export function buildFractionAriaLabel(fraction, { simplify = true } = {}) {
 export function renderValueHtml(value, { useSeparator = true, simplify = true } = {}) {
   if (isFractionValue(value)) {
     const s = simplify ? simplifyFraction(value) : value;
+    // 約分した結果、分母が1になる場合（＝整数値の場合）は、縦型分数ではなく
+    // 通常の整数として表示する（第10段階で追加。小学6年生1学期の分数×分数・分数倍などで、
+    // 生成された分数がたまたま整数に約分できる操作前の値そのものだったケースに対応するため。
+    // 計算「結果」の整数化は既存の normalizeValue が別途行っており、この分岐は
+    // カードに直接載る「操作前の値」の表示だけを対象にしている）。
+    if (s.denominator === 1) {
+      return escapeHtml(formatNumber(s.numerator, { useSeparator }));
+    }
     const label = buildFractionAriaLabel(value, { simplify });
     return (
       `<span class="fraction" aria-label="${escapeHtml(label)}">` +
@@ -62,7 +70,7 @@ export function renderValueHtml(value, { useSeparator = true, simplify = true } 
 }
 
 /**
- * 百分率の値を「小数→百分率」の形式（例: "0.5→50%"）でHTMLに変換します（第10段階で追加）。
+ * 百分率の値を「小数→百分率」の形式（例: "0.5→50%"）でHTMLに変換します。
  * 「割合・百分率」（比べる量÷もとにする量＝割合）は、計算自体は小数のまま行いますが、
  * 問題文が「何%ですか」と百分率での回答を求めているため、正解時・問題履歴の答え表示だけは、
  * 計算結果の小数に加えて百分率への変換も示します。2段階問題の途中結果（割引・増量の

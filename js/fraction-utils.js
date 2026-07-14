@@ -10,7 +10,11 @@
 // 使用しています。lcm() / convertToCommonDenominator() は、通分そのものを児童に
 // 入力させる必要は無いものの、開発者用検証ページのデバッグ表示（通分前・通分後の分数）
 // のために第8段階で追加しました。
-// かけ算・わり算の基礎処理は、将来の小学6年生対応を見据えて用意しています。
+// 分数のかけ算・わり算（分数×分数・分数×整数・分数÷整数・整数÷分数）は、
+// 第10段階（小学6年生1学期）から実際のゲームデータで使用しています。
+// わり算はすべて「右辺の逆数をかける」方式で計算し、右辺が0（0でわる）の場合は
+// null を返すため、呼び出し側（question-generator.js / question-validator.js）は
+// null を「計算不能」として扱ってください。
 
 /**
  * 2つの整数の最大公約数を求めます（ユークリッドの互除法）。
@@ -112,7 +116,7 @@ export function subtractFractions(a, b) {
 }
 
 /**
- * 分数のかけ算。今回のゲームデータでは使用しませんが、将来の拡張のために用意しています。
+ * 分数のかけ算（第10段階から実際のゲームデータで使用）。
  */
 export function multiplyFractions(a, b) {
   return simplifyFraction({
@@ -123,8 +127,8 @@ export function multiplyFractions(a, b) {
 }
 
 /**
- * 分数のわり算。右辺が0の場合は null を返します。
- * 今回のゲームデータでは使用しませんが、将来の拡張のために用意しています。
+ * 分数のわり算。右辺が0の場合は null を返します（第10段階から実際のゲームデータで使用）。
+ * b/c ÷ d/e は b/c × e/d（右辺の逆数をかける）として計算します。
  */
 export function divideFractions(a, b) {
   if (b.numerator === 0) return null;
@@ -132,6 +136,43 @@ export function divideFractions(a, b) {
     type: "fraction",
     numerator: a.numerator * b.denominator,
     denominator: a.denominator * b.numerator
+  });
+}
+
+/**
+ * 分数×整数（第10段階で追加）。整数側は必ず整数（小数は今回未対応のため null）。
+ */
+export function multiplyFractionByInteger(fraction, integer) {
+  if (!Number.isInteger(integer)) return null;
+  return simplifyFraction({
+    type: "fraction",
+    numerator: fraction.numerator * integer,
+    denominator: fraction.denominator
+  });
+}
+
+/**
+ * 分数÷整数（第10段階で追加）。整数側が0、または整数でない場合は null。
+ */
+export function divideFractionByInteger(fraction, integer) {
+  if (!Number.isInteger(integer) || integer === 0) return null;
+  return simplifyFraction({
+    type: "fraction",
+    numerator: fraction.numerator,
+    denominator: fraction.denominator * integer
+  });
+}
+
+/**
+ * 整数÷分数（第10段階で追加）。b÷(c/d) は b×(d/c)（分数の逆数をかける）として計算します。
+ * 整数側が整数でない場合、または分数の分子が0（0でわる）の場合は null。
+ */
+export function divideIntegerByFraction(integer, fraction) {
+  if (!Number.isInteger(integer) || fraction.numerator === 0) return null;
+  return simplifyFraction({
+    type: "fraction",
+    numerator: integer * fraction.denominator,
+    denominator: fraction.numerator
   });
 }
 

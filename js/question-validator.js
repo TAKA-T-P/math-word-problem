@@ -3,7 +3,7 @@
 // （tools/question-validator.html）の両方から使われる、副作用のない純粋関数群です。
 
 import { safeCalculate } from "./answer-checker.js";
-import { areValuesEqual, isValueNegative, isFractionValue, isValidFraction, isPercentValue, isValidPercent } from "./value-utils.js";
+import { areValuesEqual, isValueNegative, isFractionValue, isValidFraction, isPercentValue, isValidPercent, isZeroValue } from "./value-utils.js";
 import { areNumbersEqual, getDecimalPlaces, formatNumber, parseFormattedNumber } from "./number-utils.js";
 import { renderValueHtml, buildFractionAriaLabel } from "./value-renderer.js";
 import { ratioToPercent } from "./percentage-utils.js";
@@ -19,7 +19,7 @@ const MAX_REASONABLE_FRACTION_DENOMINATOR = 12;
 // 現在 data/index.js に登録されている出題範囲キー。新しい学期を追加したら、
 // ここにも追加してください（data/index.js から自動取得すると循環参照になりやすいため、
 // 検証専用の一覧として独立させています）。
-const VALID_GRADE_TERMS = ["4-1", "4-2", "4-3", "4-multi-step", "5-1", "5-2", "5-3"];
+const VALID_GRADE_TERMS = ["4-1", "4-2", "4-3", "4-multi-step", "5-1", "5-2", "5-3", "6-1"];
 
 // generatorType がこの集合に含まれるときだけ、生成された分数の分母が一致しているかを確認する
 // （異分母分数のたし算・ひき算には適用しない。第8段階で追加）。
@@ -215,6 +215,40 @@ const GENERATOR_TYPE_RULES = {
   increaseTwoStep: {
     requiredVariableKeys: [],
     computedVariables: []
+  },
+  // 分数×整数・分数×分数・分数÷整数・整数÷分数・分数÷分数（小学6年生1学期、第10段階で追加）は
+  // standard のエイリアスのため、固定の必須キーは無い（variables のキー名はテンプレートごとに変わる）。
+  fractionTimesInteger: {
+    requiredVariableKeys: [],
+    computedVariables: []
+  },
+  fractionTimesFraction: {
+    requiredVariableKeys: [],
+    computedVariables: []
+  },
+  fractionDividedByInteger: {
+    requiredVariableKeys: [],
+    computedVariables: []
+  },
+  integerDividedByFraction: {
+    requiredVariableKeys: [],
+    computedVariables: []
+  },
+  fractionDividedByFraction: {
+    requiredVariableKeys: [],
+    computedVariables: []
+  },
+  // 分数倍・比べる量／分数倍・もとの量（小学6年生1学期、第10段階で追加）は、
+  // 速さ・割合と同じ理由（キー名がquantityRelationで動的に決まる）で requiresQuantityRelation を使う。
+  fractionMultiplierFindCompared: {
+    requiredVariableKeys: [],
+    computedVariables: [],
+    requiresQuantityRelation: true
+  },
+  fractionMultiplierFindBase: {
+    requiredVariableKeys: [],
+    computedVariables: [],
+    requiresQuantityRelation: true
   }
 };
 
@@ -291,6 +325,12 @@ const QUANTITY_RELATION_TYPE_CONFIG = {
     knownKeyFields: ["baseKey", "rateKey"],
     computedKeyField: "comparedKey",
     unknownValues: ["compared", "rate", "base"]
+  },
+  // 分数倍（小学6年生1学期、第10段階で追加）: もとにする量×分数倍＝比べる量
+  "fraction-multiplicative-comparison": {
+    knownKeyFields: ["baseKey", "multiplierKey"],
+    computedKeyField: "comparedKey",
+    unknownValues: ["base", "compared", "multiplier"]
   }
 };
 
@@ -334,7 +374,8 @@ function validateQuantityRelation(template, errors) {
   if (!config) {
     errors.push(
       `quantityRelation.type が不正です: ${qr.type}` +
-        `（"multiplicative-comparison"／"average"／"unit-rate"／"speed"／"percentage" のいずれか）`
+        `（"multiplicative-comparison"／"average"／"unit-rate"／"speed"／"percentage"／` +
+        `"fraction-multiplicative-comparison" のいずれか）`
     );
     return;
   }
@@ -839,17 +880,23 @@ function validateValueRepresentation(value, label, errors) {
       errors.push(`${label} が正しい分数の形ではありません: ${JSON.stringify(value)}`);
       return;
     }
+    let html = "";
     try {
-      const html = renderValueHtml(value);
+      html = renderValueHtml(value);
       if (!html || typeof html !== "string" || html.length === 0) {
         errors.push(`${label} の分数表示用HTMLが生成できません`);
       }
     } catch (error) {
       errors.push(`${label} の分数表示用HTML生成中にエラーが発生しました: ${error.message}`);
     }
-    const ariaLabel = buildFractionAriaLabel(value);
-    if (!/^\d+分の\d+$/.test(ariaLabel)) {
-      errors.push(`${label} のaria-labelの形式が不正です: ${ariaLabel}`);
+    // 約分した結果、分母が1になる場合（＝整数として表示される場合）は縦型分数のHTMLを
+    // 生成しないため（第10段階で追加。renderValueHtml() 参照）、分数用のaria-labelチェックは
+    // 実際に縦型分数として表示される場合だけ行う。
+    if (html.includes('class="fraction"')) {
+      const ariaLabel = buildFractionAriaLabel(value);
+      if (!/^\d+分の\d+$/.test(ariaLabel)) {
+        errors.push(`${label} のaria-labelの形式が不正です: ${ariaLabel}`);
+      }
     }
     return;
   }
@@ -868,7 +915,7 @@ function validateValueRepresentation(value, label, errors) {
         errors.push(`${label} の百分率表示用HTMLが生成できません`);
       }
       // カード・解答欄・履歴などの値表示は、百分率を比率（小数）に変換して表示する
-      // （例: 20% → "0.2"。第10段階で変更。問題文中の「20%」という自然な言い回しは、
+      // （例: 20% → "0.2"。問題文中の「20%」という自然な言い回しは、
       // この renderValueHtml() を経由しない別経路のため、ここでは検証しない）。
       // "0.20" のような不要な末尾の0が無いかを表示テキストで確認する。
       if (!/^\d+(\.\d+)?$/.test(html.replace(/<[^>]+>/g, ""))) {
@@ -941,7 +988,7 @@ export function validateGeneratedQuestion(problem) {
     }
 
     if (route.operator === "÷") {
-      if (route.right === 0 || (isPercentValue(route.right) && route.right.value === 0)) {
+      if (isZeroValue(route.right)) {
         errors.push("わる数が0です");
         continue;
       }
@@ -1072,7 +1119,7 @@ function validateGeneratedMultiStepQuestion(problem) {
         break;
       }
       if (step.operator === "÷") {
-        if (step.right === 0 || (isPercentValue(step.right) && step.right.value === 0)) {
+        if (isZeroValue(step.right)) {
           errors.push(`[${route.id}] わる数が0です: ${JSON.stringify(step.left)}÷${JSON.stringify(step.right)}`);
           routeValid = false;
           break;

@@ -26,6 +26,11 @@ import {
 import {
   addFractions,
   subtractFractions,
+  multiplyFractions,
+  divideFractions,
+  multiplyFractionByInteger,
+  divideFractionByInteger,
+  divideIntegerByFraction,
   areFractionsEqual,
   isValidFraction,
   simplifyFraction,
@@ -127,10 +132,13 @@ function divideNumbers(left, right) {
  *   - 数値 ÷ 数値（わる数が整数なら divideExactByInteger、小数なら divideExactByDecimal。
  *     どちらも割り切れる場合のみ）
  *   - 分数 + 分数 / 分数 - 分数（分子・分母を使った正確な計算。異分母も数式としては正しく計算する）
+ *   - 分数 × 分数 / 分数 ÷ 分数（第10段階で追加。わり算は右辺の逆数をかける方式。右辺が0なら null）
+ *   - 分数 × 整数 / 整数 × 分数（第10段階で追加。交換法則が成り立つためどちらの順序も対応）
+ *   - 分数 ÷ 整数 / 整数 ÷ 分数（第10段階で追加。順序を区別する。0でわる場合は null）
  *   - 百分率 + 百分率 / 百分率 - 百分率（結果は百分率。例: 100%－20%＝80%）
  *   - 数値 × 百分率 / 百分率 × 数値（結果は数値。百分率を比率に変換してから掛ける。例: 3000×20%＝600）
  *   - 数値 ÷ 百分率（結果は数値。百分率を比率に変換してから、割り切れる場合だけ商を返す。例: 600÷20%＝3000）
- * 分数と数値・分数と百分率が混在する計算、百分率どうしのかけ算・わり算、
+ * 分数と小数・分数と百分率が混在する計算、百分率どうしのかけ算・わり算、
  * 数値と百分率のたし算・ひき算は今回のバージョンでは未対応で、呼び出された場合は null を返します
  * （「数値÷数値」の結果を百分率として扱いたい場合は、この関数ではなく、
  *  呼び出し側が solutionRoutes の resultType:"percent" を使って変換してください）。
@@ -142,14 +150,45 @@ export function calculateValues(left, operator, right) {
         return normalizeValue(addFractions(left, right));
       case "-":
         return normalizeValue(subtractFractions(left, right));
+      case "×":
+        return normalizeValue(multiplyFractions(left, right));
+      case "÷": {
+        const divided = divideFractions(left, right);
+        return divided === null ? null : normalizeValue(divided);
+      }
       default:
-        // 分数どうしのかけ算・わり算は今回のバージョンでは未対応。
         return null;
     }
   }
 
+  if (isFractionValue(left) && typeof right === "number") {
+    // 分数×整数・分数÷整数（第10段階で追加）。整数以外（小数）は今回未対応のため null。
+    if (operator === "×") {
+      const multiplied = multiplyFractionByInteger(left, right);
+      return multiplied === null ? null : normalizeValue(multiplied);
+    }
+    if (operator === "÷") {
+      const divided = divideFractionByInteger(left, right);
+      return divided === null ? null : normalizeValue(divided);
+    }
+    return null;
+  }
+
+  if (typeof left === "number" && isFractionValue(right)) {
+    // 整数×分数（かけ算の交換法則）・整数÷分数（第10段階で追加）。
+    if (operator === "×") {
+      const multiplied = multiplyFractionByInteger(right, left);
+      return multiplied === null ? null : normalizeValue(multiplied);
+    }
+    if (operator === "÷") {
+      const divided = divideIntegerByFraction(left, right);
+      return divided === null ? null : normalizeValue(divided);
+    }
+    return null;
+  }
+
   if (isFractionValue(left) || isFractionValue(right)) {
-    // 分数と、整数・小数・百分率が混在する計算は今回のバージョンでは未対応。
+    // 分数と、小数・百分率が混在する計算は今回のバージョンでは未対応。
     return null;
   }
 
@@ -244,7 +283,9 @@ export function areValuesEqual(a, b) {
 export function formatValue(value, { simplify = true } = {}) {
   if (isFractionValue(value)) {
     const s = simplify ? simplifyFraction(value) : value;
-    return `${s.numerator}/${s.denominator}`;
+    // 約分の結果、分母が1になる場合（＝整数値の場合）は整数として表示する
+    // （第10段階で追加。renderValueHtml() の同様の分岐と挙動を揃えている）。
+    return s.denominator === 1 ? `${s.numerator}` : `${s.numerator}/${s.denominator}`;
   }
   if (isPercentValue(value)) {
     return formatPercent(value);
@@ -310,6 +351,32 @@ export function getValueDecimalPlaces(value) {
   if (isFractionValue(value)) return 0;
   if (isPercentValue(value)) return getDecimalPlaces(value.value);
   return getDecimalPlaces(value);
+}
+
+/**
+ * 値（分数オブジェクトまたは整数）を、必ず分数オブジェクトへ変換します（第10段階で追加）。
+ * すでに分数の場合はそのまま返し、整数の場合は分母1の分数として返します。
+ * 整数でない数値（小数）が渡された場合は null を返します
+ * （今回のバージョンでは分数×小数・分数÷小数を想定していないため）。
+ */
+export function toFractionValue(value) {
+  if (isFractionValue(value)) return value;
+  if (typeof value === "number" && Number.isInteger(value)) {
+    return { type: "fraction", numerator: value, denominator: 1 };
+  }
+  return null;
+}
+
+/**
+ * 値（分数・百分率・整数・小数のいずれか）がゼロかどうかを、型を意識せず判定します
+ * （第10段階で追加）。分数のわり算・整数のわり算・百分率のわり算で「0でわる」問題を
+ * 生成・検証しないためのチェックに使います（question-validator.js の0でわるチェックを
+ * このヘルパーに統一しています）。
+ */
+export function isZeroValue(value) {
+  if (isFractionValue(value)) return value.numerator === 0;
+  if (isPercentValue(value)) return value.value === 0;
+  return value === 0;
 }
 
 export { isValidFraction };

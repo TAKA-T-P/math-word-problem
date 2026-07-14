@@ -320,7 +320,7 @@
         return { textHtml, formulaHtml: stepsHtml, resultHtml: renderValueHtml(problem.answer), unit: problem.answerUnit };
       }
       // 「割合・百分率」のように答えそのものが百分率の場合は、小数と百分率の両方を
-      // 「0.5→50%」の形式で示す（実際のゲーム画面と同じ扱い。第10段階で追加）。
+      // 「0.5→50%」の形式で示す（実際のゲーム画面と同じ扱い）。
       // この場合、百分率記号はすでに含まれているため、answerUnit（"%"）は付け足さない。
       const resultIsPercent = isPercentValue(problem.result);
       return {
