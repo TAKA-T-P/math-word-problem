@@ -3,9 +3,10 @@
 // （tools/question-validator.html）の両方から使われる、副作用のない純粋関数群です。
 
 import { safeCalculate } from "./answer-checker.js";
-import { areValuesEqual, isValueNegative, isFractionValue, isValidFraction } from "./value-utils.js";
+import { areValuesEqual, isValueNegative, isFractionValue, isValidFraction, isPercentValue, isValidPercent } from "./value-utils.js";
 import { areNumbersEqual, getDecimalPlaces, formatNumber, parseFormattedNumber } from "./number-utils.js";
 import { renderValueHtml, buildFractionAriaLabel } from "./value-renderer.js";
+import { ratioToPercent } from "./percentage-utils.js";
 
 // このアプリで扱う小数点以下の最大桁数（4.15 のような2桁まで）。
 // これを超える場合は「小学4年生として不自然」と判断してエラーにします。
@@ -18,7 +19,7 @@ const MAX_REASONABLE_FRACTION_DENOMINATOR = 12;
 // 現在 data/index.js に登録されている出題範囲キー。新しい学期を追加したら、
 // ここにも追加してください（data/index.js から自動取得すると循環参照になりやすいため、
 // 検証専用の一覧として独立させています）。
-const VALID_GRADE_TERMS = ["4-1", "4-2", "4-3", "4-multi-step", "5-1", "5-2"];
+const VALID_GRADE_TERMS = ["4-1", "4-2", "4-3", "4-multi-step", "5-1", "5-2", "5-3"];
 
 // generatorType がこの集合に含まれるときだけ、生成された分数の分母が一致しているかを確認する
 // （異分母分数のたし算・ひき算には適用しない。第8段階で追加）。
@@ -169,6 +170,51 @@ const GENERATOR_TYPE_RULES = {
     requiredVariableKeys: [],
     computedVariables: [],
     requiresQuantityRelation: true
+  },
+  // 速さ・道のり・時間（小学5年生3学期）は、キー名がテンプレートごとに quantityRelation で
+  // 指定されるため、平均・単位量あたりと同じ理由で requiresQuantityRelation を使います。
+  findSpeed: {
+    requiredVariableKeys: [],
+    computedVariables: [],
+    requiresQuantityRelation: true
+  },
+  findDistance: {
+    requiredVariableKeys: [],
+    computedVariables: [],
+    requiresQuantityRelation: true
+  },
+  findTime: {
+    requiredVariableKeys: [],
+    computedVariables: [],
+    requiresQuantityRelation: true
+  },
+  // 割合（比べる量・割合・もとにする量。小学5年生3学期）も同様です。
+  percentageFindCompared: {
+    requiredVariableKeys: [],
+    computedVariables: [],
+    requiresQuantityRelation: true
+  },
+  percentageFindRate: {
+    requiredVariableKeys: [],
+    computedVariables: [],
+    requiresQuantityRelation: true
+  },
+  percentageFindBase: {
+    requiredVariableKeys: [],
+    computedVariables: [],
+    requiresQuantityRelation: true
+  },
+  // 割引・増量（小学5年生3学期、2段階問題）は standard のエイリアス（originalPrice・
+  // discountRate/increaseRate という名前もテンプレートごとに変わりうるため、
+  // 固定の必須キーは指定しません。quantityRelation も使いません＝2つのルートの最終結果が
+  // 一致するかどうかは、既存の「solutionRoutes間で最終的な答えが一致するか」検証がそのまま使えます）。
+  discountTwoStep: {
+    requiredVariableKeys: [],
+    computedVariables: []
+  },
+  increaseTwoStep: {
+    requiredVariableKeys: [],
+    computedVariables: []
   }
 };
 
@@ -184,6 +230,32 @@ function extractPlaceholders(templateText) {
 
 function getGeneratorRule(generatorType) {
   return GENERATOR_TYPE_RULES[generatorType] || { requiredVariableKeys: [], computedVariables: [] };
+}
+
+/**
+ * 2段階問題の {source:"literal", value} が持つ固定値として妥当かどうかを判定します
+ * （第9段階で追加。割引・増量の「100%」のような、どの変数にも対応しない定数の検証用）。
+ * 数値・分数・百分率のいずれかであれば妥当とみなします。
+ */
+function isValidLiteralOperandValue(value) {
+  if (typeof value === "number") return Number.isFinite(value);
+  if (isValidFraction(value)) return true;
+  if (isValidPercent(value)) return true;
+  return false;
+}
+
+/**
+ * question-generator.js の applyResultType() と同じ変換を、検証側でも独立に再現します
+ * （第9段階で追加）。question-generator.js から直接 import すると循環参照になるため、
+ * この小さな純粋関数だけを重複して持たせています。route.resultType:"percent" が
+ * 指定されている場合、safeCalculate() の生の計算結果（例: 0.3）を百分率（30%）に変換してから
+ * route.result と比較しないと、「0.3 と 30% は一致しない」という誤判定になってしまいます。
+ */
+function applyResultTypeForValidation(result, resultType) {
+  if (resultType === "percent" && typeof result === "number") {
+    return ratioToPercent(result);
+  }
+  return result;
 }
 
 // quantityRelation.type ごとに、「既知（生成元）の値を指すフィールド名」2つと
@@ -207,6 +279,18 @@ const QUANTITY_RELATION_TYPE_CONFIG = {
     knownKeyFields: ["unitCountKey", "perUnitKey"],
     computedKeyField: "totalKey",
     unknownValues: ["total", "unitCount", "perUnit"]
+  },
+  // 速さ（小学5年生3学期）: 速さ×時間＝道のり
+  speed: {
+    knownKeyFields: ["speedKey", "timeKey"],
+    computedKeyField: "distanceKey",
+    unknownValues: ["distance", "speed", "time"]
+  },
+  // 割合（小学5年生3学期）: もとにする量×割合＝比べる量
+  percentage: {
+    knownKeyFields: ["baseKey", "rateKey"],
+    computedKeyField: "comparedKey",
+    unknownValues: ["compared", "rate", "base"]
   }
 };
 
@@ -249,7 +333,8 @@ function validateQuantityRelation(template, errors) {
   const config = QUANTITY_RELATION_TYPE_CONFIG[qr.type];
   if (!config) {
     errors.push(
-      `quantityRelation.type が不正です: ${qr.type}（"multiplicative-comparison"／"average"／"unit-rate" のいずれか）`
+      `quantityRelation.type が不正です: ${qr.type}` +
+        `（"multiplicative-comparison"／"average"／"unit-rate"／"speed"／"percentage" のいずれか）`
     );
     return;
   }
@@ -353,6 +438,28 @@ function validateFractionVariable(key, range, errors) {
   }
   if (typeof range.numeratorMin === "number" && range.numeratorMin < 0) {
     errors.push(`variables.${key}.numeratorMin が負の数です: ${range.numeratorMin}`);
+  }
+}
+
+/**
+ * 百分率型の変数定義 { type:"percent", values:[10,20,25,...] } を検証します（第9段階で追加）。
+ * 「10%、20%、25%…」のような、値の一覧（values）から選ぶ離散的な形式のため、
+ * 分数の min/max ではなく配列そのものを検証します。0%以下の値は許可しません
+ * （「0%引き」「0%増量」のような問題は意味をなさないため）。
+ */
+function validatePercentVariable(key, range, errors) {
+  if (!Array.isArray(range.values) || range.values.length === 0) {
+    errors.push(`variables.${key}.values は空でない配列である必要があります`);
+    return;
+  }
+  for (const v of range.values) {
+    if (typeof v !== "number" || !Number.isFinite(v)) {
+      errors.push(`variables.${key}.values に不正な値が含まれています: ${JSON.stringify(v)}`);
+    } else if (v <= 0) {
+      errors.push(`variables.${key}.values は0より大きい値である必要があります: ${v}`);
+    } else if (getDecimalPlaces(v) > MAX_REASONABLE_DECIMAL_PLACES) {
+      errors.push(`variables.${key}.values の小数点以下の桁数が大きすぎます: ${v}`);
+    }
   }
 }
 
@@ -531,12 +638,14 @@ export function validateTemplate(template) {
     validateNonNegativeUnlikeDenominatorSubtraction(template, errors);
   }
 
-  // 小数（decimalPlaces指定）・分数（type:"fraction"）の変数定義を検証する。
+  // 小数（decimalPlaces指定）・分数（type:"fraction"）・百分率（type:"percent"）の変数定義を検証する。
   if (hasVariables) {
     for (const [key, range] of Object.entries(template.variables)) {
       if (!range || typeof range !== "object") continue;
       if (range.type === "fraction") {
         validateFractionVariable(key, range, errors);
+      } else if (range.type === "percent") {
+        validatePercentVariable(key, range, errors);
       } else if (range.decimalPlaces > MAX_REASONABLE_DECIMAL_PLACES) {
         errors.push(
           `variables.${key} の decimalPlaces が大きすぎます: ${range.decimalPlaces}（最大 ${MAX_REASONABLE_DECIMAL_PLACES} 桁）`
@@ -635,11 +744,11 @@ function validateMultiStepSolutionRoutes(template, rule, errors) {
       for (const side of ["left", "right"]) {
         const operand = step[side];
         if (!operand || typeof operand !== "object") {
-          errors.push(`${label}.${side} はオブジェクト({source, key})で指定してください`);
+          errors.push(`${label}.${side} はオブジェクト({source, key} または {source:"literal", value})で指定してください`);
           continue;
         }
-        if (operand.source !== "variable" && operand.source !== "result") {
-          errors.push(`${label}.${side}.source が不正です: ${operand.source}（"variable" か "result" のみ）`);
+        if (operand.source !== "variable" && operand.source !== "result" && operand.source !== "literal") {
+          errors.push(`${label}.${side}.source が不正です: ${operand.source}（"variable"／"result"／"literal" のいずれか）`);
           continue;
         }
         if (operand.source === "variable") {
@@ -651,6 +760,13 @@ function validateMultiStepSolutionRoutes(template, rule, errors) {
             errors.push(
               `${label}.${side} が、より前のステップで確定していない中間結果を参照しています: ${operand.key}（存在しないか、循環・前方参照の可能性があります）`
             );
+          }
+        } else if (operand.source === "literal") {
+          // 割引・増量の「100%」のような、どの変数にも対応しない固定値（第9段階で追加）。
+          // 依頼文の元の書式（left/rightに値オブジェクトを直接書く形）は、既存の
+          // {source, key} という構造に合わせて {source:"literal", value:{...}} と読み替えている。
+          if (!isValidLiteralOperandValue(operand.value)) {
+            errors.push(`${label}.${side} のliteral値が不正です: ${JSON.stringify(operand.value)}`);
           }
         }
       }
@@ -738,6 +854,32 @@ function validateValueRepresentation(value, label, errors) {
     return;
   }
 
+  if (isPercentValue(value)) {
+    if (!isValidPercent(value)) {
+      errors.push(`${label} が正しい百分率の形ではありません: ${JSON.stringify(value)}`);
+      return;
+    }
+    if (getDecimalPlaces(value.value) > MAX_REASONABLE_DECIMAL_PLACES) {
+      errors.push(`${label} の百分率の小数点以下の桁数が不自然です: ${value.value}%`);
+    }
+    try {
+      const html = renderValueHtml(value);
+      if (!html || typeof html !== "string" || html.length === 0) {
+        errors.push(`${label} の百分率表示用HTMLが生成できません`);
+      }
+      // カード・解答欄・履歴などの値表示は、百分率を比率（小数）に変換して表示する
+      // （例: 20% → "0.2"。第10段階で変更。問題文中の「20%」という自然な言い回しは、
+      // この renderValueHtml() を経由しない別経路のため、ここでは検証しない）。
+      // "0.20" のような不要な末尾の0が無いかを表示テキストで確認する。
+      if (!/^\d+(\.\d+)?$/.test(html.replace(/<[^>]+>/g, ""))) {
+        errors.push(`${label} の百分率の表示テキスト（小数表記）が不正です: ${html}`);
+      }
+    } catch (error) {
+      errors.push(`${label} の百分率表示用HTML生成中にエラーが発生しました: ${error.message}`);
+    }
+    return;
+  }
+
   if (typeof value !== "number") return;
   if (getDecimalPlaces(value) > MAX_REASONABLE_DECIMAL_PLACES) {
     errors.push(`${label} の小数点以下の桁数が不自然です: ${value}`);
@@ -758,6 +900,9 @@ function containsValue(values, target) {
     return values.some(
       (v) => isFractionValue(v) && v.numerator === target.numerator && v.denominator === target.denominator
     );
+  }
+  if (isPercentValue(target)) {
+    return values.some((v) => isPercentValue(v) && v.value === target.value);
   }
   return values.includes(target);
 }
@@ -796,7 +941,7 @@ export function validateGeneratedQuestion(problem) {
     }
 
     if (route.operator === "÷") {
-      if (route.right === 0) {
+      if (route.right === 0 || (isPercentValue(route.right) && route.right.value === 0)) {
         errors.push("わる数が0です");
         continue;
       }
@@ -810,7 +955,7 @@ export function validateGeneratedQuestion(problem) {
       }
     }
 
-    const computed = safeCalculate(route.left, route.operator, route.right);
+    const computed = applyResultTypeForValidation(safeCalculate(route.left, route.operator, route.right), route.resultType);
     if (computed === null) {
       errors.push(`式が計算できません（わり切れない場合も含む）: ${route.left}${route.operator}${route.right}`);
       continue;
@@ -850,7 +995,13 @@ export function validateGeneratedQuestion(problem) {
   if (validResults.length === 0) {
     errors.push("正解ルートが存在しません(すべてのルートが不正です)");
   } else {
-    const uniqueResultKeys = new Set(validResults.map((v) => (isFractionValue(v) ? `${v.numerator}/${v.denominator}` : v)));
+    const uniqueResultKeys = new Set(
+      validResults.map((v) => {
+        if (isFractionValue(v)) return `fraction:${v.numerator}/${v.denominator}`;
+        if (isPercentValue(v)) return `percent:${v.value}`;
+        return v;
+      })
+    );
     if (uniqueResultKeys.size > 1) {
       const anyMismatch = validResults.some((v, i) => i > 0 && !areValuesEqual(v, validResults[0]));
       if (anyMismatch) {
@@ -921,15 +1072,15 @@ function validateGeneratedMultiStepQuestion(problem) {
         break;
       }
       if (step.operator === "÷") {
-        if (step.right === 0) {
-          errors.push(`[${route.id}] わる数が0です: ${step.left}÷${step.right}`);
+        if (step.right === 0 || (isPercentValue(step.right) && step.right.value === 0)) {
+          errors.push(`[${route.id}] わる数が0です: ${JSON.stringify(step.left)}÷${JSON.stringify(step.right)}`);
           routeValid = false;
           break;
         }
       }
-      const computed = safeCalculate(step.left, step.operator, step.right);
+      const computed = applyResultTypeForValidation(safeCalculate(step.left, step.operator, step.right), step.resultType);
       if (computed === null) {
-        errors.push(`[${route.id}] 式が計算できません: ${step.left}${step.operator}${step.right}`);
+        errors.push(`[${route.id}] 式が計算できません: ${JSON.stringify(step.left)}${step.operator}${JSON.stringify(step.right)}`);
         routeValid = false;
         break;
       }

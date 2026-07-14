@@ -219,6 +219,7 @@
         <option value="integer">整数のみ</option>
         <option value="decimal">小数のみ</option>
         <option value="fraction">分数のみ</option>
+        <option value="percent">百分率のみ</option>
       </select>
     </label>
     <label>判定
@@ -286,7 +287,8 @@
     import { generateQuestionFromTemplate, getContentGroup } from "../js/question-generator.js";
     import { simulateAllRoutesToCompletion } from "../js/multi-step-engine.js";
     import { generateTrainingQuestions, validateTrainingSetGeneration } from "../js/training-mode.js";
-    import { renderValueHtml, renderTextPartsHtml, escapeHtml } from "../js/value-renderer.js";
+    import { renderValueHtml, renderTextPartsHtml, renderPercentConversionHtml, escapeHtml } from "../js/value-renderer.js";
+    import { isPercentValue } from "../js/value-utils.js";
 
     const SINGLE_STEP_SAMPLE_COUNT = 30;
     const MULTI_STEP_SAMPLE_COUNT = 20;
@@ -300,6 +302,7 @@
       if (!template || !template.variables) return "integer";
       const ranges = Object.values(template.variables);
       if (ranges.some((r) => r && r.type === "fraction")) return "fraction";
+      if (ranges.some((r) => r && r.type === "percent")) return "percent";
       if (ranges.some((r) => r && r.decimalPlaces > 0)) return "decimal";
       return "integer";
     }
@@ -316,11 +319,15 @@
           .join(" / ");
         return { textHtml, formulaHtml: stepsHtml, resultHtml: renderValueHtml(problem.answer), unit: problem.answerUnit };
       }
+      // 「割合・百分率」のように答えそのものが百分率の場合は、小数と百分率の両方を
+      // 「0.5→50%」の形式で示す（実際のゲーム画面と同じ扱い。第10段階で追加）。
+      // この場合、百分率記号はすでに含まれているため、answerUnit（"%"）は付け足さない。
+      const resultIsPercent = isPercentValue(problem.result);
       return {
         textHtml,
         formulaHtml: `${renderValueHtml(problem.left)}${problem.operator}${renderValueHtml(problem.right)}`,
-        resultHtml: renderValueHtml(problem.result),
-        unit: problem.answerUnit
+        resultHtml: resultIsPercent ? renderPercentConversionHtml(problem.result) : renderValueHtml(problem.result),
+        unit: resultIsPercent ? "" : problem.answerUnit
       };
     }
 
@@ -402,7 +409,7 @@
            </div>`
         : "";
 
-      const VALUE_TYPE_LABELS = { integer: "整数", decimal: "小数", fraction: "分数" };
+      const VALUE_TYPE_LABELS = { integer: "整数", decimal: "小数", fraction: "分数", percent: "百分率" };
 
       const card = document.createElement("div");
       card.className = `template-card ${row.overallValid ? "ok" : "error"}`;

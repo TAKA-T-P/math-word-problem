@@ -15,8 +15,9 @@ import { safeCalculate } from "./answer-checker.js";
 import { validateGeneratedQuestion } from "./question-validator.js";
 import { initializeMultiStepQuestion } from "./multi-step-engine.js";
 import { normalizeNumber, multiplyDecimal } from "./number-utils.js";
-import { valueKey, isFractionValue, formatValue } from "./value-utils.js";
+import { valueKey, isFractionValue, isPercentValue, formatValue } from "./value-utils.js";
 import { fractionToNumber } from "./fraction-utils.js";
+import { percentToRatio, ratioToPercent, formatPercent } from "./percentage-utils.js";
 
 export const OPERATORS = ["+", "-", "×", "÷"];
 
@@ -75,15 +76,32 @@ function pickFractionValue(range) {
 }
 
 /**
- * 1つの変数の範囲定義から、その種類（分数・小数・整数）に応じた値を1つ選びます。
+ * 百分率の変数定義 { type:"percent", values:[10,20,25,...] } から、
+ * 一覧の中からランダムに1つ選び、百分率の値を1つ作ります（第9段階で追加）。
+ * 「10%、20%、25%、30%…」のような、小学5年生として自然な値の一覧から選ぶ設計のため、
+ * 分数の分子のような連続範囲（min〜max）ではなく、離散的な values 配列を使用します。
+ */
+function pickPercentValue(range) {
+  const values = range.values;
+  const chosen = values[pickInt(0, values.length - 1)];
+  return { type: "percent", value: chosen };
+}
+
+/**
+ * 1つの変数の範囲定義から、その種類（分数・百分率・小数・整数）に応じた値を1つ選びます。
  *   - type: "fraction"      → 分数（pickFractionValue）
+ *   - type: "percent"       → 百分率（pickPercentValue。第9段階で追加）
  *   - decimalPlaces あり    → 小数（pickDecimalValue）
  *   - それ以外               → 整数（pickStepped）
- * generateStandardValues() と、小数倍・もとの量専用の生成関数の両方から使う共通処理です。
+ * generateStandardValues() と、小数倍・もとの量・速さ・割合専用の生成関数の
+ * すべてから使う共通処理です。
  */
 function pickValueForRange(range) {
   if (range.type === "fraction") {
     return pickFractionValue(range);
+  }
+  if (range.type === "percent") {
+    return pickPercentValue(range);
   }
   if (range.decimalPlaces) {
     return pickDecimalValue(range);
@@ -254,6 +272,42 @@ function generateUnitRateValues(variables, quantityRelation) {
   return generateProportionalValues(variables, unitCountKey, perUnitKey, totalKey);
 }
 
+/**
+ * 速さ・道のり・時間専用の生成ルール（小学5年生3学期）。
+ * quantityRelation（speedKey・timeKey・distanceKey）が指す変数名を使って、
+ * generateProportionalValues() に委譲します（速さ×時間＝道のり）。
+ * 速さを求める・道のりを求める・時間を求めるのどの問題でも、生成ロジックは同じで、
+ * 「何が未知か」は solutionRoutes 側が決めます。
+ */
+function generateSpeedValues(variables, quantityRelation) {
+  if (!quantityRelation) {
+    throw new Error("quantityRelation が指定されていないテンプレートです（速さには必須です）。");
+  }
+  const { speedKey, timeKey, distanceKey } = quantityRelation;
+  return generateProportionalValues(variables, speedKey, timeKey, distanceKey);
+}
+
+/**
+ * 割合（比べる量・割合・もとにする量）専用の生成ルール（小学5年生3学期）。
+ * quantityRelation（baseKey・rateKey・comparedKey）が指す変数名を使って、
+ * もとにする量(base)・割合(rate、百分率)を独立に生成し、
+ * 比べる量(compared) = base × (rateを比率に変換した値) を誤差の出ない multiplyDecimal で
+ * 計算します。rate は百分率型のため、generateProportionalValues() は使わず（乗算の前に
+ * percentToRatio() での変換が必要なため）、専用の生成関数として用意しています。
+ * 「何が未知か」は solutionRoutes 側が決めるため、比べる量・割合・もとにする量の
+ * 3カテゴリすべてで、この1つの関数を共有できます。
+ */
+function generatePercentageValues(variables, quantityRelation) {
+  if (!quantityRelation) {
+    throw new Error("quantityRelation が指定されていないテンプレートです（割合には必須です）。");
+  }
+  const { baseKey, comparedKey, rateKey } = quantityRelation;
+  const baseValue = pickValueForRange(variables[baseKey]);
+  const rateValue = pickValueForRange(variables[rateKey]);
+  const comparedValue = normalizeNumber(multiplyDecimal(baseValue, percentToRatio(rateValue)));
+  return { [baseKey]: baseValue, [rateKey]: rateValue, [comparedKey]: comparedValue };
+}
+
 const GENERATOR_TYPE_HANDLERS = {
   standard: (variables) => generateStandardValues(variables),
   // decimalAddition / decimalSubtraction / decimalTimesInteger / decimalTimesDecimal /
@@ -297,6 +351,23 @@ const GENERATOR_TYPE_HANDLERS = {
   // 2つのカテゴリ（unitRate: 1単位あたりを求める／totalFromUnitRate: 全体量を求める）で共有します。
   unitRate: (variables, template) => generateUnitRateValues(variables, template.quantityRelation),
   totalFromUnitRate: (variables, template) => generateUnitRateValues(variables, template.quantityRelation),
+  // 速さ・道のり・時間（小学5年生3学期）。速さ×時間＝道のりの関係を持つ3つのカテゴリ
+  // （findSpeed: 速さを求める／findDistance: 道のりを求める／findTime: 時間を求める）で共有します。
+  findSpeed: (variables, template) => generateSpeedValues(variables, template.quantityRelation),
+  findDistance: (variables, template) => generateSpeedValues(variables, template.quantityRelation),
+  findTime: (variables, template) => generateSpeedValues(variables, template.quantityRelation),
+  // 割合（小学5年生3学期）。もとにする量×割合＝比べる量の関係を持つ3つのカテゴリ
+  // （percentageFindCompared: 比べる量を求める／percentageFindRate: 割合を求める／
+  //  percentageFindBase: もとにする量を求める）で共有します。
+  percentageFindCompared: (variables, template) => generatePercentageValues(variables, template.quantityRelation),
+  percentageFindRate: (variables, template) => generatePercentageValues(variables, template.quantityRelation),
+  percentageFindBase: (variables, template) => generatePercentageValues(variables, template.quantityRelation),
+  // 割引・増量（小学5年生3学期、2段階問題）。standard のエイリアス。originalPrice（もとの値段/量）・
+  // discountRate/increaseRate（百分率）を独立に生成するだけで、支払う割合・値引き額・増えた量・
+  // 最終的な答えは、resolveMultiStepRoutes() が各ルートのステップを計算する際に自動的に求まります
+  // （専用の生成関数は不要）。
+  discountTwoStep: (variables) => generateStandardValues(variables),
+  increaseTwoStep: (variables) => generateStandardValues(variables),
   multiStepDivideFirst: (variables) => generateMultiStepDivideFirstValues(variables),
   multiStepSumToDivisible: (variables) => generateMultiStepSumToDivisibleValues(variables)
 };
@@ -319,7 +390,13 @@ const QUANTITY_RELATION_GENERATOR_TYPES = new Set([
   "averageFromTotal",
   "totalFromAverage",
   "unitRate",
-  "totalFromUnitRate"
+  "totalFromUnitRate",
+  "findSpeed",
+  "findDistance",
+  "findTime",
+  "percentageFindCompared",
+  "percentageFindRate",
+  "percentageFindBase"
 ]);
 
 function generateValuesForTemplate(template) {
@@ -329,7 +406,12 @@ function generateValuesForTemplate(template) {
 
 export function renderTemplateText(template, values) {
   return template.template.replace(/\{(\w+)\}/g, (match, key) => {
-    return Object.prototype.hasOwnProperty.call(values, key) ? String(values[key]) : match;
+    if (!Object.prototype.hasOwnProperty.call(values, key)) return match;
+    const value = values[key];
+    // 百分率は "[object Object]" にならないよう "20%" の形式に変換する（第9段階で追加）。
+    // 数値はこれまでどおり String(value) のまま（桁区切りカンマを付けない。カンマ付き表示が
+    // 必要な場面＝カード・結果・履歴は、すべて renderValueHtml() 経由で別途行っている）。
+    return isPercentValue(value) ? formatPercent(value) : String(value);
   });
 }
 
@@ -378,6 +460,20 @@ function getVisibleNumbers(template, values) {
 }
 
 /**
+ * calculateValues() の計算結果に、solutionRoutes（またはステップ）が指定する
+ * resultType を適用します（第9段階で追加）。
+ * 現状で使うのは resultType:"percent" だけで、「数値÷数値」の計算結果（例: 0.3）を
+ * 百分率表示（30%）に変換したい場合に使います（15÷50＝30%のような「割合を求める」問題）。
+ * 計算結果がすでに百分率・分数の場合や、resultType が指定されていない場合は何もしません。
+ */
+function applyResultType(result, resultType) {
+  if (resultType === "percent" && typeof result === "number") {
+    return ratioToPercent(result);
+  }
+  return result;
+}
+
+/**
  * テンプレートの solutionRoutes（変数名で書かれた正解ルート）を、
  * 実際の数値に解決します（1段階問題用）。
  */
@@ -386,13 +482,16 @@ function resolveSolutionRoutes(template, values) {
     const left = values[route.left];
     const right = values[route.right];
     const operator = route.operator;
-    const result = safeCalculate(left, operator, right);
-    return { left, operator, right, result, commutative: Boolean(route.commutative) };
+    const result = applyResultType(safeCalculate(left, operator, right), route.resultType);
+    // resultType もそのまま複製する。question-validator.js が生成結果を独自に再計算して
+    // 照合する際、resultType を知らないと「0.3」と「30%」を一致しないと誤判定してしまうため
+    // （resultType の変換は、この関数の中だけでなく、検証側でも同じロジックを再現する必要がある）。
+    return { left, operator, right, result, commutative: Boolean(route.commutative), resultType: route.resultType };
   });
 }
 
 /**
- * 2段階問題の solutionRoutes（各ステップが variable/result 参照で書かれたもの）を、
+ * 2段階問題の solutionRoutes（各ステップが variable/result/literal 参照で書かれたもの）を、
  * 実際の数値に解決します。ステップは配列の順番どおりに評価し、
  * 各ステップの resultKey は「そのルート内だけで有効な」中間結果名として扱います
  * （別のルートの中間結果は参照できません＝ルートごとに独立した名前空間）。
@@ -404,7 +503,7 @@ function resolveMultiStepRoutes(template, values) {
       const left = resolveOperand(stepDef.left, values, localResults);
       const right = resolveOperand(stepDef.right, values, localResults);
       const operator = stepDef.operator;
-      const result = safeCalculate(left, operator, right);
+      const result = applyResultType(safeCalculate(left, operator, right), stepDef.resultType);
       if (stepDef.resultKey) {
         localResults[stepDef.resultKey] = result;
       }
@@ -414,17 +513,31 @@ function resolveMultiStepRoutes(template, values) {
         right,
         result,
         resultKey: stepDef.resultKey,
-        commutative: stepDef.commutative
+        commutative: stepDef.commutative,
+        resultType: stepDef.resultType
       };
     });
     return { id: route.id, steps };
   });
 }
 
+/**
+ * 2段階問題のステップの left/right（{source, key} または {source:"literal", value}）を、
+ * 実際の値に解決します。
+ *   - source: "variable" → variables（または generatorType が計算する変数）から参照
+ *   - source: "result"   → 同じルート内の、より前のステップの中間結果から参照
+ *   - source: "literal"  → 固定値そのもの（第9段階で追加。割引・増量の「100%」のような、
+ *     どの変数にも対応しない定数を式に含めるために使う。依頼文の元の書式
+ *     （{type:"percent", value:100} を left/right に直接書く形）は、既存の
+ *     {source, key} という構造に合わせて {source:"literal", value:{...}} と読み替えている）
+ */
 function resolveOperand(operand, baseValues, localResults) {
   if (!operand) return undefined;
   if (operand.source === "result") {
     return localResults[operand.key];
+  }
+  if (operand.source === "literal") {
+    return operand.value;
   }
   return baseValues[operand.key];
 }
@@ -494,12 +607,48 @@ function generateDummyFraction(referenceFraction, excludedKeys) {
 }
 
 /**
- * 値の型（数値・分数）を意識せず、既存の値と重複しないダミー値を生成します。
+ * 既存の値と重複しない、近い値のダミー百分率を生成します（第9段階で追加）。
+ * generateDummyNumber() と同じ「参照値の近くをランダムにずらす」考え方を、
+ * 百分率の value（例: 20）に対して適用します。0%以下にはしません。
+ * @param {{type:"percent", value:number}} referencePercent
+ * @param {Set<string>} excludedKeys - valueKey() で表した除外対象の集合
+ */
+function generateDummyPercent(referencePercent, excludedKeys) {
+  const magnitude = Math.max(1, Math.abs(referencePercent.value));
+  const spread = Math.max(2, Math.round(magnitude * 0.4));
+
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const offset = pickInt(-spread, spread);
+    let candidateValue = referencePercent.value + offset;
+    if (candidateValue <= 0) {
+      candidateValue = Math.abs(candidateValue) + 1;
+    }
+    const candidate = { type: "percent", value: candidateValue };
+    if (!excludedKeys.has(valueKey(candidate))) {
+      return candidate;
+    }
+  }
+  // フォールバック：それでも重複する場合は、十分離れた値を返す
+  let fallbackValue = referencePercent.value + spread + 1;
+  let candidate = { type: "percent", value: fallbackValue };
+  while (excludedKeys.has(valueKey(candidate))) {
+    fallbackValue += 1;
+    candidate = { type: "percent", value: fallbackValue };
+  }
+  return candidate;
+}
+
+/**
+ * 値の型（数値・分数・百分率）を意識せず、既存の値と重複しないダミー値を生成します。
  */
 export function generateDummyValue(referenceValue, excludedKeys) {
-  return isFractionValue(referenceValue)
-    ? generateDummyFraction(referenceValue, excludedKeys)
-    : generateDummyNumber(referenceValue, excludedKeys);
+  if (isFractionValue(referenceValue)) {
+    return generateDummyFraction(referenceValue, excludedKeys);
+  }
+  if (isPercentValue(referenceValue)) {
+    return generateDummyPercent(referenceValue, excludedKeys);
+  }
+  return generateDummyNumber(referenceValue, excludedKeys);
 }
 
 export function shuffleArray(array) {
@@ -581,7 +730,9 @@ export function buildChoiceCards(realNumbers, correctOperators, resultsToExclude
 }
 
 function numericValueForSort(value) {
-  return isFractionValue(value) ? fractionToNumber(value) : value;
+  if (isFractionValue(value)) return fractionToNumber(value);
+  if (isPercentValue(value)) return value.value;
+  return value;
 }
 
 /**
@@ -779,6 +930,12 @@ const GRADE_TERM_PLAN_CONFIG = {
   "5-2": {
     newContentGradeTerms: ["5-2"],
     reviewGradeTerms: ["4-1", "4-2", "4-3", "4-multi-step", "5-1"]
+  },
+  // 小学5年生3学期（第9段階）：新内容は5-3の8カテゴリ、復習内容は4年生1〜3学期
+  // （整数の2段階文章題を含む）・5年生1〜2学期から偏りなく選ぶ。
+  "5-3": {
+    newContentGradeTerms: ["5-3"],
+    reviewGradeTerms: ["4-1", "4-2", "4-3", "4-multi-step", "5-1", "5-2"]
   }
 };
 

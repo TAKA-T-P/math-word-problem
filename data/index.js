@@ -27,9 +27,10 @@ import { grade4Term3Templates } from "./grade4-term3.js";
 import { grade5Term1Templates } from "./grade5-term1.js";
 // 小学5年生・2学期の新内容（異分母分数のたし算・ひき算、平均、単位量あたり、混み具合）。
 import { grade5Term2Templates } from "./grade5-term2.js";
+// 小学5年生・3学期の新内容（速さ・道のり・時間、割合、割引、増量）。
+import { grade5Term3Templates } from "./grade5-term3.js";
 
 // 将来追加する学期データは、ここに import 文を追加していきます。
-// import { grade5Term3Templates } from "./grade5-term3.js";
 // import { grade6Term1Templates } from "./grade6-term1.js";
 // import { grade6Term2Templates } from "./grade6-term2.js";
 // import { grade6Term3Templates } from "./grade6-term3.js";
@@ -48,8 +49,8 @@ export const TEMPLATE_SETS_BY_GRADE_TERM = {
   "4-3": grade4Term3Templates,
   "4-multi-step": multiStepIntegerTemplates,
   "5-1": grade5Term1Templates,
-  "5-2": grade5Term2Templates
-  // "5-3": grade5Term3Templates,
+  "5-2": grade5Term2Templates,
+  "5-3": grade5Term3Templates
   // "6-1": grade6Term1Templates,
   // "6-2": grade6Term2Templates,
   // "6-3": grade6Term3Templates

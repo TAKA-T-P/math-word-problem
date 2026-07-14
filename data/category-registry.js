@@ -204,6 +204,72 @@ export const categoryRegistry = [
     gradeLabel: "小学5年生・2学期",
     enabledInTraining: true,
     order: 22
+  },
+
+  // ---- 小学5年生・3学期 ----
+  {
+    id: "speed-find-speed",
+    label: "速さ",
+    gradeTerm: "5-3",
+    gradeLabel: "小学5年生・3学期",
+    enabledInTraining: true,
+    order: 23
+  },
+  {
+    id: "speed-find-distance",
+    label: "道のり",
+    gradeTerm: "5-3",
+    gradeLabel: "小学5年生・3学期",
+    enabledInTraining: true,
+    order: 24
+  },
+  {
+    id: "speed-find-time",
+    label: "時間",
+    gradeTerm: "5-3",
+    gradeLabel: "小学5年生・3学期",
+    enabledInTraining: true,
+    order: 25
+  },
+  {
+    id: "percentage-compared-amount",
+    label: "割合・比べる量",
+    gradeTerm: "5-3",
+    gradeLabel: "小学5年生・3学期",
+    enabledInTraining: true,
+    order: 26
+  },
+  {
+    id: "percentage-rate",
+    label: "割合・百分率",
+    gradeTerm: "5-3",
+    gradeLabel: "小学5年生・3学期",
+    enabledInTraining: true,
+    order: 27
+  },
+  {
+    id: "percentage-base-amount",
+    label: "割合・もとにする量",
+    gradeTerm: "5-3",
+    gradeLabel: "小学5年生・3学期",
+    enabledInTraining: true,
+    order: 28
+  },
+  {
+    id: "percentage-discount",
+    label: "割引",
+    gradeTerm: "5-3",
+    gradeLabel: "小学5年生・3学期",
+    enabledInTraining: true,
+    order: 29
+  },
+  {
+    id: "percentage-increase",
+    label: "増量",
+    gradeTerm: "5-3",
+    gradeLabel: "小学5年生・3学期",
+    enabledInTraining: true,
+    order: 30
   }
 ];
 

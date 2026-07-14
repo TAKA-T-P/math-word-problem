@@ -3,15 +3,19 @@
 小学4年生〜6年生を対象とした、算数の文章題学習アプリです。
 敵キャラクターとのバトル形式で、文章題の式をカードで組み立てながら学習します。
 
-**現在のバージョンは第8段階です。** 小学4年生・1学期（整数の四則計算）・2学期（小数のたし算/ひき算・
+**現在のバージョンは第9段階です。** 小学4年生・1学期（整数の四則計算）・2学期（小数のたし算/ひき算・
 大きな数・2けたでわるわり算・整数の2段階文章題）・3学期（小数×整数、小数÷整数、同分母分数のたし算・ひき算）・
-5年生1学期（小数×小数、小数÷小数、小数倍、もとの量）に加えて、
-**小学5年生・2学期（異分母分数のたし算・ひき算、平均、単位量あたり、混み具合）を通常バトルの正式モードとして追加**しました。
-タイマー・ハート・敵HP・スコアの無い「トレーニングモード」では、22種類のカテゴリ（単元）から1つを選び、
+5年生1学期（小数×小数、小数÷小数、小数倍、もとの量）・5年生2学期（異分母分数のたし算・ひき算、平均、
+単位量あたり、混み具合）に加えて、
+**小学5年生・3学期（速さ・道のり・時間、割合・比べる量・百分率・もとにする量、割引、増量）を通常バトルの
+正式モードとして追加**しました。第9段階では、整数・小数・分数に続く4つ目の値の型として**百分率（パーセント）**
+を導入し、割引・増量は2つの解法ルートを持つ2段階問題として実装しています。
+タイマー・ハート・敵HP・スコアの無い「トレーニングモード」では、30種類のカテゴリ（単元）から1つを選び、
 そのカテゴリだけを5問、時間を気にせず何度でも解き直しながら練習できます
 （詳しくは[18. トレーニングモード（第6段階）](#18-トレーニングモード第6段階)、
 5年1学期の内容は[19. 小学5年生・1学期（第7段階）](#19-小学5年生1学期第7段階)、
-5年2学期の内容は[20. 小学5年生・2学期（第8段階）](#20-小学5年生2学期第8段階)）。
+5年2学期の内容は[20. 小学5年生・2学期（第8段階）](#20-小学5年生2学期第8段階)、
+5年3学期の内容は[21. 小学5年生・3学期（第9段階）](#21-小学5年生3学期第9段階)）。
 
 3学期モードでは、分数を**教科書と同じ縦型（横線の上に分子、下に分母）**で表示します。整数・小数・分数は
 `js/value-utils.js` が用意する共通の関数（`calculateValues` `areValuesEqual` など）を通じて扱うため、
@@ -59,6 +63,7 @@
 18. [トレーニングモード（第6段階）](#18-トレーニングモード第6段階)
 19. [小学5年生・1学期（第7段階）](#19-小学5年生1学期第7段階)
 20. [小学5年生・2学期（第8段階）](#20-小学5年生2学期第8段階)
+21. [小学5年生・3学期（第9段階）](#21-小学5年生3学期第9段階)
 
 ## 1. ファイル構成
 
@@ -79,20 +84,22 @@ math-word-battle/
 │  ├─ answer-checker.js          … 式の正誤判定（eval() 不使用、複数解法=solutionRoutes対応。実際の計算・比較は value-utils.js に委譲）
 │  ├─ number-utils.js            … 浮動小数点誤差の出ない小数計算・数値の表示整形（桁区切り）・比較
 │  ├─ fraction-utils.js          … 分数専用の計算処理（約分・四則演算・同値判定）。分子・分母のみで計算し、小数へ変換しない（新規）
-│  ├─ value-utils.js             … 整数・小数・分数を型を意識せず扱う共通レイヤー（`calculateValues` `areValuesEqual` など）。ゲーム本体に型ごとの分岐を書かないための橋渡し役（新規）
+│  ├─ percentage-utils.js        … 百分率（パーセント）専用の計算処理（比率⇔百分率の変換・表示・同値判定）。`{type:"percent", value}` の値オブジェクトのみを扱う（第9段階で新規）
+│  ├─ value-utils.js             … 整数・小数・分数・百分率を型を意識せず扱う共通レイヤー（`calculateValues` `areValuesEqual` など）。ゲーム本体に型ごとの分岐を書かないための橋渡し役（新規、第9段階で百分率対応を追加）
 │  ├─ value-renderer.js          … 分数の縦型表示（教科書と同じ、横線の上に分子・下に分母）のHTML生成、textParts形式の問題文の描画（新規）
 │  ├─ score.js                   … スコア・ランク計算
 │  ├─ audio.js                   … Web Audio API による効果音生成
 │  └─ storage.js                 … ハイスコア・効果音設定・選択中の出題範囲の保存/読み込み
 ├─ data/
 │  ├─ index.js                  … 問題データ読み込みの一元窓口。ゲーム本体はここ経由でのみ取得する
-│  ├─ category-registry.js      … トレーニングで選べる22カテゴリの単一の情報源（id/表示名/学期/表示可否/表示順。第8段階で5カテゴリ追加）
+│  ├─ category-registry.js      … トレーニングで選べる30カテゴリの単一の情報源（id/表示名/学期/表示可否/表示順。第9段階で8カテゴリ追加）
 │  ├─ grade4-term1.js           … 小学4年生・1学期の問題テンプレート（24種類、1段階問題）
 │  ├─ grade4-term2.js           … 小学4年生・2学期の問題テンプレート（24種類、小数のたし算/ひき算・大きな数・2けたでわるわり算）
 │  ├─ grade4-term3.js           … 小学4年生・3学期の問題テンプレート（24種類、小数×整数・小数÷整数・同分母分数のたし算/ひき算）
 │  ├─ grade5-term1.js           … 小学5年生・1学期の問題テンプレート（32種類、小数×小数・小数÷小数・小数倍・もとの量）
 │  ├─ grade5-term2.js           … 小学5年生・2学期の問題テンプレート（30種類、異分母分数のたし算/ひき算・平均・単位量あたり・混み具合。第8段階で新規）
-│  └─ multi-step-integer.js     … 整数のみの2段階問題テンプレート（12種類。開発版モード「4-multi-step」、4-2モードの「2段階文章題」カテゴリ、4-3/5-1/5-2モードの復習内容から共有）
+│  ├─ grade5-term3.js           … 小学5年生・3学期の問題テンプレート（40種類、速さ・道のり・時間・割合（比べる量/百分率/もとにする量）・割引・増量。第9段階で新規）
+│  └─ multi-step-integer.js     … 整数のみの2段階問題テンプレート（12種類。開発版モード「4-multi-step」、4-2モードの「2段階文章題」カテゴリ、4-3/5-1/5-2/5-3モードの復習内容から共有）
 └─ tools/
    └─ question-validator.html   … 開発者用の問題データ検証ページ（1段階・2段階・整数/小数/分数、出題範囲/カテゴリ等でフィルタ可能）
 ```
@@ -112,12 +119,12 @@ math-word-battle/
 | `questionType` | `"singleStep"` \| `"multiStep"` | `singleStep` は1つの式で解く問題。`multiStep` は2つの式で解く問題（[4章](#4-2段階問題questiontype-multistepについて)で詳説） |
 | `template` | string（`textParts` と排他） | `{変数名}` を埋め込んだ問題文。整数・小数のみの問題で使用 |
 | `textParts` | array（`template` と排他） | 分数のように横並びの文字列だけでは正しく表示できない問題文に使用。文字列パーツと値パーツが交互に並ぶ配列（[5章](#5-値の共通データ形式と分数の扱いvalue-utilsjs--fraction-utilsjs--value-rendererjs)で詳説） |
-| `variables` | object | `template`（または`textParts`）/ `solutionRoutes` から参照する変数の生成ルール `{ min, max, step }`。小数の場合は `{ min, max, decimalPlaces }`、分数の場合は `{ type:"fraction", denominator, numeratorMin, numeratorMax }`（後述） |
+| `variables` | object | `template`（または`textParts`）/ `solutionRoutes` から参照する変数の生成ルール `{ min, max, step }`。小数の場合は `{ min, max, decimalPlaces }`、分数の場合は `{ type:"fraction", denominator, numeratorMin, numeratorMax }`、百分率の場合は `{ type:"percent", values:[10,20,25,...] }`（「きりのよい」割合の一覧から1つを選ぶ。第9段階で追加。後述） |
 | `generatorType` | string | 数値の生成方法（後述） |
 | `solutionRoutes` | array | 正解として認める式のパターンの配列（`singleStep`と`multiStep`で形が異なる。後述） |
 | `answerUnit` | string | 答えの単位 |
 | `contentGroup` | `"new"` \| `"review"`（省略可） | その出題範囲内での「新しく習う内容」か「前の学期までの復習内容」かの区分。4-2の出題プラン（新内容/復習内容をおよそ半々で出題）が使う。**省略した場合は自動判定**され、`gradeTerm` が `"4-1"` なら `"review"`、それ以外は `"new"` として扱われる（`js/question-generator.js` の `getContentGroup()`）。このため既存の `grade4-term1.js` は変更不要 |
-| `quantityRelation` | object（省略可、第7段階で追加、第8段階で汎用化） | 「2つの既知の値から、積にあたる3つ目の値を求める」という数量関係を持つテンプレート専用のメタデータ。`type` によってフィールド名が変わる（小数倍・もとの量: `{type:"multiplicative-comparison", baseKey, comparedKey, multiplierKey, unknown}`、平均: `{type:"average", totalKey, countKey, averageKey, unknown}`、単位量あたり・混み具合: `{type:"unit-rate", totalKey, unitCountKey, perUnitKey, unknown}`）。詳しくは[19章](#19-小学5年生1学期第7段階)・[20章](#20-小学5年生2学期第8段階) |
+| `quantityRelation` | object（省略可、第7段階で追加、第8段階で汎用化、第9段階で速さ・割合を追加） | 「2つの既知の値から、積にあたる3つ目の値を求める」という数量関係を持つテンプレート専用のメタデータ。`type` によってフィールド名が変わる（小数倍・もとの量: `{type:"multiplicative-comparison", baseKey, comparedKey, multiplierKey, unknown}`、平均: `{type:"average", totalKey, countKey, averageKey, unknown}`、単位量あたり・混み具合: `{type:"unit-rate", totalKey, unitCountKey, perUnitKey, unknown}`、速さ: `{type:"speed", distanceKey, timeKey, speedKey, unknown, distanceUnit, timeUnit, speedUnit}`、割合: `{type:"percentage", baseKey, comparedKey, rateKey, unknown}`）。詳しくは[19章](#19-小学5年生1学期第7段階)・[20章](#20-小学5年生2学期第8段階)・[21章](#21-小学5年生3学期第9段階) |
 
 ### 小数を扱う変数（`decimalPlaces`）
 
@@ -153,6 +160,9 @@ variables: {
 | `"averageFromTotal"` / `"totalFromAverage"`（第8段階） | 平均 | `template.quantityRelation` の `countKey`・`averageKey` が指す変数を独立に生成し、`totalKey`(=count×average) を自動計算する。平均を求める（合計÷個数）・合計を求める（平均×個数）のどちらも同じ生成関数を共有する |
 | `"averageOfTwoValues"`（第8段階） | 2つの数の平均（2段階問題） | `multiStepSumToDivisible` と全く同じ生成ロジック。`variables.divisor` を常に2に固定したテンプレートにするだけで「たし算→わり算」の2段階問題として実現できる |
 | `"unitRate"` / `"totalFromUnitRate"`（第8段階） | 単位量あたり・混み具合 | `template.quantityRelation` の `unitCountKey`・`perUnitKey` が指す変数を独立に生成し、`totalKey`(=unitCount×perUnit) を自動計算する。混み具合は単位量あたりと数量関係が同じ構造のため、同じ generatorType を共有し、categoryId・問題文のテーマだけで区別する |
+| `"findSpeed"` / `"findDistance"` / `"findTime"`（第9段階） | 速さ・道のり・時間 | `template.quantityRelation` の `speedKey`・`timeKey` が指す変数を独立に生成し、`distanceKey`(=speed×time) を自動計算する（内部的には第8段階の `generateProportionalValues()` をそのまま再利用）。速さ・道のり・時間のどれが「未知（答え）」かは `solutionRoutes` 側が決めるため、3つの generatorType すべてで同じ生成関数を共有する |
+| `"percentageFindCompared"` / `"percentageFindRate"` / `"percentageFindBase"`（第9段階） | 割合（比べる量・百分率・もとにする量） | `template.quantityRelation` の `baseKey`・`rateKey` が指す変数を独立に生成し、`comparedKey`(=base×ratio(rate)) を自動計算する。`rate` は `{type:"percent", value}` のため、乗算前に `percentToRatio()` で比率に変換する点だけが `unitRate` 系と異なる |
+| `"discountTwoStep"` / `"increaseTwoStep"`（第9段階） | 割引・増量（2段階問題、複数解法） | `"standard"` の別名。`originalPrice`（または `originalAmount`）・`discountRate`（または `increaseRate`）を独立に生成するだけでよく、専用の生成関数は不要。支払う割合・値引き額・増えた量・最終的な答えは、登録した2つの解法ルートがそれぞれ独立に計算し、整数スケール小数演算のため必ず一致する（詳しくは[21章](#21-小学5年生3学期第9段階)） |
 | `"multiStepDivideFirst"` | 2段階「わり算 → 何か」 | `exactDivision` と同様に `divisor`・`quotient` から `dividend` を計算し、それ以外の変数は独立に生成する |
 | `"multiStepSumToDivisible"` | 2段階「たし算 → わり算」 | `divisor`・`quotient`・`a` を定義すると、`sum`(=divisor×quotient) と `b`(=sum-a) が自動計算される。1つ目の式の答え（a+b）が必ず割り切れることを保証する |
 
@@ -350,7 +360,9 @@ variables: {
 ## 4. 2段階問題（questionType: "multiStep"）について
 
 2段階問題は、1つ目の式の答え（中間結果）を使って2つ目の式を解く問題です。今回のバージョンは
-**すべて「整数だけ・ちょうど2つの式」に限定**しています（3つ以上の式や、小数・分数は対象外）。
+**すべて「ちょうど2つの式」に限定**しています（3つ以上の式や、かっこを使った式は対象外）。
+値は整数（開発版モード・4-2の「2段階文章題」）に加えて、第9段階から**百分率（割引・増量）**にも対応しました。
+小数・分数を使った2段階問題は今回も対象外です。
 
 2段階問題専用の進行管理（今どちらの式を解いているか、正解ルートの絞り込み、中間結果カードの生成、
 履歴の整形など）は、すべて `js/multi-step-engine.js` が担当します。`game.js` や `ui.js` には
@@ -396,11 +408,18 @@ variables: {
 ```
 
 - `solutionRoutes[].steps[].left` / `right` は `{ source: "variable", key: "..." }`
-  （`variables` または `generatorType` が計算する値を参照）か、
-  `{ source: "result", key: "..." }`（**同じルート内の、より前のステップの `resultKey`** を参照）のどちらかです。
+  （`variables` または `generatorType` が計算する値を参照）、
+  `{ source: "result", key: "..." }`（**同じルート内の、より前のステップの `resultKey`** を参照）、
+  `{ source: "literal", value: ... }`（第9段階で追加。どの変数にも対応しない固定値をそのまま使う。例:
+  割引問題の「100%」は `{ source: "literal", value: { type: "percent", value: 100 } }`）のいずれかです。
   後のステップから前のステップの `resultKey` しか参照できないため、循環参照は構造上起こりません。
 - `operator` は `"+"` `"-"` `"×"` `"÷"` のいずれか。交換法則（たし算・かけ算は順序を問わない）は
   演算子から自動判定されます（`commutative` を明示的に書くこともできます）。
+- `resultType`（省略可、第9段階で追加）: ステップの計算結果を別の型に変換したい場合に指定します。
+  現時点では `"percent"` のみサポートし、通常の数値÷数値の結果（比率、例: 0.3）を
+  百分率の値オブジェクト（例: `{type:"percent", value:30}`）に変換します（`ratioToPercent()`）。
+  「割合・百分率」（比べる量÷もとにする量＝割合）のように、計算自体は普通の数値の割り算だが
+  **表示だけ百分率にしたい**場合に使います。
 - 生成されると、`js/question-generator.js` が `solutionRoutes` の `left`/`right`/`operator` を実際の数値に解決し、
   `js/multi-step-engine.js` が進行状態（`problem.multiStep`）と1つ目の式用のカード（`problem.choices`）を作ります。
 
@@ -460,7 +479,8 @@ solutionRoutes: [
 
 ## 5. 値の共通データ形式と分数の扱い（value-utils.js / fraction-utils.js / value-renderer.js）
 
-このアプリでは、問題の値（変数の値・カードの値・正解の値など）は、次の2つの形のどちらかです。
+このアプリでは、問題の値（変数の値・カードの値・正解の値など）は、次の3つの形のいずれかです
+（百分率は第9段階で追加）。
 
 ### 整数・小数
 
@@ -486,19 +506,68 @@ solutionRoutes: [
   `normalizeValue()` が行います。
 - 仮分数になった場合、今回のバージョンでは帯分数に変換せず、仮分数のまま扱います。
 
+### 百分率（第9段階で追加）
+
+百分率（パーセント）も、分数と同じく**専用のオブジェクト**で扱います。`"20%"` のような文字列や、
+`0.2` のような比率に変換した値を、計算用の内部値として使うことはありません。
+
+```js
+{
+  type: "percent",
+  value: 20   // 「20%」を表す。比率（0.2）ではなく、パーセント表記の数値をそのまま持つ
+}
+```
+
+- 百分率専用の計算処理は `js/percentage-utils.js` に切り出しています（分数における
+  `fraction-utils.js` と同じ位置づけ）。`isValidPercent(value)` `normalizePercent(value)`
+  `percentToRatio(value)`（百分率→比率、20% → 0.2）`ratioToPercent(ratio)`（比率→百分率、0.3 → 30%）
+  `formatPercent(value)`（表示用テキスト、`"20%"`）`arePercentValuesEqual(a,b)` を提供します。
+- `js/value-utils.js` の `calculateValues()` は、百分率どうし・数値×百分率・数値÷百分率の
+  組み合わせだけをサポートします。サポート対象の組み合わせと結果の型は次のとおりです。
+
+  | 左辺 | 演算子 | 右辺 | 結果の型 | 例 |
+  |---|---|---|---|---|
+  | percent | `+` | percent | percent | `100% + 25% = 125%` |
+  | percent | `-` | percent | percent | `100% - 20% = 80%` |
+  | number | `×` | percent | number | `3000 × 20% = 600` |
+  | percent | `×` | number | number | `20% × 3000 = 600`（交換法則） |
+  | number | `÷` | percent | number | `600 ÷ 20% = 3000` |
+  | number | `÷` | number | number（`resultType:"percent"` 指定時のみ percent） | `15 ÷ 50 = 0.3`（または `resultType:"percent"` 指定時は `30%`） |
+
+  上記以外の組み合わせ（`percent × percent`、`number + percent`、`number - percent`、
+  `percent ÷ percent`、分数と百分率の混在など）は、すべて `null` を返します
+  （テンプレート側でこれらの組み合わせを使おうとすると、`question-validator.js` が
+  生成結果を「計算不能」としてエラーにするため、不正なテンプレートを混入させても
+  プレイヤーに出題される前に検出できます）。
+- 選択肢カード・解答欄・正解演出・問題履歴への百分率の表示は、分数と同じく
+  `js/value-renderer.js` の `renderValueHtml(value)` が一元的に行いますが、**表示は「%」ではなく
+  比率（小数）に変換して行います**（例: `20%` → `"0.2"`。第10段階で変更）。割合の計算は
+  小数で行うという教科書の指導方法に合わせたもので、`percentToRatio(value)` で比率に変換してから
+  通常の数値と同じ `formatNumber()` で整形するだけのため、分数のような専用のCSSクラス・
+  `aria-label` は不要です（プレーンな数値と同じ見た目・読み上げになります）。
+  問題文中の「20%が…」のような自然な言い回しは、この `renderValueHtml()` を経由しない
+  別経路（`js/question-generator.js` の `renderTemplateText()` が `formatPercent(value)` を直接使う）
+  のため、この変更の影響を受けず、これまでどおり「%」で表示されます。
+- ただし「割合・百分率」（比べる量÷もとにする量＝割合。問題文が「何%ですか」と百分率での
+  回答を求める）の**正解時・問題履歴の答え表示だけ**は例外です。計算結果の小数（例: `0.5`）に
+  加えて、百分率への変換も「0.5→50%」の形式で示します（`js/value-renderer.js` の
+  `renderPercentConversionHtml(value)`）。2段階問題（割引・増量）の途中結果（「支払う割合」
+  「増量後の割合」など）は、あくまで計算の中間値であり「%で答える」ものではないため、
+  この変換は行わず、通常どおり小数のみで表示します。
+
 ### 値の共通処理（`js/value-utils.js`）
 
-整数・小数・分数を、型を意識せず扱うための関数を提供します。ゲーム本体（`game.js` `ui.js`
+整数・小数・分数・百分率を、型を意識せず扱うための関数を提供します。ゲーム本体（`game.js` `ui.js`
 `answer-checker.js` `question-generator.js`）は、これらの関数を呼ぶだけで、
-「整数か小数か分数か」で分岐する処理を自前で書く必要がありません。
+「整数か小数か分数か百分率か」で分岐する処理を自前で書く必要がありません。
 
 | 関数 | 役割 |
 |---|---|
-| `calculateValues(left, operator, right)` | 値の型に応じて安全に計算する（数値は `number-utils.js`、分数は `fraction-utils.js` に委譲）。計算できない場合（0で割る、割り切れない、今回未対応の型の組み合わせなど）は `null` を返す |
-| `areValuesEqual(a, b)` | 値の型を意識せず、2つの値が等しいかを判定する（分数は分子・分母から正確に、数値は誤差許容で） |
-| `normalizeValue(value)` | 値を正規化する（数値は丸め誤差の除去、分数は約分・整数への変換） |
-| `formatValue(value)` | 値をプレーンテキストに変換する（分数は `"3/5"` 形式。**画面表示には使わない**。デバッグ用テキスト専用） |
-| `isFractionValue(value)` / `isValueNegative(value)` / `valueKey(value)` など | 型判定・符号判定・Set/Mapのキー生成などの補助関数 |
+| `calculateValues(left, operator, right)` | 値の型に応じて安全に計算する（数値は `number-utils.js`、分数は `fraction-utils.js`、百分率は `percentage-utils.js` に委譲）。計算できない場合（0で割る、割り切れない、今回未対応の型の組み合わせなど）は `null` を返す |
+| `areValuesEqual(a, b)` | 値の型を意識せず、2つの値が等しいかを判定する（分数は分子・分母から正確に、百分率は`value`どうしを比較、数値は誤差許容で） |
+| `normalizeValue(value)` | 値を正規化する（数値は丸め誤差の除去、分数は約分・整数への変換、百分率は丸め誤差の除去） |
+| `formatValue(value)` | 値をプレーンテキストに変換する（分数は `"3/5"` 形式、百分率は `"20%"` 形式。**画面表示には使わない**。デバッグ用テキスト専用） |
+| `isFractionValue(value)` / `isPercentValue(value)` / `isValueNegative(value)` / `valueKey(value)` など | 型判定・符号判定・Set/Mapのキー生成などの補助関数 |
 
 `js/answer-checker.js` の `safeCalculate()` は `calculateValues()` を、`matchesStep()` は
 `areValuesEqual()` をそのまま呼び出すだけになっており、正誤判定のコード自体は
@@ -824,25 +893,27 @@ http://localhost:8000/index.html?debug=true
 | `js/game.js` | 通常バトルの `gameState` オブジェクトでゲーム状態を一元管理。起動時に問題テンプレートを `question-validator.js` の `filterValidTemplateSets()`（トレーニングと共通）で検証・フィルタします。問題の進行、ハート管理、敵HP管理、タイマー管理、正解/不正解後の処理、クリア/ゲームオーバー判定、`?debug=true` 時のデバッグ出力を行います。2段階問題の判定・進行自体は `multi-step-engine.js` に委譲し、その結果（正解/不正解、最終正解かどうか）を受け取って既存の共通フロー（ハート減少・タイマー・スコア加算など）に橋渡しするだけに留めています。4-2・4-3モードでは、ゲーム開始時に `question-generator.js` の `planQuestionSequence()` で出題計画を作り（[6章](#6-小学4年生2学期3学期の出題プラン新内容復習内容の比率とカテゴリ配分)）、各問題はその計画に沿って生成します。同一ゲーム内での問題文・式の重複を避ける仕組み（`generateNonDuplicateQuestion()`）、分数を含む問題文（`textParts`）の履歴への保存、分数の分子・分母・約分後の値などを含む詳細なデバッグ出力もここにあります。カウントダウン演出（`runCountdown()`）は `training-mode.js` からも再利用されるため export しています。トレーニングモードの状態（`trainingState`）や `training-mode.js` を参照することは一切ありません。 |
 | `js/training-mode.js` | トレーニングモード専用の状態（`trainingState`）・進行管理（新規、第6段階）。`gameState` とは完全に独立しており、タイマー・ハート・敵HP・スコア・ランク・ハイスコアを一切参照しません。`generateTrainingQuestions(categoryId, templates, count)` が、指定カテゴリのテンプレートだけから（新内容/復習内容の比率処理は使わず）ちょうど5問を、問題文・式の重複を避けながら生成します。1問ごとの正解/不正解処理は、ハート減少・ゲームオーバーの代わりに「同じ問題（2段階なら同じ式）を解答欄をクリアしたまま再挑戦させる」処理になっており、`answer-checker.js`・`multi-step-engine.js`・`ui.js` のカード生成/正誤判定/分数表示はすべて通常バトルと同じ関数をそのまま再利用します。開発者用検証ページ向けの `validateTrainingSetGeneration()`（指定カテゴリで20回生成し、5問ちょうどか・他カテゴリが混ざらないか・重複が無いかを検証）もここにあります。 |
 | `js/ui.js` | 画面の表示切り替え、問題文・選択肢カード・解答欄の表示、HP/ハート/時間ゲージの更新、正解/不正解演出、カードのタップ操作・ドラッグ操作（Pointer Events）、結果画面の表示、デバッグパネルの表示を行います。2段階問題用に、進行表示（「式 1／2」）・中間結果カードの見た目・途中式正解の演出・`?debug=true` 時の開発版モードボタンの動的追加も担当します。数値・分数の表示は必ず `js/value-renderer.js` の `renderValueHtml()` / `renderTextPartsHtml()` を経由し（問題文・カード・解答欄・結果ボックス・履歴）、分数を含むカード・解答欄には専用のクラス（`choice-value-fraction`）で高さを確保します。タイトル画面で最後に選んだ出題範囲・モード・トレーニングの学期/カテゴリの保存・復元も担当します。**第6段階で追加**: モード選択ボタン（`setMode()`）、`data/category-registry.js` から動的に生成する学年学期/カテゴリ選択ボタン、トレーニング画面のヘッダー更新（`updateTrainingHeader()`）、トレーニング専用の軽い誤答演出（`triggerTrainingIncorrectEffect()`）、トレーニング結果画面（`showTrainingResultScreen()`）。バトル画面・結果画面のバトル専用/トレーニング専用要素の出し分けは、`#app` 要素への `mode-training` クラスの付け外し（CSS側の `.battle-only` / `.training-only`）にまとめており、`ui.js` 自体には要素ごとの表示切り替えロジックをほとんど書いていません。 |
-| `js/question-generator.js` | テンプレートから値を生成し、問題文（`text` またはHTML描画用の `textParts`）・選択肢カード（最大8枚）・`solutionRoutes`（解決済みの正解ルート）を作成します。生成直後に `question-validator.js` で検証し、不正な場合はコンソールにエラーを出力した上で再生成します。`questionType: "multiStep"` の場合は、値の生成とルートの数値解決までを行い、進行状態の初期化・最初のカード生成は `multi-step-engine.js` に委譲します。小数変数（`decimalPlaces`）・分数変数（`type:"fraction"`）の生成、4-2/4-3/5-1/5-2の出題計画生成（`planQuestionSequence()` `getCandidateTemplatesForSlot()` `getContentGroup()`、`GRADE_TERM_PLAN_CONFIG` にモードを1件追加するだけで新しい学期にも適用できる）もここが担当します。ダミーカード生成・重複排除は、数値と分数のどちらの値にも対応した `value-utils.js` の `valueKey()` を使って値の型を意識せず行います。**第7段階で追加**: `quantityRelation` を持つテンプレート（小数倍・もとの量）専用の値生成（`generateDecimalMultiplicativeComparisonValues()`）と、そのテンプレートの「見えている数値」を `solutionRoutes[0]` から動的に判定する `getVisibleNumbers()` の分岐。**第8段階で追加**: 「2つの既知の値から積にあたる3つ目の値を求める」共通ロジック `generateProportionalValues()` を切り出し、`generateDecimalMultiplicativeComparisonValues()`（小数倍・もとの量）に加えて `generateAverageValues()`（平均）・`generateUnitRateValues()`（単位量あたり・混み具合）がこれを共有します。異分母分数のたし算・ひき算は `generateStandardValues()` のエイリアスのため、この点は無改造です。 |
-| `js/multi-step-engine.js` | 2段階問題専用の進行管理。現在の途中式番号、正解候補となる解法ルートの絞り込み、途中式・最終式の判定、中間結果の保存、中間結果カードの生成、次の途中式への移行、複数解法の管理、結果画面用の履歴データの作成を担当します。開発者用検証ページから使う「全ルート完答シミュレーション」もここにあります。式の文字列表示は `js/value-renderer.js` の `renderValueHtml()` を使っており、今回のバージョンの2段階問題はすべて整数のみですが、将来分数の2段階問題を追加した場合にも対応できる下地になっています。 |
-| `js/question-validator.js` | 問題テンプレート（構造）と生成済み問題（数値確定後）を検証します。1段階問題・2段階問題の両方に対応し、2段階問題については「式が2つ登録されているか」「ルートID・resultKeyの重複」「存在しない変数/中間結果の参照や循環参照が無いか」「各ルートの最終結果が一致するか」なども検証します。加えて、`gradeTerm`／`contentGroup` の値の妥当性、`template`/`textParts` のどちらかが存在するか、`textParts` の構造・参照先の妥当性、小数の桁数が多すぎないか、分数の分母・分子の範囲や同分母性、`exactDivision`系のわる数が想定範囲内か、`formatNumber()`/`parseFormattedNumber()` の往復変換が元の値と一致するか、分数の表示用HTML・`aria-label`が正しく生成できるか、なども検証します。ゲーム本体（`game.js`・`training-mode.js`）と `tools/question-validator.html` の両方から使われます。**第6段階で追加**: `filterValidTemplateSets()`（不正なテンプレートを出題プールから除外する処理を`game.js`から移設し、通常バトル・トレーニング共通で使う）、`validateCategoryRegistry()`（カテゴリレジストリ自体のID重複・必須項目チェック）、`validateCategoryRegistryAgainstTemplates()`（レジストリとテンプレートの対応関係。孤立した`categoryId`・テンプレート0件のカテゴリが無いかを検証）。**第7段階で追加**: `validateQuantityRelation()`（小数倍・もとの量テンプレートの `quantityRelation` の構造検証）と、`comparedKey` のような動的な変数名も「既知の変数」として扱う `getKnownVariableKeys()` ヘルパー。**第8段階で追加**: `validateQuantityRelation()` を `QUANTITY_RELATION_TYPE_CONFIG` で汎用化し、平均（`type:"average"`）・単位量あたり（`type:"unit-rate"`）にも対応。異分母分数専用の `validateUnlikeDenominators()`（分母が異なることを要求）・`validateNonNegativeUnlikeDenominatorSubtraction()`（クロス乗算で答えが負にならないか検証）を追加。既存の「生成された分数の分母が同じか」というチェックは、同分母専用の `generatorType`（`SAME_DENOMINATOR_GENERATOR_TYPES`）に限定するよう修正（異分母分数を誤って弾かないようにするため）。 |
-| `js/answer-checker.js` | `eval()` を使わずに、値（数値または分数）と演算記号から安全に式を計算します。1つの式が正解ステップと一致するかを判定する共通ロジック（`matchesStep`）を持ち、1段階問題の `checkAnswer` と、2段階問題の `multi-step-engine.js` の両方から使われます。実際の計算・比較は自分では行わず、`value-utils.js` の `calculateValues()` / `areValuesEqual()` にすべて委譲しています。 |
-| `js/number-utils.js` | 浮動小数点誤差の出ない小数の加減乗除（整数にスケールしてから計算し戻す方式）、整数のわる数による安全なわり算（`divideExactByInteger()`。小数÷整数にも対応）、桁区切り・小数のトリム表示（`formatNumber()`）、表示文字列から数値へ戻す変換（`parseFormattedNumber()`）、誤差を許容した数値比較（`areNumbersEqual()`）を提供します。数値（整数・小数）専用のユーティリティで、分数は扱いません（分数は `fraction-utils.js`）。 |
+| `js/question-generator.js` | テンプレートから値を生成し、問題文（`text` またはHTML描画用の `textParts`）・選択肢カード（最大8枚）・`solutionRoutes`（解決済みの正解ルート）を作成します。生成直後に `question-validator.js` で検証し、不正な場合はコンソールにエラーを出力した上で再生成します。`questionType: "multiStep"` の場合は、値の生成とルートの数値解決までを行い、進行状態の初期化・最初のカード生成は `multi-step-engine.js` に委譲します。小数変数（`decimalPlaces`）・分数変数（`type:"fraction"`）・百分率変数（`type:"percent"`）の生成、4-2/4-3/5-1/5-2/5-3の出題計画生成（`planQuestionSequence()` `getCandidateTemplatesForSlot()` `getContentGroup()`、`GRADE_TERM_PLAN_CONFIG` にモードを1件追加するだけで新しい学期にも適用できる）もここが担当します。ダミーカード生成・重複排除は、数値・分数・百分率のどの値にも対応した `value-utils.js` の `valueKey()` を使って値の型を意識せず行います。**第7段階で追加**: `quantityRelation` を持つテンプレート（小数倍・もとの量）専用の値生成（`generateDecimalMultiplicativeComparisonValues()`）と、そのテンプレートの「見えている数値」を `solutionRoutes[0]` から動的に判定する `getVisibleNumbers()` の分岐。**第8段階で追加**: 「2つの既知の値から積にあたる3つ目の値を求める」共通ロジック `generateProportionalValues()` を切り出し、`generateDecimalMultiplicativeComparisonValues()`（小数倍・もとの量）に加えて `generateAverageValues()`（平均）・`generateUnitRateValues()`（単位量あたり・混み具合）がこれを共有します。異分母分数のたし算・ひき算は `generateStandardValues()` のエイリアスのため、この点は無改造です。**第9段階で追加**: `pickPercentValue()`（百分率変数の生成）、`generateSpeedValues()`（速さ、`generateProportionalValues()` を再利用）、`generatePercentageValues()`（割合）、`resolveOperand()` の `{source:"literal"}` 対応（割引・増量の固定値「100%」）、`applyResultType()`（`resultType:"percent"` の変換）、`generateDummyPercent()`、`renderTemplateText()` の百分率対応（`String(value)` が `"[object Object]"` になっていたバグの修正）。 |
+| `js/multi-step-engine.js` | 2段階問題専用の進行管理。現在の途中式番号、正解候補となる解法ルートの絞り込み、途中式・最終式の判定、中間結果の保存、中間結果カードの生成、次の途中式への移行、複数解法の管理、結果画面用の履歴データの作成を担当します。開発者用検証ページから使う「全ルート完答シミュレーション」もここにあります。式の文字列表示は `js/value-renderer.js` の `renderValueHtml()` を使っており、すでに解決済みの値（数値・分数・百分率のいずれか）を型を意識せず扱う設計のため、第9段階の百分率2段階問題（割引・増量）にも無改造で対応できました。 |
+| `js/question-validator.js` | 問題テンプレート（構造）と生成済み問題（数値確定後）を検証します。1段階問題・2段階問題の両方に対応し、2段階問題については「式が2つ登録されているか」「ルートID・resultKeyの重複」「存在しない変数/中間結果の参照や循環参照が無いか」「各ルートの最終結果が一致するか」なども検証します。加えて、`gradeTerm`／`contentGroup` の値の妥当性、`template`/`textParts` のどちらかが存在するか、`textParts` の構造・参照先の妥当性、小数の桁数が多すぎないか、分数の分母・分子の範囲や同分母性、百分率の値の妥当性、`exactDivision`系のわる数が想定範囲内か、`formatNumber()`/`parseFormattedNumber()` の往復変換が元の値と一致するか、分数・百分率の表示用HTML・`aria-label`が正しく生成できるか、なども検証します。ゲーム本体（`game.js`・`training-mode.js`）と `tools/question-validator.html` の両方から使われます。**第6段階で追加**: `filterValidTemplateSets()`（不正なテンプレートを出題プールから除外する処理を`game.js`から移設し、通常バトル・トレーニング共通で使う）、`validateCategoryRegistry()`（カテゴリレジストリ自体のID重複・必須項目チェック）、`validateCategoryRegistryAgainstTemplates()`（レジストリとテンプレートの対応関係。孤立した`categoryId`・テンプレート0件のカテゴリが無いかを検証）。**第7段階で追加**: `validateQuantityRelation()`（小数倍・もとの量テンプレートの `quantityRelation` の構造検証）と、`comparedKey` のような動的な変数名も「既知の変数」として扱う `getKnownVariableKeys()` ヘルパー。**第8段階で追加**: `validateQuantityRelation()` を `QUANTITY_RELATION_TYPE_CONFIG` で汎用化し、平均（`type:"average"`）・単位量あたり（`type:"unit-rate"`）にも対応。異分母分数専用の `validateUnlikeDenominators()`（分母が異なることを要求）・`validateNonNegativeUnlikeDenominatorSubtraction()`（クロス乗算で答えが負にならないか検証）を追加。既存の「生成された分数の分母が同じか」というチェックは、同分母専用の `generatorType`（`SAME_DENOMINATOR_GENERATOR_TYPES`）に限定するよう修正（異分母分数を誤って弾かないようにするため）。**第9段階で追加**: `QUANTITY_RELATION_TYPE_CONFIG` に速さ（`type:"speed"`）・割合（`type:"percentage"`）を追加、`validatePercentVariable()`（百分率変数の検証）、`validateValueRepresentation()` の百分率対応、`validateMultiStepSolutionRoutes()` の `{source:"literal"}` オペランド対応、`applyResultTypeForValidation()`（生成側と独立に `resultType:"percent"` を再現し、正解式の再計算と一致させる）。 |
+| `js/answer-checker.js` | `eval()` を使わずに、値（数値・分数・百分率）と演算記号から安全に式を計算します。1つの式が正解ステップと一致するかを判定する共通ロジック（`matchesStep`）を持ち、1段階問題の `checkAnswer` と、2段階問題の `multi-step-engine.js` の両方から使われます。実際の計算・比較は自分では行わず、`value-utils.js` の `calculateValues()` / `areValuesEqual()` にすべて委譲しています。 |
+| `js/number-utils.js` | 浮動小数点誤差の出ない小数の加減乗除（整数にスケールしてから計算し戻す方式）、整数のわる数による安全なわり算（`divideExactByInteger()`。小数÷整数にも対応）、桁区切り・小数のトリム表示（`formatNumber()`）、表示文字列から数値へ戻す変換（`parseFormattedNumber()`）、誤差を許容した数値比較（`areNumbersEqual()`）を提供します。数値（整数・小数）専用のユーティリティで、分数・百分率は扱いません（分数は `fraction-utils.js`、百分率は `percentage-utils.js`）。 |
 | `js/fraction-utils.js` | 分数専用の計算処理。最大公約数（`gcd`）、約分（`simplifyFraction`）、たし算・ひき算・かけ算・わり算（`addFractions` など）、同値判定（`areFractionsEqual`）を、分子・分母だけを使って正確に行います（浮動小数点数を経由しません）。`addFractions`/`subtractFractions` は最初から異分母対応（クロス乗算）です。**第8段階で追加**: 最小公倍数（`lcm`）・通分（`convertToCommonDenominator`。デバッグ表示・将来の解説機能用で、正誤判定には使用しません）。 |
-| `js/value-utils.js` | 整数・小数・分数を型を意識せず扱うための共通レイヤー（新規）。`calculateValues()` は値の型に応じて `number-utils.js` または `fraction-utils.js` に処理を振り分け、`areValuesEqual()` は型ごとの同値判定を、`normalizeValue()` は正規化（分数の約分・整数化を含む）を行います。「整数・小数・分数ごとの分岐」をこのファイル1か所に閉じ込めることで、ゲーム本体には型分岐を書かせない設計にしています。 |
-| `js/value-renderer.js` | 分数の縦型表示（教科書と同じ、横線の上に分子・下に分母）のHTMLと、`aria-label`（読み上げ用の「分母分の分子」形式）を生成します（新規）。`textParts` 形式の問題文をHTMLに変換する `renderTextPartsHtml()` もここにあります。問題文・選択肢カード・解答欄・■欄・正解演出・問題履歴・問題検証ページ・デバッグ表示は、すべてこのファイルの関数を経由して分数を表示します。 |
+| `js/percentage-utils.js` | 百分率専用の計算処理（新規、第9段階）。`isValidPercent` `normalizePercent` `percentToRatio`（百分率→比率）`ratioToPercent`（比率→百分率）`formatPercent`（表示用テキスト）`arePercentValuesEqual` を、`{type:"percent", value}` の値オブジェクトのみを使って行います。`fraction-utils.js` と同じ位置づけの、値の型ごとの専用計算モジュールです。 |
+| `js/value-utils.js` | 整数・小数・分数・百分率を型を意識せず扱うための共通レイヤー（新規、第9段階で百分率対応を追加）。`calculateValues()` は値の型に応じて `number-utils.js`・`fraction-utils.js`・`percentage-utils.js` に処理を振り分け、`areValuesEqual()` は型ごとの同値判定を、`normalizeValue()` は正規化（分数の約分・整数化、百分率の丸め誤差除去を含む）を行います。「整数・小数・分数・百分率ごとの分岐」をこのファイル1か所に閉じ込めることで、ゲーム本体には型分岐を書かせない設計にしています。 |
+| `js/value-renderer.js` | 分数の縦型表示（教科書と同じ、横線の上に分子・下に分母）のHTMLと、`aria-label`（読み上げ用のテキスト）を生成します（新規、第9段階で百分率対応を追加）。百分率は比率（小数）に変換してから通常の数値と同じ形式で表示します（第10段階で変更。`renderPercentConversionHtml()` は「割合・百分率」の答え表示専用で、「0.5→50%」の形式を作ります）。`textParts` 形式の問題文をHTMLに変換する `renderTextPartsHtml()` もここにあります。問題文・選択肢カード・解答欄・■欄・正解演出・問題履歴・問題検証ページ・デバッグ表示は、すべてこのファイルの関数を経由して分数・百分率を表示します。 |
 | `js/score.js` | 問題ごとの加算スコア、現在のランクを計算します（1段階・2段階共通）。 |
 | `js/audio.js` | Web Audio API でカウントダウン音・正解音・不正解音・敵撃破音・ゲームオーバー音を生成します。 |
 | `js/storage.js` | ハイスコア・効果音設定・タイトル画面で最後に選んだ出題範囲（`gradeTerm`）を `localStorage` に保存/読み込みします。`localStorage` が使えない環境でもエラーにならないようにしています。**第6段階で追加**: `lastMode`（前回選んだモード）・`lastTrainingGradeTerm`・`lastTrainingCategoryId` の保存/読み込み。トレーニングのスコア・進捗・ハイスコアは保存しません。既存のハイスコア用キーとは別のキーを使っており、既存データには一切触れません。 |
-| `data/index.js` | 出題範囲（学年・学期）ごとの問題テンプレートを一元管理するレジストリ。ゲーム本体はここ経由でのみデータを取得します。`"4-3"` は `data/grade4-term3.js`、`"5-1"` は `data/grade5-term1.js`、`"5-2"` は `data/grade5-term2.js`（第8段階）に登録し、`"4-multi-step"` の `data/multi-step-integer.js` を4-2の「2段階文章題」カテゴリ・4-3/5-1/5-2の復習内容としても共有します。 |
-| `data/category-registry.js` | トレーニングモードで選べる22カテゴリの単一の情報源（第6段階で新規導入、第7段階で4カテゴリ、第8段階で5カテゴリ追加）。各カテゴリは `{ id, label, gradeTerm, gradeLabel, enabledInTraining, order }` を持ち、`getCategoriesForGradeTerm()` `getGradeTermGroups()` `getCategoryById()` のヘルパーを提供します。`js/ui.js` はこのレジストリからタイトル画面のカテゴリ選択ボタンを動的に生成するだけで、カテゴリ名を個別にハードコードしていません。詳しくは[18章](#18-トレーニングモード第6段階)。 |
+| `data/index.js` | 出題範囲（学年・学期）ごとの問題テンプレートを一元管理するレジストリ。ゲーム本体はここ経由でのみデータを取得します。`"4-3"` は `data/grade4-term3.js`、`"5-1"` は `data/grade5-term1.js`、`"5-2"` は `data/grade5-term2.js`（第8段階）、`"5-3"` は `data/grade5-term3.js`（第9段階）に登録し、`"4-multi-step"` の `data/multi-step-integer.js` を4-2の「2段階文章題」カテゴリ・4-3/5-1/5-2/5-3の復習内容としても共有します。 |
+| `data/category-registry.js` | トレーニングモードで選べる30カテゴリの単一の情報源（第6段階で新規導入、第7段階で4カテゴリ、第8段階で5カテゴリ、第9段階で8カテゴリ追加）。各カテゴリは `{ id, label, gradeTerm, gradeLabel, enabledInTraining, order }` を持ち、`getCategoriesForGradeTerm()` `getGradeTermGroups()` `getCategoryById()` のヘルパーを提供します。`js/ui.js` はこのレジストリからタイトル画面のカテゴリ選択ボタンを動的に生成するだけで、カテゴリ名を個別にハードコードしていません。詳しくは[18章](#18-トレーニングモード第6段階)。 |
 | `data/grade4-term1.js` | 小学4年生・1学期の1段階問題テンプレートのデータのみを定義（ゲーム処理は含みません）。 |
 | `data/grade4-term2.js` | 小学4年生・2学期の1段階問題テンプレートのデータのみを定義（小数のたし算・ひき算、大きな数、2けたでわるわり算、各6種類・計24種類）。 |
 | `data/grade4-term3.js` | 小学4年生・3学期の1段階問題テンプレートのデータのみを定義（小数×整数・小数÷整数・同分母分数のたし算・同分母分数のひき算、各6種類・計24種類）。分数のテンプレートは `textParts` を使用します。 |
 | `data/grade5-term1.js` | 小学5年生・1学期の1段階問題テンプレートのデータのみを定義（小数×小数・小数÷小数・小数倍・もとの量、各8種類・計32種類）。小数倍・もとの量のテンプレートは `quantityRelation` メタデータを持ちます。詳しくは[19章](#19-小学5年生1学期第7段階)。 |
 | `data/grade5-term2.js` | 小学5年生・2学期の問題テンプレートのデータのみを定義（異分母分数のたし算・ひき算・平均・単位量あたり・混み具合、各6種類・計30種類。第8段階で新規）。平均・単位量あたり・混み具合のテンプレートは `quantityRelation` メタデータを持ち、「2つの数の平均」だけは `questionType:"multiStep"` の2段階問題です。詳しくは[20章](#20-小学5年生2学期第8段階)。 |
-| `data/multi-step-integer.js` | 整数のみの2段階問題テンプレートのデータのみを定義。開発版モード（`4-multi-step`）専用のデータであると同時に、4-2モードの「2段階文章題」カテゴリ、4-3/5-1/5-2モードの復習内容からも同じデータをそのまま参照します（複製はしていません）。 |
+| `data/grade5-term3.js` | 小学5年生・3学期の問題テンプレートのデータのみを定義（速さ・道のり・時間・割合（比べる量/百分率/もとにする量）・割引・増量、各5種類・計40種類。第9段階で新規）。速さ・割合のテンプレートは `quantityRelation` メタデータを持ち、割引・増量は `questionType:"multiStep"` の2段階問題（それぞれ2つの解法ルート）です。詳しくは[21章](#21-小学5年生3学期第9段階)。 |
+| `data/multi-step-integer.js` | 整数のみの2段階問題テンプレートのデータのみを定義。開発版モード（`4-multi-step`）専用のデータであると同時に、4-2モードの「2段階文章題」カテゴリ、4-3/5-1/5-2/5-3モードの復習内容からも同じデータをそのまま参照します（複製はしていません）。 |
 
 ## 12. ローカルでの起動方法
 
@@ -1003,6 +1074,29 @@ npx serve .
   - 30種類の新規テンプレート（異分母分数のたし算・ひき算・平均・単位量あたり・混み具合、各6種類）
   - トレーニングモードの5新規カテゴリにも対応（`unlike-fraction-addition` `unlike-fraction-subtraction`
     `average` `unit-rate` `crowdedness`）
+- **小学5年生・3学期（第9段階、正式モード、`gradeTerm: "5-3"`）**
+  - 速さ（道のり・時間から速さを求める）・道のり（速さ・時間から道のりを求める）・
+    時間（道のり・速さから時間を求める）。単位は km/時・m/分・m/秒の3種類のみで、単位換算は行わない
+  - 割合・比べる量（もとにする量・割合から比べる量を求める）・割合・百分率（比べる量・もとにする量から
+    割合を求める。数値÷数値の結果を百分率として表示する `resultType:"percent"` を使用）・
+    割合・もとにする量（比べる量・割合からもとにする量を求める）
+  - 割引・増量（2段階問題、それぞれ2つの解法ルートに対応。割引:
+    「100%－割引率＝支払う割合、もとの値段×支払う割合＝代金」と
+    「もとの値段×割引率＝値引き額、もとの値段－値引き額＝代金」のどちらでも正解。
+    増量も同様に「100%＋増量率」と「増量分を先に求める」の2ルート）
+  - 整数・小数・分数に続く4つ目の値の型として**百分率**（`{type:"percent", value}`）を追加
+    （詳しくは[5章](#5-値の共通データ形式と分数の扱いvalue-utilsjs--fraction-utilsjs--value-rendererjs)）
+  - 「基準量の何倍が比較量」（小数倍・平均・単位量あたり）と同じ `quantityRelation` の枠組みを、
+    「道のり＝速さ×時間」（速さ）・「比べる量＝もとにする量×割合」（割合）にも拡張
+  - 1〜3学期＋5年1〜2学期の復習内容と5年3学期の新出内容を同数（新内容:復習=1:1）で出題
+  - 新内容側は8カテゴリに均等に近い頻度で配分（ラウンドロビン、8カテゴリ以下なので出題数の範囲内では重複しない）
+  - 復習内容は4-1/4-2/4-3/4-multi-step/5-1/5-2から偏りなく選ばれる
+  - 同じ問題文・同じ式が1回のゲーム内で繰り返し出題されないようにする重複回避
+  - ハイスコアは出題範囲＋レベルの組み合わせごとに保存（5-3にも独立したハイスコア枠がある）
+  - 40種類の新規テンプレート（速さ・道のり・時間・割合（比べる量/百分率/もとにする量）・割引・増量、各5種類）
+  - トレーニングモードの8新規カテゴリにも対応（`speed-find-speed` `speed-find-distance` `speed-find-time`
+    `percentage-compared-amount` `percentage-rate` `percentage-base-amount`
+    `percentage-discount` `percentage-increase`。割引・増量は2段階問題としてトレーニングでも出題される）
 
 ## 15. 今回対応していない内容／今後追加予定の機能
 
@@ -1017,16 +1111,27 @@ npx serve .
   たし算→わり算の組み合わせに限定。異分母分数・小数倍・単位量あたりなどを組み合わせた
   2段階問題は今回追加していません）
 - 小数と分数が混在する計算・問題
-- 速さ・道のり・時間、割合・百分率・歩合・値引き・増量（第8段階でも対象外）
 - 分数の比・比例・反比例・縮尺
 - 「AとBのどちらが混んでいるか」を文字で答える問題（今回の解答形式は数式を作る形式のため）
 - 3つ以上の値から平均を求める問題、複数グループの平均を合成する加重平均
-- 小学5年生3学期以降・小学6年生の内容（比、拡大図・縮図、円の面積、角柱・円柱の体積 など）
+- 小学6年生の内容（円の面積、角柱・円柱の体積 など）
+
+### 今回のバージョンで対応していない速さ・割合の内容（第9段階）
+
+速さ・百分率データの正確性・既存機能の維持を優先するため、次の内容は今回意図的に対象外としています。
+
+- 速さの単位換算を含む問題（km↔m、時↔分↔秒の変換。km/時・m/分・m/秒の3種類の単位のみで、
+  1つの問題内では必ず対応する単位だけを使う）
+- 平均の速さ、往復・追いつき・出会いなどの複数区間・複数移動体を扱う速さの問題
+- 分数を使った速さ・割合の問題
+- 比・拡大図・縮図
+- 複合の割引（割引後にさらに割引、割引と増量の組み合わせ）、消費税込み価格の計算
+- 3つ以上の式が必要な問題、括弧を使う式（割引・増量を含め、2段階問題はすべて「ちょうど2つの式」に限定）
 
 ### 今後追加予定の機能
 
-- 小学5年生3学期以降・6年生の問題データ（比、拡大図・縮図、円の面積・角柱円柱の体積 など）
-- 2段階問題の独立した出題範囲としての公開（現在は4-2モードの1カテゴリ・4-3/5-1/5-2モードの復習内容と、開発版モードのみ）
+- 小学6年生の問題データ（比、拡大図・縮図、円の面積・角柱円柱の体積 など）
+- 2段階問題の独立した出題範囲としての公開（現在は4-2モードの1カテゴリ・4-3/5-1/5-2/5-3モードの復習内容と、開発版モードのみ）
 - 3つ以上の式が必要な問題、括弧を使う式
 - `difficulty` を使った出題フィルタ
 - 効果音・演出のバリエーション追加
@@ -1200,6 +1305,53 @@ npx serve .
       （異分母分数のたし算・ひき算・平均・単位量あたり・混み具合）をそれぞれ選んで5問練習できる
 - [ ] `4-1`・`4-2`・`4-3`・`5-1`（既存モード）が、5-2追加後もこれまでと全く同じように動作する（回帰確認）
 
+### 小学5年生・3学期（5-3モード、第9段階）
+
+- [ ] タイトル画面の出題範囲に「5年3学期」ボタンが表示され、選択できる（disabledではない）
+- [ ] 5-3モードを選ぶと、速さ・道のり・時間・割合（比べる量/百分率/もとにする量）・割引・増量・
+      （復習として）4年生1〜3学期・5年生1〜2学期の内容が出題される
+- [ ] 速さの問題（道のり・時間→速さ）の答えが正しい（例: `30km÷1時間=時速30km`）
+- [ ] 道のりの問題（速さ・時間→道のり）の答えが正しい（例: `分速250m×4分=1000m`）。順序を入れ替えても正解
+- [ ] 時間の問題（道のり・速さ→時間）の答えが正しい（例: `1320m÷分速220m=6分`）
+- [ ] 速さ・道のり・時間の問題が、km/時・m/分・m/秒のいずれか1種類の単位だけで完結し、
+      単位換算（km↔m、時↔分↔秒）を必要とする問題が出題されない
+- [ ] 割合・比べる量の問題（もとにする量・割合→比べる量）の答えが正しい（問題文は「1100円の50%」の
+      ように`%`表記だが、カード・解答欄・正解式は`1100×0.5=550`のように小数で表示される。第10段階で変更）。
+      順序を入れ替えても正解
+- [ ] 割合・百分率の問題（比べる量・もとにする量→割合）は、カード・解答欄・正解式は小数（例: `5÷20=0.25`）
+      だが、正解時・問題履歴の答え表示だけは「小数→百分率」の形式（例: `0.25→25%`）になる
+      （問題文が「何%ですか」と百分率での回答を求めるため。第10段階で追加）
+- [ ] 割合・もとにする量の問題（比べる量・割合→もとにする量）の答えが正しい（カード・解答欄は
+      `2640÷0.6=4400` のように小数で表示される）
+- [ ] 割引の問題が2段階問題として出題され、「式を2つ答えよう！」の進行表示が出る
+- [ ] 割引の1つ目の式（`100%－割引率＝支払う割合`）と、別解（`もとの値段×割引率＝値引き額`）の
+      どちらの解き方でも1つ目の式が正解と判定される（カード・解答欄・中間結果は
+      `1-0.2=0.8` のように小数で表示される。第10段階で変更）
+- [ ] 割引の2つ目の式に正解すると、正しい代金が計算・表示される（例: `2900×0.75=2175`。
+      最終的な代金はもともと小数ではなく通常の金額のため、百分率への変換表示は行わない）
+- [ ] 増量の問題が2段階問題として出題され、割引と同様に2つの解法ルートのどちらでも正解になる
+- [ ] 割引・増量のカード・解答欄・中間結果カードに小数（`%`無し）が正しく表示され、
+      `[object Object]` のような表示崩れが出ない
+- [ ] 百分率が関わるカードが、数値カードと同様にタップ・ドラッグで解答欄に配置できる
+- [ ] 問題文中の「20%が…」「20%引き」のような自然な言い回しは、これまでどおり`%`表記のまま
+      表示される（カード・解答欄だけが小数表記に変わり、問題文には影響しない）
+- [ ] 10問（デフォルト出題数）を通しで見たとき、新内容（5年3学期の新出内容）と復習内容
+      （4年生1〜3学期・5年生1〜2学期の内容）が同数になっている（`?debug=true` のデバッグパネルで確認できる）
+- [ ] 新内容の8カテゴリに極端な偏りがない（レベル5の新内容5問・レベルMAXの新内容6問が、
+      毎回同じカテゴリの組み合わせにならない）
+- [ ] 復習内容が4年生1〜3学期・5年生1〜2学期から偏りなく出題される
+- [ ] 同じカテゴリの問題（復習内容全体も1つのまとまりとして）が3問以上連続しない
+- [ ] レベルMAXでハート数が2個、問題数が12問、初期制限時間が20秒になっている（5-3追加でこの仕様は変更していない）
+- [ ] ページ全体が横スクロールしない。スマートフォン縦画面でも崩れずに表示される
+- [ ] ハイスコアが5-3＋レベルの組み合わせごとに独立して保存・表示される
+- [ ] 一度タイトル画面で5-3を選んでページを再読み込みすると、5-3が選択された状態で復元される
+- [ ] `tools/question-validator.html` で `gradeTerm` フィルターを `5-3` にすると、40件のテンプレートが
+      すべてOK（NGが無い）と表示される
+- [ ] トレーニングモードの「がくねん・がっき」に「小学5年生・3学期」が表示され、8カテゴリ
+      （速さ・道のり・時間・割合の3種類・割引・増量）をそれぞれ選んで5問練習できる
+      （割引・増量は2段階問題としてトレーニングでも出題される）
+- [ ] `4-1`・`4-2`・`4-3`・`5-1`・`5-2`（既存モード）が、5-3追加後もこれまでと全く同じように動作する（回帰確認）
+
 ## 17. 問題データ追加時のチェック項目
 
 ### 共通（1段階・2段階どちらでも）
@@ -1244,7 +1396,7 @@ npx serve .
 - [ ] たし算は `commutative: true`、ひき算は `commutative: false` になっている
 - [ ] 検証ページで、生成された問題の分数が正しく計算・約分され、縦型で表示されている
 
-### quantityRelationを持つテンプレート（小数倍・もとの量・平均・単位量あたり・混み具合、第7〜8段階）
+### quantityRelationを持つテンプレート（小数倍・もとの量・平均・単位量あたり・混み具合・速さ・割合、第7〜9段階）
 
 `quantityRelation.type` によって、フィールド名・`unknown` に使える値が異なります
 （`js/question-validator.js` の `QUANTITY_RELATION_TYPE_CONFIG` を参照）。
@@ -1254,23 +1406,32 @@ npx serve .
 | `"multiplicative-comparison"`（小数倍・もとの量） | `baseKey` `multiplierKey` | `comparedKey` | `"base"` `"compared"` `"multiplier"` |
 | `"average"`（平均） | `countKey` `averageKey` | `totalKey` | `"total"` `"count"` `"average"` |
 | `"unit-rate"`（単位量あたり・混み具合） | `unitCountKey` `perUnitKey` | `totalKey` | `"total"` `"unitCount"` `"perUnit"` |
+| `"speed"`（速さ・道のり・時間、第9段階） | `speedKey` `timeKey` | `distanceKey` | `"distance"` `"speed"` `"time"` |
+| `"percentage"`（割合、第9段階） | `baseKey` `rateKey` | `comparedKey` | `"compared"` `"rate"` `"base"` |
 
-- [ ] `quantityRelation.type` が上記3種類のいずれかになっている
+- [ ] `quantityRelation.type` が上記5種類のいずれかになっている
 - [ ] 「既知（生成元）のキー」2つが `variables` に存在するキー名と一致している
 - [ ] 「自動計算されるキー」は `variables` に**含めない**（生成時に自動計算される値のため）
 - [ ] `quantityRelation.unknown` が、その `type` に対応する3つの値のいずれかになっている
 - [ ] `solutionRoutes` の `left`/`right` が、`unknown` に応じて正しい2変数を参照している
       （例: 小数倍で `unknown:"compared"` なら `base×multiplier`、平均で `unknown:"average"` なら
-      `total÷count`、単位量あたりで `unknown:"total"` なら `perUnit×unitCount`）
-- [ ] `template`（または `textParts`）に、自動計算されるキー（例: `{compared}` `{total}`）の
+      `total÷count`、単位量あたりで `unknown:"total"` なら `perUnit×unitCount`、速さで
+      `unknown:"speed"` なら `distance÷time`、割合で `unknown:"rate"` なら `compared÷base`
+      （このときだけ `resultType:"percent"` を指定して結果を百分率にする））
+- [ ] `template`（または `textParts`）に、自動計算されるキー（例: `{compared}` `{total}` `{distance}`）の
       プレースホルダーが、そのキーが `unknown` **ではない**ときだけ使われている
       （答えにあたる値を問題文に出してはいけない）
 - [ ] `generatorType` が、その `type` に対応するもの（小数倍・もとの量: `decimalMultiplicativeComparison`
       `decimalOriginalQuantity`／平均: `averageFromTotal` `totalFromAverage`／
-      単位量あたり・混み具合: `unitRate` `totalFromUnitRate`）になっている
+      単位量あたり・混み具合: `unitRate` `totalFromUnitRate`／速さ: `findSpeed` `findDistance` `findTime`／
+      割合: `percentageFindCompared` `percentageFindRate` `percentageFindBase`）になっている
 - [ ] 「既知（生成元）」側の2つの変数の `decimalPlaces` を2桁以内にしておく
       （積・商のどちらを逆算しても、安全に有限小数として求まるようにするため）
 - [ ] 平均の `countKey`（個数）が整数の範囲（`decimalPlaces` 無し）で定義されている
+- [ ] 速さの `distanceUnit`/`timeUnit`/`speedUnit`（表示用メタデータ）が、km/時・m/分・m/秒のいずれか
+      対応する組み合わせになっている（1つのテンプレート内で単位換算が発生しないように）
+- [ ] 割合の `rateKey` が指す変数は `{ type:"percent", values:[...] }` の形式になっている
+      （`min`/`max`/`step` ではなく、きりのよい割合の一覧から選ぶ）
 - [ ] 検証ページで、生成された問題の`quantityRelation`関連のエラー（`validateQuantityRelation()`）が出ていない
 
 ### 分数のテンプレート（同分母分数のたし算・ひき算）
@@ -1284,6 +1445,26 @@ npx serve .
 - [ ] たし算は `commutative: true`、ひき算は `commutative: false` になっている
 - [ ] 検証ページで、生成された問題の分数が縦型（横線の上に分子・下に分母）で表示されている
 - [ ] 検証ページの「値の種類」フィルターで「分数のみ」を選ぶと、追加したテンプレートが表示される
+
+### 百分率のテンプレート（割合・割引・増量、第9段階）
+
+- [ ] 百分率を扱う変数は `{ type:"percent", values:[10,20,25,...] }`（配列から選ぶ形式）になっている
+      （`min`/`max`/`step` や `decimalPlaces` は使わない）
+- [ ] `values` の各要素が、分母が2・4・5・10のいずれかになる「きりのよい」割合になっている
+      （例: 10・20・25・30・40・50・60・75・80。中途半端な割合にすると、比べる量・答えが
+      きれいな整数にならないことがある）
+- [ ] もとにする量（`baseKey` が指す変数、または割引・増量の `originalPrice`/`originalAmount`）の
+      `step` が、`values` に含まれるすべての割合の分母の最小公倍数の倍数になっている
+      （例: 割合の候補が10%・20%・25%・50%なら最小公倍数は20なので、`step: 20` 以上の倍数にする。
+      これにより、比べる量・支払う代金などが必ず整数になる）
+- [ ] 計算結果を百分率で返す必要がある場合（割合・百分率のように「数値÷数値」の結果を`%`として
+      表示したい場合）だけ、`solutionRoutes` に `resultType:"percent"` を指定している
+      （それ以外の計算に `resultType` を付けると、`question-validator.js` がエラーにする）
+- [ ] 検証ページで、生成された問題の百分率（カード・正解式・解答欄）が `0.2` のような小数で
+      表示され、`[object Object]` のような表示崩れが無いことを確認する（第10段階で変更。
+      問題文中の「20%」という自然な言い回しはこの限りではない）
+- [ ] 「割合・百分率」（答えが百分率になるテンプレート）だけは、正解式の最終結果が
+      `0.25→25%` のように「小数→百分率」の形式で表示されることを確認する
 
 ### 2段階問題（questionType: "multiStep"）
 
@@ -1300,6 +1481,22 @@ npx serve .
 - [ ] `data/multi-step-integer.js` に追加した場合、`gradeTerm` は `"4-multi-step"` のままにしている
       （新しい学期キーを使う場合は [7章](#7-問題データの読み込みdataindexjsと新しい学期の追加方法)の手順に従う）
 - [ ] 検証ページで、20回の生成に加えて「全ルート完答シミュレーション」がすべて成功している
+
+### 割引・増量のテンプレート（2段階問題、複数解法、第9段階）
+
+- [ ] `generatorType` が `"discountTwoStep"`（割引）または `"increaseTwoStep"`（増量）になっている
+      （専用の生成関数は無く、`"standard"` と同じ値生成のため、`variables` を独立に定義するだけでよい）
+- [ ] どの変数にも対応しない固定値（割引・増量の「100%」）は、`{ source: "variable", key: "..." }` ではなく
+      `{ source: "literal", value: { type: "percent", value: 100 } }` の形式になっている
+- [ ] 2つの解法ルートが登録されている（割引: 「支払う割合を先に求める」ルートと
+      「値引き額を先に求める」ルート／増量: 「増量後の割合を先に求める」ルートと
+      「増えた量を先に求める」ルート）
+- [ ] `originalPrice`（または `originalAmount`）の `step` と、割引率/増量率の `values` の組み合わせが、
+      「百分率のテンプレート」チェック項目の範囲設計（最小公倍数の倍数）を満たしている
+- [ ] 検証ページで、両方のルートが同じ最終的な答えに到達し、「全ルート完答シミュレーション」が成功している
+- [ ] 検証ページで、1つ目の式の選択肢カードに「100%」と割引率/増量率の百分率カードが含まれ、
+      2つ目の式の選択肢カードに、もとの値段/量と、1つ目の式で正解したときの中間結果（百分率）が
+      含まれていることを確認する
 
 ## 18. トレーニングモード（第6段階）
 
@@ -1342,8 +1539,10 @@ onJudge: (answer) => (currentMode === "training" ? training.handleJudge(answer) 
 }
 ```
 
-第6段階時点では13カテゴリでしたが、第7段階で5年1学期の4カテゴリを追加し、現在17カテゴリ登録されています
-（5年1学期の内訳は[19章](#19-小学5年生1学期第7段階)を参照）。
+第6段階時点では13カテゴリでしたが、第7段階で5年1学期の4カテゴリ、第8段階で5年2学期の5カテゴリ、
+第9段階で5年3学期の8カテゴリを追加し、現在30カテゴリ登録されています
+（5年1学期の内訳は[19章](#19-小学5年生1学期第7段階)、5年2学期の内訳は[20章](#20-小学5年生2学期第8段階)、
+5年3学期の内訳は[21章](#21-小学5年生3学期第9段階)を参照）。
 
 | 学期 | カテゴリ（categoryId） |
 |---|---|
@@ -1351,6 +1550,8 @@ onJudge: (answer) => (currentMode === "training" ? training.handleJudge(answer) 
 | 4-2 | `decimal-addition` `decimal-subtraction` `large-numbers` `integer-division-two-digit` `multi-step-integer` |
 | 4-3 | `decimal-times-integer` `decimal-division-by-integer` `same-denominator-fraction-addition` `same-denominator-fraction-subtraction` |
 | 5-1 | `decimal-times-decimal` `decimal-divided-by-decimal` `decimal-multiplicative-comparison` `decimal-original-quantity` |
+| 5-2 | `unlike-fraction-addition` `unlike-fraction-subtraction` `average` `unit-rate` `crowdedness` |
+| 5-3 | `speed-find-speed` `speed-find-distance` `speed-find-time` `percentage-compared-amount` `percentage-rate` `percentage-base-amount` `percentage-discount` `percentage-increase` |
 
 `js/ui.js` はタイトル画面の「がくねん・がっき」「もんだいの しゅるい」ボタンを、
 `getGradeTermGroups()` / `getCategoriesForGradeTerm()` を使って**このレジストリから動的に生成**します。
@@ -1856,3 +2057,236 @@ quantityRelation: { type: "unit-rate", totalKey: "total", unitCountKey: "unitCou
 - 詳しいチェック項目は[16章の「小学5年生・2学期（5-2モード、第8段階）」](#16-動作確認用チェックリスト)、
   テンプレート追加時のチェック項目は[17章の「異分母分数のテンプレート」「quantityRelationを持つ
   テンプレート」](#17-問題データ追加時のチェック項目)を参照してください。
+
+## 21. 小学5年生・3学期（第9段階）
+
+小学5年生・2学期に続く、**通常バトルの正式モード**として `gradeTerm: "5-3"` を追加しました。
+新出内容は「速さ」「道のり」「時間」「割合・比べる量」「割合・百分率」「割合・もとにする量」
+「割引」「増量」の8カテゴリです。速さ・道のり・時間・割合の3種類は1段階問題、割引・増量は
+2段階問題（それぞれ2つの解法ルート）です。第9段階では、整数・小数・分数に続く4つ目の値の型として
+**百分率（パーセント）**を導入しています。
+
+### 4つ目の値の型としての百分率（percentage-utils.js / value-utils.js）
+
+これまでのバージョンは、値を「整数・小数（素のJavaScript数値）」「分数（`{type:"fraction", ...}`）」の
+2つの形で扱ってきました。第9段階では、これに百分率 `{type:"percent", value}` を追加しています。
+`"20%"` のような文字列表現や、`0.2` のような比率へ変換した値を内部値として使うことは一切ありません。
+
+分数のときと同様に、百分率専用の計算処理は `js/percentage-utils.js` という新規ファイルに
+切り出しました（`js/fraction-utils.js` と同じ位置づけ）。
+
+```js
+export function percentToRatio(value) {
+  return normalizeNumber(divideDecimal(value.value, 100));   // 20% → 0.2
+}
+export function ratioToPercent(ratio) {
+  return { type: "percent", value: normalizeNumber(multiplyDecimal(ratio, 100)) };  // 0.3 → 30%
+}
+```
+
+`js/value-utils.js` の `calculateValues()` には、百分率を含む計算の組み合わせを追加しています。
+サポートする組み合わせは限定的で、それ以外はすべて `null`（計算不能）を返すよう明示的に制限しました
+（詳しくは[5章の「百分率」節](#百分率第9段階で追加)）。
+
+```js
+if (isPercentValue(left) && isPercentValue(right)) {
+  // percent + percent、percent - percent のみ（percent × percent、percent ÷ percent は非対応）
+}
+if (isPercentValue(left) && typeof right === "number") {
+  // percent × number のみ
+}
+if (typeof left === "number" && isPercentValue(right)) {
+  // number × percent、number ÷ percent
+}
+```
+
+これにより、「数値×百分率＝比べる量」「比べる量÷もとにする量＝割合（％）」「割合＋割合」
+「もとの値段×支払う割合＝代金」のような、教科書に出てくる組み合わせだけを許可し、
+`percent × percent` のような意味を持たない組み合わせをテンプレートに書いても、
+生成結果が自動的に検証エラーになる（後述）ようにしています。
+
+### 数値÷数値の結果を百分率として扱う（resultType）
+
+「割合・百分率」（比べる量÷もとにする量＝割合を求める）は、計算自体は**ふつうの数値の割り算**
+（例: `15÷50=0.3`）ですが、答えは百分率（`30%`）として表示する必要があります。この「計算は
+数値のまま行い、結果の型だけ変える」ケースのために、`solutionRoutes`（および2段階問題の
+`steps`）に `resultType: "percent"` という新しいフィールドを追加しました。
+
+```js
+solutionRoutes: [
+  { left: "compared", operator: "÷", right: "base", commutative: false, resultType: "percent" }
+]
+```
+
+生成時（`js/question-generator.js` の `applyResultType()`）に `calculateValues()` の結果（`0.3`）を
+`ratioToPercent()` で百分率（`{type:"percent", value:30}`）に変換し、`resultType` フィールド自体も
+生成済みの問題オブジェクトに複製しています。これは、`js/question-validator.js` 側が**独立に**
+`safeCalculate(route.left, route.operator, route.right)` を計算して正解式と突き合わせる際、
+同じ変換（`applyResultTypeForValidation()`。循環import を避けるための重複実装）をしないと
+「`0.3` と `{type:"percent",value:30}` が一致しない」という誤検出になってしまうためです
+（実装中に実際にこの不一致が発生し、`resultType` を検証側にも伝播させることで解決しました）。
+
+### 速さ・道のり・時間（quantityRelationの拡張、単位はkm/時・m/分・m/秒に限定）
+
+小数倍・もとの量・平均・単位量あたり（第7〜8段階）で使ってきた `quantityRelation` の枠組みに、
+「道のり＝速さ×時間」という数量関係を追加しました。
+
+```js
+quantityRelation: {
+  type: "speed",
+  distanceKey: "distance", timeKey: "time", speedKey: "speed", unknown: "speed",
+  distanceUnit: "km", timeUnit: "時間", speedUnit: "km/時"
+}
+```
+
+値の生成は、既存の `generateProportionalValues(variables, aKey, bKey, productKey)`
+（第8段階で単位量あたり用に切り出した汎用関数）をそのまま `generateSpeedValues()` から
+呼び出すだけで実現しています。新しい生成アルゴリズムは追加していません。
+
+単位は、依頼どおり **km/時・m/分・m/秒の3種類だけ**に限定し、1つのテンプレート内では
+必ず対応する単位（例: 道のりkm・時間時間・速さkm/時）だけを使います。km↔m、時↔分↔秒のような
+単位換算を必要とする問題（例: 「2時間30分」「1.5km＝1500m」）は今回意図的に追加していません。
+
+### 割合（比べる量・百分率・もとにする量）
+
+「もとにする量×割合＝比べる量」という数量関係を、`quantityRelation.type: "percentage"` として
+追加しました。
+
+```js
+quantityRelation: { type: "percentage", baseKey: "base", comparedKey: "compared", rateKey: "rate", unknown: "compared" }
+```
+
+値の生成（`generatePercentageValues()`）は、速さや単位量あたりと似ていますが、`rate`
+（割合）が百分率型のため、掛け算の前に `percentToRatio()` で比率に変換する処理が必要な点だけが
+異なります（このためだけに専用の生成関数を用意し、`generateProportionalValues()` は再利用していません）。
+
+割合を「きりのよい」値（分母が2・4・5・10のいずれかになる10%・20%・25%・30%・40%・50%・60%・
+75%・80%など）に限定し、もとにする量の `step` をそれらの最小公倍数（20）の倍数にすることで、
+比べる量が常に整数になるように範囲を設計しています。
+
+### 割引・増量（2段階問題・複数解法・literal オペランド）
+
+割引・増量は、それぞれ次の2つの解法ルートを持つ2段階問題として実装しています。
+
+```js
+// 割引: 「支払う割合を先に求める」ルート
+[100% - discountRate% = paymentRate%] → [originalPrice × paymentRate% = answer]
+// 割引: 「値引き額を先に求める」ルート
+[originalPrice × discountRate% = discountAmount] → [originalPrice - discountAmount = answer]
+```
+
+依頼文の元の書式では、この「100%」のような**固定値**を `left`/`right` に直接値オブジェクトとして
+埋め込む書き方（`left: {type:"percent", value:100}`）が使われていましたが、既存の
+`solutionRoutes[].steps[].left`/`right` は必ず `{ source, key }` の形式（`variables` または
+前のステップの結果を参照する）という設計だったため、これに合わせて次のように読み替えています。
+
+```js
+left: { source: "literal", value: { type: "percent", value: 100 } }
+```
+
+`js/question-generator.js` の `resolveOperand()` に `operand.source === "literal"` の分岐を1つ
+追加するだけで対応でき（`operand.value` をそのまま返す）、この解決は生成時に一度だけ行われるため、
+`js/multi-step-engine.js` などの下流のコード（カード生成・進行管理）は、値がどこから来たかを
+一切意識せず、これまでどおり動作します。
+
+`discountTwoStep`/`increaseTwoStep` という `generatorType` を用意していますが、専用の生成関数は
+必要ありませんでした（`"standard"` と同じ、独立変数の生成のみ）。支払う割合・値引き額・増えた量・
+最終的な答えは、登録した2つのルートがそれぞれ独立に計算しますが、整数へスケールしてから計算する
+小数演算（`multiplyDecimal` など）を使っているため、分配法則（`a×(1-r) = a - a×r`）が
+浮動小数点誤差なく成立し、両ルートの最終結果は理論的にも実装的にも必ず一致します
+（Node.jsでの検証でも、5個体×30回すべてで両ルートの最終結果が一致することを確認済みです）。
+
+### 出題比率・トレーニングモードへの統合
+
+5-3モードの出題プランも、既存の `planQuestionSequence()` / `GRADE_TERM_PLAN_CONFIG` の仕組みを
+そのまま使っています。追加したのは次の1エントリだけです。
+
+```js
+"5-3": {
+  newContentGradeTerms: ["5-3"],
+  reviewGradeTerms: ["4-1", "4-2", "4-3", "4-multi-step", "5-1", "5-2"]
+}
+```
+
+新内容側は8カテゴリを均等に近い頻度で配分する既存のラウンドロビン方式（`buildRoundRobinLabels()`）が
+そのまま使われます。新内容の数は最大でもレベルMAXの6問（8カテゴリ以下）のため、ラウンドロビンが
+一周して重複することはありません（レベル1〜5・MAXすべてで、Node.jsテストにより新内容:復習が
+正確に1:1になることと、カテゴリの出現数に極端な偏りがないことを確認済みです）。
+
+トレーニングモードへの統合も、`data/category-registry.js` に8カテゴリ（order 23〜30）を
+追加しただけです。`js/training-mode.js` `js/ui.js` `tools/question-validator.html` は
+いずれもレジストリから動的に読み込むため、コードの変更は一切不要でした。割引・増量は
+2段階問題ですが、トレーニングモードの2段階問題対応は5年2学期の「2つの数の平均」ですでに
+実装済みのため、そのまま動作します。
+
+```js
+{ id: "speed-find-speed", label: "速さ", gradeTerm: "5-3", gradeLabel: "小学5年生・3学期", enabledInTraining: true, order: 23 },
+{ id: "speed-find-distance", label: "道のり", gradeTerm: "5-3", gradeLabel: "小学5年生・3学期", enabledInTraining: true, order: 24 },
+{ id: "speed-find-time", label: "時間", gradeTerm: "5-3", gradeLabel: "小学5年生・3学期", enabledInTraining: true, order: 25 },
+{ id: "percentage-compared-amount", label: "割合・比べる量", gradeTerm: "5-3", gradeLabel: "小学5年生・3学期", enabledInTraining: true, order: 26 },
+{ id: "percentage-rate", label: "割合・百分率", gradeTerm: "5-3", gradeLabel: "小学5年生・3学期", enabledInTraining: true, order: 27 },
+{ id: "percentage-base-amount", label: "割合・もとにする量", gradeTerm: "5-3", gradeLabel: "小学5年生・3学期", enabledInTraining: true, order: 28 },
+{ id: "percentage-discount", label: "割引", gradeTerm: "5-3", gradeLabel: "小学5年生・3学期", enabledInTraining: true, order: 29 },
+{ id: "percentage-increase", label: "増量", gradeTerm: "5-3", gradeLabel: "小学5年生・3学期", enabledInTraining: true, order: 30 }
+```
+
+### 現在の難易度・スコア・ランク・タイマー仕様（変更なし）
+
+依頼文には、レベルMAXのハート数・スコア加算式・ランク係数・タイマー加速上限について、
+このアプリの現在の実装と完全に一致する数値が明記されていました。実装前に `js/game.js`
+`js/score.js` を確認し、以下がすべて依頼文どおりであることを確認済みです（変更していません）。
+
+| 項目 | 現在の実装 |
+|---|---|
+| レベルMAXの内部レベル | 6 |
+| レベルMAXのハート数 | 2個 |
+| レベルMAXの必要正解数 | 12問（`2×内部レベル`） |
+| レベルMAXの初期制限時間 | 20秒（`120秒÷内部レベル`） |
+| 正解時の加算スコア | `(10+n)×(50+ゲージ残量%)×4` |
+| ランク係数 | `現在のスコア÷(1600×レベル)`（MAXは`÷9600`） |
+| タイマー加速倍率 | `1+(n-1)/(N-1)`、1問目1.0倍・最終問題2.0倍 |
+
+### 既存機能への影響
+
+5-3追加にあたって変更したのは、次のファイル・箇所だけです。それ以外の既存ファイル
+（`js/training-mode.js` `js/storage.js` `js/enemy-list.js` `js/multi-step-engine.js`
+`js/answer-checker.js` `js/fraction-utils.js` `js/score.js` など）は無改造です。
+
+| ファイル | 変更内容 |
+|---|---|
+| `js/percentage-utils.js` | 新規追加。百分率専用の計算処理（比率⇔百分率変換・表示・同値判定） |
+| `js/value-utils.js` | `isPercentValue`・`calculateValues`/`areValuesEqual`/`formatValue`/`valueKey`等の百分率対応・`computeUnsimplifiedFractionResult`（分数の約分なし表示、前回リクエスト分） |
+| `js/value-renderer.js` | 百分率を比率（小数）に変換して表示（`renderValueHtml()`）・「割合・百分率」の答え専用の「小数→百分率」表示（`renderPercentConversionHtml()`。第10段階で、カード・解答欄・履歴の表示を`%`表記から小数表記に変更） |
+| `js/ui.js` | 百分率カードのサイズクラス判定（`percentToRatio()`＋`formatNumber()`で小数表記の長さを使うよう修正）・正解演出（`showCorrectEffect()`）と問題履歴（`buildSingleStepHistoryHtml()`/`buildMultiStepHistoryHtml()`）の百分率表示を小数表記に統一（第10段階） |
+| `js/question-generator.js` | 新しい `generatorType` 8種（`findSpeed`/`findDistance`/`findTime`/`percentageFindCompared`/`percentageFindRate`/`percentageFindBase`/`discountTwoStep`/`increaseTwoStep`）・`pickPercentValue()`・`generateSpeedValues()`・`generatePercentageValues()`・`resolveOperand()` の `literal` 対応・`applyResultType()`・`generateDummyPercent()`・`renderTemplateText()` の百分率対応（`[object Object]` バグの修正）・`QUANTITY_RELATION_GENERATOR_TYPES`/`GRADE_TERM_PLAN_CONFIG` の拡張 |
+| `js/question-validator.js` | `VALID_GRADE_TERMS` に `"5-3"` を追加・新しい `generatorType` 8種のルール・`QUANTITY_RELATION_TYPE_CONFIG` に `speed`/`percentage` を追加・`validatePercentVariable()`・`validateValueRepresentation()` の百分率対応・`validateMultiStepSolutionRoutes()` の `literal` オペランド対応・`applyResultTypeForValidation()`（`resultType` の重複実装） |
+| `data/grade5-term3.js` | 新規ファイル（40テンプレート） |
+| `data/index.js` | `grade5-term3.js` の import・`TEMPLATE_SETS_BY_GRADE_TERM` への登録 |
+| `data/category-registry.js` | 8カテゴリを追加（order 23〜30） |
+| `js/game.js` | `PLANNED_GRADE_TERMS` に `"5-3"` を追加（出題プランを使うモードとして登録するだけ） |
+| `js/ui.js` | `RANGE_LABELS` に `"5-3": "小学5年生・3学期"` を追加 |
+| `index.html` | 「5年3学期」ボタンの `disabled` を解除し、`data-range="5-3"` を設定 |
+
+`js/game.js`・`js/score.js`・`js/storage.js` のハート数・スコア・ランク・タイマー加速・
+ハイスコアキーの仕組みはレベル・`gradeTerm`に対して汎用的な実装のため、5-3にもそのまま
+（無改造で）正しく適用されています。
+
+### 動作確認・検証の進め方
+
+- Node.js での単体検証: 40テンプレートそれぞれについて30回ずつ、レベル1〜MAXの出題プランを
+  20回ずつ、トレーニングの5問セットを8カテゴリそれぞれ20回ずつ生成し、`validateGeneratedQuestion()`
+  ですべて検証（全件成功）。割引・増量は「全ルート完答シミュレーション」で両方の解法ルートが
+  同じ最終結果に到達することも確認しています。
+- ブラウザでの回帰確認（Playwright）: タイトル画面の「5年3学期」ボタン表示、バトルモード
+  （レベル1・レベルMAX）でのカウントダウン→問題文・選択肢カードの表示（`[object Object]`や
+  `undefined`/`NaN`が出ないこと）、トレーニングモードの8カテゴリすべてでの出題確認、
+  百分率が関わるカード・解答欄・正解式が `0.2` のように小数で表示され`%`表記にならないこと
+  （問題文中の「20%」という自然な言い回しは`%`のまま変わらないこと）、「割合・百分率」だけは
+  正解時・問題履歴の答え表示が `0.25→25%` のように小数と百分率の両方を示すこと、
+  割引の2段階問題で両方の解法ルートのどちらでも1つ目の式が正解になり、2つ目の式まで
+  正しく解けて正しい代金が小数の中間結果（`%`表記ではなく）とともに表示されること、
+  コンソールにJavaScriptエラーが出ていないこと、既存モード（4-1〜5-2）が5-3追加後も
+  従来どおり動作すること、をすべて確認済みです（第10段階の百分率表示変更を含む）。
+- 詳しいチェック項目は[16章の「小学5年生・3学期（5-3モード、第9段階）」](#16-動作確認用チェックリスト)、
+  テンプレート追加時のチェック項目は[17章の「quantityRelationを持つテンプレート」「百分率の
+  テンプレート」「割引・増量のテンプレート」](#17-問題データ追加時のチェック項目)を参照してください。

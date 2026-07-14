@@ -7,7 +7,8 @@
 
 import { formatNumber } from "./number-utils.js";
 import { simplifyFraction } from "./fraction-utils.js";
-import { isFractionValue } from "./value-utils.js";
+import { formatPercent, percentToRatio } from "./percentage-utils.js";
+import { isFractionValue, isPercentValue } from "./value-utils.js";
 
 export function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (c) => (
@@ -30,12 +31,18 @@ export function buildFractionAriaLabel(fraction, { simplify = true } = {}) {
 /**
  * 値1つを、画面表示用のHTML文字列に変換します。
  * - 分数: 縦型分数のHTML（aria-label付き、読み上げにも対応）
+ * - 百分率: 比率（小数）に変換してから表示します（例: 20% → "0.2"。第10段階で変更）。
+ *   割合の計算は小数で行うという教科書の指導に合わせ、選択肢カード・解答欄・正解演出・
+ *   問題履歴など、値として扱う場面ではすべて小数表記に統一します。
+ *   問題文中の「20%」のような自然な言い回しは、この関数を経由せず
+ *   `js/question-generator.js` の `renderTemplateText()`/`formatPercent()` が
+ *   別途扱うため、この変更の影響を受けません。
  * - 整数・小数: number-utils.js の formatNumber() で末尾0除去（既定では桁区切りカンマも付与）した上でエスケープ
- * @param {number|{type:"fraction",numerator:number,denominator:number}} value
+ * @param {number|{type:"fraction",numerator:number,denominator:number}|{type:"percent",value:number}} value
  * @param {{useSeparator?: boolean, simplify?: boolean}} options - useSeparator: false で桁区切りカンマを付けずに表示する
  *   （選択肢カード・解答欄・ドラッグ中のカードは「3900」のようにカンマ無しで表示するために使う）。
  *   simplify: false で分数を約分せずそのまま表示する（第9段階で追加。既定は true=約分して表示、
- *   これまでと同じ挙動）。
+ *   これまでと同じ挙動。百分率には影響しません）。
  */
 export function renderValueHtml(value, { useSeparator = true, simplify = true } = {}) {
   if (isFractionValue(value)) {
@@ -48,7 +55,24 @@ export function renderValueHtml(value, { useSeparator = true, simplify = true } 
       `</span>`
     );
   }
+  if (isPercentValue(value)) {
+    return escapeHtml(formatNumber(percentToRatio(value), { useSeparator }));
+  }
   return escapeHtml(formatNumber(value, { useSeparator }));
+}
+
+/**
+ * 百分率の値を「小数→百分率」の形式（例: "0.5→50%"）でHTMLに変換します（第10段階で追加）。
+ * 「割合・百分率」（比べる量÷もとにする量＝割合）は、計算自体は小数のまま行いますが、
+ * 問題文が「何%ですか」と百分率での回答を求めているため、正解時・問題履歴の答え表示だけは、
+ * 計算結果の小数に加えて百分率への変換も示します。2段階問題の途中結果（割引・増量の
+ * 「支払う割合」など）は、あくまで計算の中間値であり「%で答える」ものではないため、
+ * この関数は使わず、通常の `renderValueHtml()`（小数表示）を使ってください。
+ */
+export function renderPercentConversionHtml(value, { useSeparator = true } = {}) {
+  const ratioHtml = escapeHtml(formatNumber(percentToRatio(value), { useSeparator }));
+  const percentHtml = escapeHtml(formatPercent(value));
+  return `${ratioHtml}→${percentHtml}`;
 }
 
 /**

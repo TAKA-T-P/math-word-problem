@@ -5,8 +5,9 @@
 // （整数・小数・大きな数の表示をアプリ全体で統一するため）。
 
 import { formatNumber } from "./number-utils.js";
-import { isFractionValue, computeUnsimplifiedFractionResult } from "./value-utils.js";
-import { renderValueHtml, renderTextPartsHtml, escapeHtml } from "./value-renderer.js";
+import { percentToRatio } from "./percentage-utils.js";
+import { isFractionValue, isPercentValue, computeUnsimplifiedFractionResult } from "./value-utils.js";
+import { renderValueHtml, renderTextPartsHtml, renderPercentConversionHtml, escapeHtml } from "./value-renderer.js";
 import {
   loadSelectedGradeTerm,
   saveSelectedGradeTerm,
@@ -679,8 +680,11 @@ function isCardPlaced(cardId) {
 function getValueCardSizeClass(value) {
   if (isFractionValue(value)) return "choice-value-fraction";
   // カード・解答欄は桁区切りカンマを付けずに表示するため、実際に表示される文字列の
-  // 長さ（カンマ無し）を基準にサイズクラスを決める。
-  const displayText = formatNumber(value, { useSeparator: false });
+  // 長さ（カンマ無し）を基準にサイズクラスを決める（百分率は比率＝小数に変換して表示するため、
+  // その小数表記の長さで判定する）。
+  const displayText = isPercentValue(value)
+    ? formatNumber(percentToRatio(value), { useSeparator: false })
+    : formatNumber(value, { useSeparator: false });
   if (displayText.length >= 8) return "choice-value-xlong";
   if (displayText.length >= 6) return "choice-value-long";
   return "";
@@ -995,7 +999,11 @@ export function unlockInput() {
 
 export function showCorrectEffect(resultValue, { simplify = true } = {}) {
   // ■欄の答えの数字は、選択肢カード・解答欄と同じく桁区切りカンマを付けずに表示する。
-  els.resultBox.innerHTML = renderValueHtml(resultValue, { useSeparator: false, simplify });
+  // 百分率が答えになるのは「割合・百分率」（何%ですかと問う問題）だけのため、
+  // その場合だけ「0.5→50%」のように小数と百分率の両方を示す（第10段階で追加）。
+  els.resultBox.innerHTML = isPercentValue(resultValue)
+    ? renderPercentConversionHtml(resultValue, { useSeparator: false })
+    : renderValueHtml(resultValue, { useSeparator: false, simplify });
   els.correctMark.classList.add("show");
   nextQuestionTapLock = false;
   window.setTimeout(() => {
@@ -1105,7 +1113,8 @@ const RANGE_LABELS = {
   "4-3": "小学4年生・3学期",
   "4-multi-step": "2段階問題・整数（開発版）",
   "5-1": "小学5年生・1学期",
-  "5-2": "小学5年生・2学期"
+  "5-2": "小学5年生・2学期",
+  "5-3": "小学5年生・3学期"
 };
 
 // 内部レベル（レベルMAXの計算には6を使う）を、タイトル画面のボタンと同じ表示ラベルに変換する。
@@ -1203,13 +1212,19 @@ function buildSingleStepHistoryHtml(entry, index) {
   const displayResult = simplify
     ? entry.result
     : computeUnsimplifiedFractionResult(entry.left, entry.operator, entry.right) ?? entry.result;
+  // 「割合・百分率」（何%ですかと問う問題）の答えだけは、小数と百分率の両方を
+  // 「0.5→50%」の形式で示す。この場合、百分率記号はすでに含まれているため、
+  // answerUnit（"%"）は付け足さない（第10段階で追加）。
+  const resultDisplayHtml = isPercentValue(displayResult)
+    ? renderPercentConversionHtml(displayResult, { useSeparator: false })
+    : `${renderValueHtml(displayResult, { useSeparator: false, simplify })}${escapeHtml(entry.answerUnit || "")}`;
   return `
     <div class="history-item-head">
       <span class="history-index">第${index + 1}問</span>
       <span class="history-category">${escapeHtml(entry.category)}</span>
     </div>
     <p class="history-text">${questionTextHtml}</p>
-    <p class="history-formula">正解式：${renderValueHtml(entry.left, { useSeparator: false, simplify })}${entry.operator}${renderValueHtml(entry.right, { useSeparator: false, simplify })} = ${renderValueHtml(displayResult, { useSeparator: false, simplify })}${escapeHtml(entry.answerUnit || "")}</p>
+    <p class="history-formula">正解式：${renderValueHtml(entry.left, { useSeparator: false, simplify })}${entry.operator}${renderValueHtml(entry.right, { useSeparator: false, simplify })} = ${resultDisplayHtml}</p>
     ${buildHistoryCountsHtml(entry.incorrectCount, entry.timeoutCount)}
   `;
 }
@@ -1219,7 +1234,9 @@ function buildMultiStepHistoryHtml(entry, index) {
     .map((step) => {
       if (step.completed) {
         // step.formula は multi-step-engine.js 側で既に桁区切り無しで整形済みの文字列。
-        return `<p class="history-step">式${step.stepNumber}：${step.formula}＝${formatNumber(step.result, { useSeparator: false })}</p>`;
+        // step.result は数値のことも百分率（割引・増量の途中結果）のこともあるため、
+        // 型を意識せず扱える renderValueHtml() を使う（百分率は小数で表示される。第10段階で修正）。
+        return `<p class="history-step">式${step.stepNumber}：${step.formula}＝${renderValueHtml(step.result, { useSeparator: false })}</p>`;
       }
       if (step.lastAttemptFormula) {
         return `<p class="history-step history-step-incomplete">式${step.stepNumber}：${step.lastAttemptFormula}（解答途中）</p>`;

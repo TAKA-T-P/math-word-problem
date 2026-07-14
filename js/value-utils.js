@@ -31,12 +31,20 @@ import {
   simplifyFraction,
   fractionToNumber
 } from "./fraction-utils.js";
+import { normalizePercent, percentToRatio, formatPercent, arePercentValuesEqual } from "./percentage-utils.js";
 
 /**
  * 値が分数オブジェクトかどうかを判定します。
  */
 export function isFractionValue(value) {
   return !!value && typeof value === "object" && value.type === "fraction";
+}
+
+/**
+ * 値が百分率オブジェクトかどうかを判定します（第9段階で追加）。
+ */
+export function isPercentValue(value) {
+  return !!value && typeof value === "object" && value.type === "percent";
 }
 
 /**
@@ -57,12 +65,16 @@ function collapseFractionIfInteger(fraction) {
 }
 
 /**
- * 値（数値・分数どちらでも）を正規化します。
- * 数値は浮動小数点の丸め誤差を除去し、分数は約分（整数になる場合は整数化）します。
+ * 値（数値・分数・百分率どちらでも）を正規化します。
+ * 数値は浮動小数点の丸め誤差を除去し、分数は約分（整数になる場合は整数化）し、
+ * 百分率は丸め誤差を除去します（第9段階で百分率に対応）。
  */
 export function normalizeValue(value) {
   if (isFractionValue(value)) {
     return collapseFractionIfInteger(value);
+  }
+  if (isPercentValue(value)) {
+    return normalizePercent(value);
   }
   if (typeof value === "number") {
     return normalizeNumber(value);
@@ -74,7 +86,9 @@ export function normalizeValue(value) {
  * 値の種類を文字列で返します（デバッグ表示・検証ページ用）。
  */
 export function getValueType(value) {
-  return isFractionValue(value) ? "fraction" : "number";
+  if (isFractionValue(value)) return "fraction";
+  if (isPercentValue(value)) return "percent";
+  return "number";
 }
 
 /**
@@ -84,11 +98,27 @@ export function isValueNegative(value) {
   if (isFractionValue(value)) {
     return value.numerator < 0;
   }
+  if (isPercentValue(value)) {
+    return value.value < 0;
+  }
   return typeof value === "number" && value < 0;
 }
 
 /**
- * left operator right を、値の型（整数・小数・分数）に応じて安全に計算します。
+ * 整数・小数どうしの安全なわり算（既存の divideExactByInteger / divideExactByDecimal の使い分け）。
+ * 数値×百分率から得た比率で割る場合（数値÷百分率）にも共有するため、関数として切り出しています。
+ */
+function divideNumbers(left, right) {
+  if (right === 0) return null;
+  const normalizedLeft = normalizeNumber(left);
+  const normalizedRight = normalizeNumber(right);
+  return Number.isInteger(normalizedRight)
+    ? divideExactByInteger(normalizedLeft, normalizedRight)
+    : divideExactByDecimal(normalizedLeft, normalizedRight);
+}
+
+/**
+ * left operator right を、値の型（整数・小数・分数・百分率）に応じて安全に計算します。
  * eval() は使用しません。計算できない場合（0で割る、割り切れない、
  * 型の組み合わせが今回未対応 など）は null を返します。
  *
@@ -97,8 +127,13 @@ export function isValueNegative(value) {
  *   - 数値 ÷ 数値（わる数が整数なら divideExactByInteger、小数なら divideExactByDecimal。
  *     どちらも割り切れる場合のみ）
  *   - 分数 + 分数 / 分数 - 分数（分子・分母を使った正確な計算。異分母も数式としては正しく計算する）
- * 分数と数値が混在する計算（分数×整数 など）は今回のデータには存在しませんが、
- * 呼び出された場合は null を返します（今回未対応のため）。
+ *   - 百分率 + 百分率 / 百分率 - 百分率（結果は百分率。例: 100%－20%＝80%）
+ *   - 数値 × 百分率 / 百分率 × 数値（結果は数値。百分率を比率に変換してから掛ける。例: 3000×20%＝600）
+ *   - 数値 ÷ 百分率（結果は数値。百分率を比率に変換してから、割り切れる場合だけ商を返す。例: 600÷20%＝3000）
+ * 分数と数値・分数と百分率が混在する計算、百分率どうしのかけ算・わり算、
+ * 数値と百分率のたし算・ひき算は今回のバージョンでは未対応で、呼び出された場合は null を返します
+ * （「数値÷数値」の結果を百分率として扱いたい場合は、この関数ではなく、
+ *  呼び出し側が solutionRoutes の resultType:"percent" を使って変換してください）。
  */
 export function calculateValues(left, operator, right) {
   if (isFractionValue(left) && isFractionValue(right)) {
@@ -114,7 +149,43 @@ export function calculateValues(left, operator, right) {
   }
 
   if (isFractionValue(left) || isFractionValue(right)) {
-    // 分数と整数・小数が混在する計算は今回のバージョンでは未対応。
+    // 分数と、整数・小数・百分率が混在する計算は今回のバージョンでは未対応。
+    return null;
+  }
+
+  if (isPercentValue(left) && isPercentValue(right)) {
+    switch (operator) {
+      case "+":
+        return normalizeValue({ type: "percent", value: addDecimal(left.value, right.value) });
+      case "-":
+        return normalizeValue({ type: "percent", value: subtractDecimal(left.value, right.value) });
+      default:
+        // 百分率どうしのかけ算・わり算は今回のバージョンでは未対応。
+        return null;
+    }
+  }
+
+  if (isPercentValue(left) && typeof right === "number") {
+    // 百分率×数値（例: 20%×3000＝600）。かけ算のみ対応。
+    if (operator === "×") {
+      return normalizeValue(multiplyDecimal(percentToRatio(left), right));
+    }
+    return null;
+  }
+
+  if (typeof left === "number" && isPercentValue(right)) {
+    // 数値×百分率（例: 3000×20%＝600）、数値÷百分率（例: 600÷20%＝3000）。
+    if (operator === "×") {
+      return normalizeValue(multiplyDecimal(left, percentToRatio(right)));
+    }
+    if (operator === "÷") {
+      return normalizeValue(divideNumbers(left, percentToRatio(right)));
+    }
+    return null;
+  }
+
+  if (isPercentValue(left) || isPercentValue(right)) {
+    // 上記以外の百分率と数値の組み合わせ（百分率÷数値など）は今回のバージョンでは未対応。
     return null;
   }
 
@@ -129,17 +200,11 @@ export function calculateValues(left, operator, right) {
       return subtractDecimal(left, right);
     case "×":
       return multiplyDecimal(left, right);
-    case "÷": {
-      if (right === 0) return null;
-      const normalizedLeft = normalizeNumber(left);
-      const normalizedRight = normalizeNumber(right);
+    case "÷":
       // わる数が整数か小数かで、既存の divideExactByInteger（小学4年生・5年生の整数÷わり算）と
       // 小数対応の divideExactByDecimal（小学5年生1学期の小数÷小数、小数倍・もとの量の「÷」）を
       // 使い分ける。どちらも「割り切れる場合だけ商を返す」という安全性は共通。
-      return Number.isInteger(normalizedRight)
-        ? divideExactByInteger(normalizedLeft, normalizedRight)
-        : divideExactByDecimal(normalizedLeft, normalizedRight);
-    }
+      return divideNumbers(left, right);
     default:
       return null;
   }
@@ -150,8 +215,14 @@ export function calculateValues(left, operator, right) {
  * 分数どうしは分子・分母から正確に、数値どうしは誤差許容で比較します。
  * 分数と数値が混在する場合は、分数を数値に変換して誤差許容で比較します
  * （今回のテンプレートでは基本的に発生しませんが、安全のため対応しています）。
+ * 百分率どうしは value を誤差許容で比較します（第9段階で追加）。
+ * 百分率は分数・数値のどちらとも混在させない設計のため、型が食い違う場合は
+ * （百分率とそれ以外の組み合わせも含めて）false を返します。
  */
 export function areValuesEqual(a, b) {
+  if (isPercentValue(a) || isPercentValue(b)) {
+    return arePercentValuesEqual(a, b);
+  }
   if (isFractionValue(a) && isFractionValue(b)) {
     return areFractionsEqual(a, b);
   }
@@ -174,6 +245,9 @@ export function formatValue(value, { simplify = true } = {}) {
   if (isFractionValue(value)) {
     const s = simplify ? simplifyFraction(value) : value;
     return `${s.numerator}/${s.denominator}`;
+  }
+  if (isPercentValue(value)) {
+    return formatPercent(value);
   }
   return formatNumber(value);
 }
@@ -210,6 +284,9 @@ export function valueKey(value) {
   if (isFractionValue(value)) {
     return `fraction:${value.numerator}/${value.denominator}`;
   }
+  if (isPercentValue(value)) {
+    return `percent:${normalizeNumber(value.value)}`;
+  }
   if (typeof value === "number") {
     return `number:${normalizeNumber(value)}`;
   }
@@ -231,7 +308,9 @@ export function valuesContainKey(values, target) {
  */
 export function getValueDecimalPlaces(value) {
   if (isFractionValue(value)) return 0;
+  if (isPercentValue(value)) return getDecimalPlaces(value.value);
   return getDecimalPlaces(value);
 }
 
 export { isValidFraction };
+export { isValidPercent } from "./percentage-utils.js";
