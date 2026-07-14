@@ -66,9 +66,22 @@
       <div id="training-category-select" class="option-grid three-col"></div>
     </div>
 
-    <button id="start-btn" class="primary-btn" type="button">バトル スタート！</button>
+    <!-- トレーニングモードでは、この共通スタートボタンではなく「問題の しゅるい」ボタンを
+         タップして開く確認ダイアログ（training-start-confirm-dialog）からトレーニングを
+         開始する（js/ui.js 参照）ため、battle-only で隠す。 -->
+    <button id="start-btn" class="primary-btn battle-only" type="button">バトル スタート！</button>
 
     <p class="credit-text">©2026 T.TAKEMOTO / KEC Glows</p>
+
+    <div id="training-start-confirm-dialog" class="dialog-overlay" aria-hidden="true">
+      <div class="dialog-box">
+        <p id="training-start-confirm-text">トレーニングをはじめますか？</p>
+        <div class="dialog-buttons">
+          <button id="training-start-confirm-yes" class="dialog-btn" type="button">スタート</button>
+          <button id="training-start-confirm-no" class="dialog-btn" type="button">もどる</button>
+        </div>
+      </div>
+    </div>
   </section>
 
   <!-- ============== カウントダウン画面 ============== -->

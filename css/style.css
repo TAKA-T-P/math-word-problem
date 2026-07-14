@@ -141,8 +141,16 @@ button {
    タイトル画面
    ========================================================================== */
 
+/* justify-content は space-between ではなく flex-start にする。space-between は
+   表示中のフレックス子要素の数に応じてすき間の大きさを再計算するため、
+   （バトルモードは title-block/mode-select/setting-block/start-btn の4つ、
+   トレーニングモードは start-btn が battle-only で非表示になり3つ、というように）
+   モード切り替えで子要素の数が変わるたびに、タイトル・モード切り替えボタンなど
+   すべての要素の縦位置がずれてしまっていた（PC等の縦に余白が大きい画面ほど目立つ）。
+   flex-start なら要素は常に上から同じ順序・同じすき間（gap）で並ぶため、
+   モードを切り替えても位置がずれない。 */
 #screen-title {
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
   text-align: center;
   gap: 12px;

@@ -14,9 +14,7 @@ import {
   loadLastMode,
   saveLastMode,
   loadLastTrainingGradeTerm,
-  saveLastTrainingGradeTerm,
-  loadLastTrainingCategoryId,
-  saveLastTrainingCategoryId
+  saveLastTrainingGradeTerm
 } from "./storage.js";
 import { getGradeTermGroups, getCategoriesForGradeTerm } from "../data/category-registry.js";
 import { ENEMY_LIST } from "./enemy-list.js";
@@ -47,6 +45,11 @@ let activePointerId = null;
 
 let nextQuestionTapLock = false;
 
+// トレーニングの「問題の しゅるい」ボタンをタップしてから、確認ダイアログの
+// 「スタート」が押されるまでの間だけ保持する、開始予定の設定（gradeTerm・categoryId等）。
+// ダイアログを閉じる（スタート／もどるのどちらでも）たびに null に戻す。
+let pendingTrainingSettings = null;
+
 function qs(id) {
   return document.getElementById(id);
 }
@@ -64,6 +67,10 @@ function cacheElements() {
     rangeSelect: qs("range-select"),
     levelSelect: qs("level-select"),
     startBtn: qs("start-btn"),
+    trainingStartDialog: qs("training-start-confirm-dialog"),
+    trainingStartConfirmText: qs("training-start-confirm-text"),
+    trainingStartYesBtn: qs("training-start-confirm-yes"),
+    trainingStartNoBtn: qs("training-start-confirm-no"),
 
     countdownText: qs("countdown-text"),
 
@@ -176,31 +183,26 @@ function setupTitleScreen() {
     populateTrainingCategorySelect(btn.dataset.gradeterm);
   });
 
+  // カテゴリボタンをタップすると、そのカテゴリで本当にトレーニングを始めてよいかの
+  // 確認ダイアログ（training-start-confirm-dialog）を開く。カテゴリボタン自体には
+  // 「選択状態」の見た目を持たせない（どのボタンをタップしても、常に同じ確認フローになるため）。
+  // 学年・学期は populateTrainingGradeTermSelect() が起動時に必ず1つ選択済みにするため、
+  // ここで未選択を気にする必要はない。
   els.trainingCategorySelect.addEventListener("click", (e) => {
     const btn = e.target.closest(".category-btn");
     if (!btn) return;
-    selectTrainingCategoryButton(btn);
-    saveLastTrainingCategoryId(btn.dataset.categoryId);
+    const gradeTermBtn = els.trainingGradeTermSelect.querySelector(".gradeterm-btn.selected");
+    pendingTrainingSettings = {
+      mode: "training",
+      gradeTerm: gradeTermBtn ? gradeTermBtn.dataset.gradeterm : null,
+      categoryId: btn.dataset.categoryId,
+      categoryLabel: btn.textContent
+    };
+    showTrainingStartDialog(btn.textContent);
   });
 
+  // このボタンはバトルモード専用（.battle-only。トレーニングモードでは非表示）。
   els.startBtn.addEventListener("click", () => {
-    if (getSelectedMode() === "training") {
-      const categoryBtn = els.trainingCategorySelect.querySelector(".category-btn.selected");
-      if (!categoryBtn) {
-        shakeElement(els.startBtn);
-        return;
-      }
-      const gradeTermBtn = els.trainingGradeTermSelect.querySelector(".gradeterm-btn.selected");
-      const settings = {
-        mode: "training",
-        gradeTerm: gradeTermBtn ? gradeTermBtn.dataset.gradeterm : null,
-        categoryId: categoryBtn.dataset.categoryId,
-        categoryLabel: categoryBtn.textContent
-      };
-      callbacks.onStart && callbacks.onStart(settings);
-      return;
-    }
-
     const rangeBtn = els.rangeSelect.querySelector(".range-btn.selected");
     const levelBtn = els.levelSelect.querySelector(".level-btn.selected");
     const settings = {
@@ -244,11 +246,6 @@ function restoreSelectedGradeTerm() {
 
 // ============== モード選択（通常バトル／トレーニング） ==============
 
-function getSelectedMode() {
-  const btn = els.modeSelect.querySelector(".mode-btn.selected");
-  return btn ? btn.dataset.mode : "battle";
-}
-
 /**
  * モードを切り替える。#app 要素に mode-training クラスを付け外しすることで、
  * タイトル画面の設定ブロックの出し分けと、バトル画面・結果画面の
@@ -256,9 +253,7 @@ function getSelectedMode() {
  * 出し分けの両方を、CSS側でまとめて行う（js/ui.js に個別のif分岐を増やさないため）。
  */
 export function setMode(mode) {
-  const isTraining = mode === "training";
-  els.appEl.classList.toggle("mode-training", isTraining);
-  els.startBtn.textContent = isTraining ? "トレーニング スタート！" : "バトル スタート！";
+  els.appEl.classList.toggle("mode-training", mode === "training");
 }
 
 function selectMode(mode) {
@@ -277,11 +272,6 @@ function restoreSelectedMode() {
 
 function selectTrainingGradeTermButton(btn) {
   els.trainingGradeTermSelect.querySelectorAll(".gradeterm-btn").forEach((b) => b.classList.remove("selected"));
-  btn.classList.add("selected");
-}
-
-function selectTrainingCategoryButton(btn) {
-  els.trainingCategorySelect.querySelectorAll(".category-btn").forEach((b) => b.classList.remove("selected"));
   btn.classList.add("selected");
 }
 
@@ -323,6 +313,8 @@ function formatShortGradeTermLabel(gradeTerm) {
 /**
  * data/category-registry.js の getCategoriesForGradeTerm() から、選択中の学年学期に
  * 属するカテゴリ選択ボタンを動的に生成する。個別のカテゴリ名をここにハードコードしない。
+ * カテゴリボタンはタップした時点で確認ダイアログを開くだけのため（選択状態を持たない）、
+ * ここで初期選択を行う必要はない。
  */
 function populateTrainingCategorySelect(gradeTerm) {
   const categories = getCategoriesForGradeTerm(gradeTerm);
@@ -334,14 +326,6 @@ function populateTrainingCategorySelect(gradeTerm) {
     btn.dataset.categoryId = category.id;
     btn.textContent = category.label;
     els.trainingCategorySelect.appendChild(btn);
-  }
-
-  const savedCategoryId = loadLastTrainingCategoryId();
-  const matching = categories.find((c) => c.id === savedCategoryId);
-  const initialCategoryId = matching ? matching.id : categories.length > 0 ? categories[0].id : null;
-  if (initialCategoryId) {
-    const btn = els.trainingCategorySelect.querySelector(`.category-btn[data-category-id="${initialCategoryId}"]`);
-    if (btn) selectTrainingCategoryButton(btn);
   }
 }
 
@@ -1105,6 +1089,31 @@ export function hideRetireDialog() {
   els.retireDialog.classList.remove("show");
 }
 
+// ============== トレーニング開始確認ダイアログ ==============
+
+function setupTrainingStartConfirmDialog() {
+  els.trainingStartYesBtn.addEventListener("click", () => {
+    hideTrainingStartDialog();
+    if (pendingTrainingSettings) {
+      callbacks.onStart && callbacks.onStart(pendingTrainingSettings);
+    }
+    pendingTrainingSettings = null;
+  });
+  els.trainingStartNoBtn.addEventListener("click", () => {
+    hideTrainingStartDialog();
+    pendingTrainingSettings = null;
+  });
+}
+
+function showTrainingStartDialog(categoryLabel) {
+  els.trainingStartConfirmText.textContent = `${categoryLabel} のトレーニングをはじめますか？`;
+  els.trainingStartDialog.classList.add("show");
+}
+
+function hideTrainingStartDialog() {
+  els.trainingStartDialog.classList.remove("show");
+}
+
 // ============== 結果画面 ==============
 
 const RANGE_LABELS = {
@@ -1299,6 +1308,7 @@ export function initUI(cb) {
   setupCardInteraction();
   setupNextQuestionTap();
   setupRetireDialog();
+  setupTrainingStartConfirmDialog();
   setupResultScreen();
   setupScoreDelta();
 }
