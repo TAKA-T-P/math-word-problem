@@ -1,19 +1,24 @@
 // バトルに出現するエネミー（絵文字・名前・出現レベル・せりふ・紹介文）の一覧。
 // js/game.js（バトル開始時のランダム抽選、選んだレベル以下のminLevelを持つエネミーだけが対象）と
-// js/ui.js（タイトル画面のスクロール表示、レベルを問わず全種類を表示。結果画面のエネミーコメント表示）の
-// 両方から参照する、単一の情報源。エネミーを追加・変更する場合はこの配列だけを編集すればよい。
+// js/ui.js（タイトル画面のスクロール表示、レベルを問わず全種類を表示。結果画面のエネミーコメント表示。
+// エネミー図鑑の描画）の両方から参照する、単一の情報源。エネミーを追加・変更する場合は
+// この配列だけを編集すればよい。
 //
+// id         : エネミー図鑑の解放状態（js/storage.js への保存）を名前・絵文字ではなく
+//              安定して識別するための一意なID（運用開始後に追加）。名前・絵文字を変更しても
+//              解放状態が失われないよう、一度決めたIDは変更しない。
 // minLevel   : そのエネミーが出現し始める最小の内部レベル（1〜5、レベルMAXは6として扱う）。
 //              例えばレベルMAXでしか出ないエネミーは minLevel:6 にする（内部レベルの仕組みは
 //              js/game.js の heartsForLevel() 等と同じ）。
 // clearText  : そのエネミーにクリア（勝利）したときに結果画面へ表示するせりふ。
 // gameOverText: そのエネミーにゲームオーバー（またはリタイア）になったときに結果画面へ表示するせりふ。
-// introText  : キャラ紹介文。今回のバージョンではゲーム内に表示しないが、将来の「エネミー図鑑」
-//              機能で使うためデータとして保持しておく。
+// introText  : キャラ紹介文。エネミー図鑑で、倒したことがあるエネミーの説明として表示する
+//              （運用開始後、エネミー図鑑機能を実装しゲーム内で使用するようになった）。
 
 export const ENEMY_LIST = [
   // すべてのレベルで出現
   {
+    id: "chikurin",
     emoji: "🦟",
     name: "チクリン",
     minLevel: 1,
@@ -22,6 +27,7 @@ export const ENEMY_LIST = [
     introText: "すばやく飛び回り、気づかないうちにチクリとこうげきしてくる。"
   },
   {
+    id: "petapetan",
     emoji: "🦎",
     name: "ペタペタン",
     minLevel: 1,
@@ -30,6 +36,7 @@ export const ENEMY_LIST = [
     introText: "壁や天井にペタペタくっつき、とつぜん目の前に現れる。"
   },
   {
+    id: "basatto",
     emoji: "🦇",
     name: "バサット",
     minLevel: 1,
@@ -38,6 +45,7 @@ export const ENEMY_LIST = [
     introText: "暗い場所を好み、大きな羽音を立てながら急降下してくる。"
   },
   {
+    id: "nyoro-king",
     emoji: "🐍",
     name: "ニョロキング",
     minLevel: 1,
@@ -46,6 +54,7 @@ export const ENEMY_LIST = [
     introText: "ヘビたちの王様で、長い体を使って相手を取り囲む。"
   },
   {
+    id: "takon-star",
     emoji: "🐙",
     name: "タコンスター",
     minLevel: 1,
@@ -54,6 +63,7 @@ export const ENEMY_LIST = [
     introText: "8本の足を器用に動かし、次々と攻撃をくり出す海のスター。"
   },
   {
+    id: "eagle-run",
     emoji: "🦅",
     name: "イーグルン",
     minLevel: 1,
@@ -62,6 +72,7 @@ export const ENEMY_LIST = [
     introText: "空高くから相手を見つけ、ものすごい速さで飛びかかる。"
   },
   {
+    id: "gaurufu",
     emoji: "🐺",
     name: "ガウルフ",
     minLevel: 1,
@@ -70,6 +81,7 @@ export const ENEMY_LIST = [
     introText: "大きな遠ぼえで仲間を呼び、群れになって攻めてくる。"
   },
   {
+    id: "yurarin",
     emoji: "👻",
     name: "ユラリン",
     minLevel: 1,
@@ -79,6 +91,7 @@ export const ENEMY_LIST = [
   },
   // レベル2以上で出現
   {
+    id: "tosshin-bo",
     emoji: "🐗",
     name: "トッシンボー",
     minLevel: 2,
@@ -87,6 +100,7 @@ export const ENEMY_LIST = [
     introText: "一度走り出すと止まれず、どんなものにも一直線に突っ込む。"
   },
   {
+    id: "gyororin",
     emoji: "👁️",
     name: "ギョロリン",
     minLevel: 2,
@@ -95,6 +109,7 @@ export const ENEMY_LIST = [
     introText: "大きな目で相手の動きを観察し、弱点をすぐに見つけ出す。"
   },
   {
+    id: "hone-bone",
     emoji: "💀",
     name: "ホネボーン",
     minLevel: 2,
@@ -103,6 +118,7 @@ export const ENEMY_LIST = [
     introText: "体がバラバラになっても、カラカラ音を立てて元に戻る。"
   },
   {
+    id: "spider",
     emoji: "🕷️",
     name: "スパイダー！",
     minLevel: 2,
@@ -112,6 +128,7 @@ export const ENEMY_LIST = [
   },
   // レベル3以上で出現
   {
+    id: "sasoringer",
     emoji: "🦂",
     name: "サソリンガー",
     minLevel: 3,
@@ -120,6 +137,7 @@ export const ENEMY_LIST = [
     introText: "大きなハサミとするどいしっぽを持つ、砂漠の危険な戦士。"
   },
   {
+    id: "robo-star",
     emoji: "🤖",
     name: "ロボスターMk.II",
     minLevel: 3,
@@ -128,6 +146,7 @@ export const ENEMY_LIST = [
     introText: "戦いのデータを分析し、負けるたびに強くなる最新型ロボット。"
   },
   {
+    id: "waruimon",
     emoji: "😈",
     name: "ワルイモン",
     minLevel: 3,
@@ -136,6 +155,7 @@ export const ENEMY_LIST = [
     introText: "いたずらと悪だくみが大好きで、いつも誰かをこまらせている。"
   },
   {
+    id: "mahojii",
     emoji: "🧙",
     name: "まほじい",
     minLevel: 3,
@@ -145,6 +165,7 @@ export const ENEMY_LIST = [
   },
   // レベル4以上で出現
   {
+    id: "invader",
     emoji: "👾",
     name: "インベーダ",
     minLevel: 4,
@@ -153,6 +174,7 @@ export const ENEMY_LIST = [
     introText: "電子の世界から現れ、ピコピコ音とともにこうげきをしかける。"
   },
   {
+    id: "oo-akaoni",
     emoji: "👹",
     name: "大あかおに",
     minLevel: 4,
@@ -161,6 +183,7 @@ export const ENEMY_LIST = [
     introText: "大きな体と怪力がじまんで、怒ると地面までゆれるという。"
   },
   {
+    id: "tengu-star",
     emoji: "👺",
     name: "テングスター",
     minLevel: 4,
@@ -169,6 +192,7 @@ export const ENEMY_LIST = [
     introText: "長い鼻と大きなうちわを使い、強い風を巻き起こす。"
   },
   {
+    id: "vampirian",
     emoji: "🧛",
     name: "バンパイアン",
     minLevel: 4,
@@ -178,6 +202,7 @@ export const ENEMY_LIST = [
   },
   // レベル5以上で出現
   {
+    id: "gaburyu",
     emoji: "🦖",
     name: "ガブリュウ",
     minLevel: 5,
@@ -186,6 +211,7 @@ export const ENEMY_LIST = [
     introText: "大きな口とするどい歯を持ち、目の前のものに何でもかみつく。"
   },
   {
+    id: "alien-z",
     emoji: "👽",
     name: "ウチュウジンZ",
     minLevel: 5,
@@ -195,6 +221,7 @@ export const ENEMY_LIST = [
   },
   // レベルMAX（内部レベル6）のみで出現
   {
+    id: "kurukurun",
     emoji: "🛸",
     name: "クルクルーン",
     minLevel: 6,
@@ -203,6 +230,7 @@ export const ENEMY_LIST = [
     introText: "回転しながら空を飛び、不思議な光で相手をまどわせる。"
   },
   {
+    id: "ryu-king",
     emoji: "🐲",
     name: "リュウキング",
     minLevel: 6,
@@ -217,18 +245,69 @@ export const ENEMY_LIST = [
 // minLevel を持たないのは、総復習モードにレベルの概念が無いため。
 // 「4年のまとめ」「5年のまとめ」「6年のまとめ」では FORMULA_KAMEN が、
 // その完全上位版である「小学校のまとめ」では FORMULA_KAMEN_ACE が固定で出現する。
+// reviewScope: "grade"（学年のまとめ）/ "all"（小学校のまとめ）は、エネミー図鑑の出現条件
+// ヒント（getEnemyUnlockHint()）が、名前の文字列比較ではなく安定したフィールドで
+// 総復習専用エネミーを判定できるようにするための出現種別（運用開始後に追加）。
 export const FORMULA_KAMEN = {
+  id: "formula-kamen",
   emoji: "🦹",
   name: "フォーミュラ仮面",
+  reviewScope: "grade",
   clearText: "まさかここまでやるとは……合格よ！",
   gameOverText: "きちんと復習しないと、おしおきよ！",
   introText: "数式を自在にあやつり、こうげきをしかけてくるナゾの女戦士。"
 };
 
 export const FORMULA_KAMEN_ACE = {
+  id: "formula-kamen-ace",
   emoji: "🦹‍♂️",
   name: "フォーミュラ仮面エース",
+  reviewScope: "all",
   clearText: "すべての問題を完ペキに解ききるとは……まいりました！",
   gameOverText: "すべて計算どおり！これがエースの実力さ！",
   introText: "すべての数式を完ペキに使いこなす、フォーミュラ仮面の最強進化形。"
 };
+
+// プレイヤーが操作中に遭遇しうる、レベルMAXの内部値（js/game.js の heartsForLevel() 等と同じ、
+// 6を「レベルMAX」として扱う仕組みに合わせている）。
+const MAX_INTERNAL_LEVEL = 6;
+
+/**
+ * エネミー図鑑に掲載するエネミー一覧を返します（運用開始後に追加）。
+ * 通常バトルのランダム抽選プール（ENEMY_LIST）に、総復習専用の固定エネミー
+ * （FORMULA_KAMEN・FORMULA_KAMEN_ACE）を加えた、プレイヤーが実際に遭遇しうる
+ * 全エネミーです。図鑑用のエネミー情報を別途手入力せず、この関数が唯一の情報源
+ * （ENEMY_LIST・FORMULA_KAMEN・FORMULA_KAMEN_ACE）からそのまま組み立てます。
+ */
+export function getAllEnemiesForDex() {
+  return [...ENEMY_LIST, FORMULA_KAMEN, FORMULA_KAMEN_ACE];
+}
+
+/**
+ * まだ倒していないエネミーの出現条件を、プレイヤー向けのヒント文にして返します
+ * （エネミー図鑑の未解放カード用。運用開始後に追加）。
+ * 文章をエネミーごとに個別管理せず、実際の出現条件（minLevel・reviewScope）から
+ * 動的に生成するため、抽選条件（js/game.js の pickRandomEnemy()、
+ * js/review-mode.js の pickEnemyForScope()）とヒントが食い違うことがない。
+ * - reviewScope:"all"（小学校のまとめ専用）→「小学校の総復習であらわれるかも？」
+ * - reviewScope:"grade"（学年のまとめ専用）→「学年の総復習であらわれるかも？」
+ * - minLevel が内部レベル6（レベルMAX）以上 →「レベルMAXであらわれるかも？」
+ *   （タイトル画面のレベル表示と同じく、内部値の6をそのまま表示しない）
+ * - それ以外の minLevel →「レベル○以上であらわれるかも？」
+ *   （pickRandomEnemy() が `minLevel <= level` で判定するため、常に「以上」の表現になる）
+ */
+export function getEnemyUnlockHint(enemy) {
+  if (enemy.reviewScope === "all") {
+    return "小学校の総復習であらわれるかも？";
+  }
+  if (enemy.reviewScope === "grade") {
+    return "学年の総復習であらわれるかも？";
+  }
+  if (typeof enemy.minLevel === "number") {
+    if (enemy.minLevel >= MAX_INTERNAL_LEVEL) {
+      return "レベルMAXであらわれるかも？";
+    }
+    return `レベル${enemy.minLevel}以上であらわれるかも？`;
+  }
+  return "まだ正体はナゾ……？";
+}

@@ -17,7 +17,8 @@ import {
   loadSoundSetting,
   saveSoundSetting,
   loadGrade6Term3RotationIndex,
-  saveGrade6Term3RotationIndex
+  saveGrade6Term3RotationIndex,
+  recordDefeatedEnemy
 } from "./storage.js";
 import { filterValidTemplateSets } from "./question-validator.js";
 import { getDecimalPlaces } from "./number-utils.js";
@@ -914,6 +915,11 @@ function finishGame(type) {
   };
 
   if (type === "clear") {
+    // エネミー図鑑の解放は、クリアが確定したこの瞬間だけ行う（運用開始後に追加）。
+    // ゲームオーバー・リタイアからは呼ばない。finishGame("clear") はここでの1回しか
+    // 通らないため、同じエネミーを重複して記録することはない
+    // （recordDefeatedEnemy() 自体も、既に記録済みのIDなら何もしない安全設計）。
+    recordDefeatedEnemy(gameState.enemy.id);
     audio.playEnemyDefeated();
     ui.triggerEnemyDefeatEffect();
     ui.showBattleMessage("エネミーを倒した！", "clear");

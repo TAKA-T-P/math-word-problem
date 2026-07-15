@@ -137,6 +137,13 @@ button {
   z-index: 5;
 }
 
+/* タイトル画面左上のヘルプボタン（運用開始後に追加）。.icon-btn（右上、音声切り替え）と
+   左右対称の位置に置くため、right ではなく left を指定する。 */
+.icon-btn-left {
+  left: 12px;
+  right: auto;
+}
+
 /* ==========================================================================
    タイトル画面
    ========================================================================== */
@@ -1500,6 +1507,199 @@ button {
   gap: 12px;
   color: var(--color-bad);
   font-size: 0.78rem;
+}
+
+/* ==========================================================================
+   ヘルプ画面（ヘルプメニュー／このゲームについて／エネミー図鑑。運用開始後に追加）
+   ========================================================================== */
+
+.help-menu-screen {
+  justify-content: flex-start;
+  align-items: stretch;
+  gap: 20px;
+  padding-top: calc(20px + var(--safe-top));
+}
+
+.help-menu-title {
+  text-align: center;
+  font-size: 1.4rem;
+  color: var(--color-accent);
+  margin: 0;
+}
+
+.help-menu-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 「このゲームについて」「エネミー図鑑」に共通する、見出し＋右上「もどる」の画面。
+   .help-scroll-area だけを縦スクロールさせ、ヘッダーは常に見える位置に固定する。 */
+.help-detail-screen {
+  padding: 12px 16px;
+  padding-top: calc(12px + var(--safe-top));
+}
+
+.help-screen-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-bottom: 10px;
+}
+
+.help-screen-title {
+  font-size: 1.2rem;
+  color: var(--color-accent);
+  margin: 0;
+}
+
+/* もどるボタンにフォーカスリング以外の見た目上の目印（枠線）も付け、
+   タップ領域を44px以上確保する。 */
+.help-back-btn {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--color-panel-strong);
+  color: var(--color-text);
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.help-scroll-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 12px;
+}
+
+.help-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.help-section {
+  background: var(--color-panel);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.help-section h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  color: var(--color-accent);
+}
+
+.help-section p {
+  margin: 0 0 6px;
+  font-size: 0.88rem;
+  line-height: 1.8;
+}
+
+.help-section p:last-child {
+  margin-bottom: 0;
+}
+
+.help-section ul {
+  margin: 0;
+  padding-left: 1.3em;
+  font-size: 0.88rem;
+  line-height: 1.8;
+}
+
+.help-step {
+  margin: 0 0 10px;
+}
+
+.help-step:last-child {
+  margin-bottom: 0;
+}
+
+.help-step h4 {
+  margin: 0 0 3px;
+  font-size: 0.9rem;
+  color: var(--color-text);
+}
+
+.help-step p {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.8;
+  color: var(--color-text-dim);
+}
+
+/* エネミー図鑑の発見数表示（例:「発見したエネミー　8／26」）。 */
+.enemy-dex-progress {
+  flex-shrink: 0;
+  text-align: center;
+  margin: 0 0 10px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--color-text-dim);
+}
+
+/* スマートフォンでは2列、画面がさらに狭い場合は1列に切り替える。
+   横スクロールは発生させない（グリッド自体が親要素の幅に収まる）。 */
+.enemy-dex-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+@media (max-width: 340px) {
+  .enemy-dex-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.enemy-dex-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  min-height: 128px;
+  background: var(--color-panel);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 14px;
+  padding: 12px 8px;
+}
+
+/* 解放済み・未解放の違いを色だけで表現しない（絵文字・名前・説明の中身自体が異なる）ため、
+   ここでの枠線・背景の違いはあくまで補助的な強調。 */
+.enemy-dex-card.defeated {
+  border-color: var(--color-accent);
+  background: rgba(255, 210, 63, 0.12);
+}
+
+.enemy-dex-card.undefeated {
+  opacity: 0.85;
+}
+
+.enemy-dex-emoji {
+  font-size: 2.1rem;
+  line-height: 1.2;
+}
+
+.enemy-dex-name {
+  font-weight: 800;
+  font-size: 0.85rem;
+}
+
+.enemy-dex-card.undefeated .enemy-dex-name {
+  color: var(--color-text-dim);
+}
+
+.enemy-dex-desc {
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--color-text-dim);
+  overflow-wrap: break-word;
 }
 
 /* ==========================================================================

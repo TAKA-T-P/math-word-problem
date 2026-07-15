@@ -6,6 +6,10 @@ const SOUND_SETTING_KEY = "mathWordBattle_soundEnabled";
 const SELECTED_RANGE_KEY = "mathWordBattle_selectedGradeTerm";
 const LAST_MODE_KEY = "mathWordBattle_lastMode";
 const LAST_TRAINING_GRADETERM_KEY = "mathWordBattle_lastTrainingGradeTerm";
+// エネミー図鑑で解放済み（＝倒したことがある）エネミーのID一覧（運用開始後に追加）。
+// js/enemy-list.js の各エネミーが持つ安定したid（名前・絵文字が変わっても壊れない）を
+// JSON配列として保存する。
+const DEFEATED_ENEMY_IDS_KEY = "mathWordBattle_defeatedEnemyIds";
 // 小学6年生3学期（第12段階）の出題グループ（グループA/B/Cの3グループ）で、
 // 端数（余り）をどのグループから受け取るかのローテーション位置。ゲームを1回開始する
 // たびに js/game.js が進め、複数回プレイしたときに毎回同じグループばかりに
@@ -231,4 +235,70 @@ export function saveGrade6Term3RotationIndex(index) {
   } catch (error) {
     // 保存に失敗しても、アプリの動作は継続する
   }
+}
+
+/**
+ * 倒したことがあるエネミーのID一覧を読み込みます（エネミー図鑑の解放状態。運用開始後に追加）。
+ * 保存が無い/localStorageが使えない場合は空配列を返します。保存データが壊れている
+ * （不正なJSON・配列でない・要素が文字列でない）場合も、安全に空配列へフォールバックします
+ * （エネミー図鑑が未解放状態から始まるだけで、ゲーム本体は止まりません）。
+ */
+export function loadDefeatedEnemyIds() {
+  if (!checkLocalStorageAvailable()) {
+    return [];
+  }
+  try {
+    const raw = window.localStorage.getItem(DEFEATED_ENEMY_IDS_KEY);
+    if (raw === null) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.filter((id) => typeof id === "string" && id.length > 0);
+  } catch (error) {
+    return [];
+  }
+}
+
+/**
+ * 倒したことがあるエネミーのID一覧を保存します（運用開始後に追加）。
+ * 重複除去は呼び出し側の recordDefeatedEnemy() が行うため、ここでは配列をそのまま
+ * JSON文字列にして保存するだけです。
+ */
+export function saveDefeatedEnemyIds(ids) {
+  if (!checkLocalStorageAvailable()) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(DEFEATED_ENEMY_IDS_KEY, JSON.stringify(ids));
+  } catch (error) {
+    // 保存に失敗しても、アプリの動作は継続する
+  }
+}
+
+/**
+ * 指定したエネミーIDを倒したことがあるかどうかを判定します
+ * （エネミー図鑑の解放判定用。運用開始後に追加）。
+ */
+export function isEnemyDefeated(enemyId) {
+  return loadDefeatedEnemyIds().includes(enemyId);
+}
+
+/**
+ * エネミーを「倒した」として記録します（運用開始後に追加）。
+ * 通常バトル・総復習の**クリアが確定した瞬間だけ**呼び出してください
+ * （ゲームオーバー・リタイア・結果画面を開いただけ・トレーニングの完了からは呼ばないこと）。
+ * すでに記録済みのIDを渡しても重複追加せず、エラーにもなりません。
+ */
+export function recordDefeatedEnemy(enemyId) {
+  if (typeof enemyId !== "string" || enemyId.length === 0) {
+    return;
+  }
+  const ids = loadDefeatedEnemyIds();
+  if (ids.includes(enemyId)) {
+    return;
+  }
+  saveDefeatedEnemyIds([...ids, enemyId]);
 }

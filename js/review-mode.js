@@ -23,6 +23,7 @@ import { formatValue, computeUnsimplifiedFractionResult } from "./value-utils.js
 import { renderValueHtml } from "./value-renderer.js";
 import { getCategoriesForGrade, getEnabledTrainingCategories } from "../data/category-registry.js";
 import { FORMULA_KAMEN, FORMULA_KAMEN_ACE } from "./enemy-list.js";
+import { recordDefeatedEnemy } from "./storage.js";
 import * as multiStepEngine from "./multi-step-engine.js";
 import * as audio from "./audio.js";
 import * as ui from "./ui.js";
@@ -446,6 +447,9 @@ function finishReview(type) {
   };
 
   if (type === "clear") {
+    // エネミー図鑑の解放は、クリアが確定したこの瞬間だけ行う（運用開始後に追加。
+    // js/game.js の finishGame() と同じ考え方）。ゲームオーバー・リタイアからは呼ばない。
+    recordDefeatedEnemy(reviewState.enemy.id);
     audio.playEnemyDefeated();
     ui.triggerEnemyDefeatEffect();
     ui.showBattleMessage("エネミーを倒した！", "clear");

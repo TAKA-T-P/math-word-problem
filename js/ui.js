@@ -20,7 +20,8 @@ import {
   loadLastMode,
   saveLastMode,
   loadLastTrainingGradeTerm,
-  saveLastTrainingGradeTerm
+  saveLastTrainingGradeTerm,
+  loadDefeatedEnemyIds
 } from "./storage.js";
 import {
   getGradeTermGroups,
@@ -28,7 +29,7 @@ import {
   getCategoriesForGrade,
   getEnabledTrainingCategories
 } from "../data/category-registry.js";
-import { ENEMY_LIST } from "./enemy-list.js";
+import { ENEMY_LIST, getAllEnemiesForDex, getEnemyUnlockHint } from "./enemy-list.js";
 
 const DRAG_THRESHOLD = 6;
 
@@ -91,6 +92,17 @@ function cacheElements() {
   els = {
     appEl: qs("app"),
     soundToggleBtn: qs("sound-toggle-btn"),
+    helpBtn: qs("help-btn"),
+    helpMenuTitle: qs("help-menu-title"),
+    helpAboutBtn: qs("help-about-btn"),
+    helpDexBtn: qs("help-dex-btn"),
+    helpMenuBackBtn: qs("help-menu-back-btn"),
+    aboutTitle: qs("about-title"),
+    aboutBackBtn: qs("about-back-btn"),
+    enemyDexTitle: qs("enemy-dex-title"),
+    enemyDexBackBtn: qs("enemy-dex-back-btn"),
+    enemyDexProgress: qs("enemy-dex-progress"),
+    enemyDexGrid: qs("enemy-dex-grid"),
     modeSelect: qs("mode-select"),
     appSubtitle: qs("app-subtitle"),
     enemyPreviewTrack: qs("enemy-preview-track"),
@@ -1382,6 +1394,135 @@ function hideReviewStartDialog() {
   els.reviewStartDialog.classList.remove("show");
 }
 
+// ============== ヘルプ画面（ヘルプメニュー／このゲームについて／エネミー図鑑。運用開始後に追加） ==============
+//
+// ヘルプは、ゲーム進行（問題・スコア・ハート等）を一切持たない、タイトル画面の補助画面のため、
+// js/app.js の MODES ディスパッチテーブル（バトル/トレーニング/総復習の切り替え）には
+// 追加しない。画面遷移・エネミー図鑑の描画は、すべてこの中だけで完結する。
+
+// 「エネミー図鑑」から「もどる」で戻ったとき、ヘルプメニューのどのボタンにフォーカスを
+// 戻すか（「このゲームについて」か「エネミー図鑑」、直前に押した方）を覚えておく。
+let lastPressedHelpMenuButton = null;
+
+/**
+ * 指定した要素にフォーカスを移す。画面切り替え直後に呼ばれることが多いため、
+ * 描画が落ち着いた次のフレームで実行する（要素が見つからない場合は何もしない）。
+ */
+function focusElement(el) {
+  if (!el) return;
+  window.requestAnimationFrame(() => {
+    try {
+      el.focus({ preventScroll: false });
+    } catch (error) {
+      // フォーカス移動に失敗しても、画面遷移自体は継続する
+    }
+  });
+}
+
+function getActiveScreenId() {
+  const active = document.querySelector(".screen.active-screen");
+  return active ? active.id : null;
+}
+
+function openHelpMenu() {
+  showScreen("help-menu");
+  focusElement(els.helpMenuTitle);
+}
+
+function closeHelpMenuToTitle() {
+  showScreen("title");
+  focusElement(els.helpBtn);
+}
+
+function openAboutScreen() {
+  lastPressedHelpMenuButton = els.helpAboutBtn;
+  showScreen("about");
+  focusElement(els.aboutTitle);
+}
+
+function openEnemyDexScreen() {
+  lastPressedHelpMenuButton = els.helpDexBtn;
+  renderEnemyDex();
+  showScreen("enemy-dex");
+  focusElement(els.enemyDexTitle);
+}
+
+function backToHelpMenuFromDetail() {
+  showScreen("help-menu");
+  focusElement(lastPressedHelpMenuButton || els.helpMenuTitle);
+}
+
+/**
+ * エネミー図鑑のグリッドを描画する。js/enemy-list.js の getAllEnemiesForDex()（唯一の
+ * 情報源）と js/storage.js の loadDefeatedEnemyIds()（解放状態）だけから組み立てるため、
+ * 図鑑専用のエネミー情報をここで別に持つことはない。
+ * 倒したことがあるエネミーは絵文字・名前・キャラ紹介文を、まだ倒していないエネミーは
+ * 「❓」「？？？」と出現条件のヒント（getEnemyUnlockHint()）だけを表示し、本来の絵文字・
+ * 名前・紹介文はDOM上のどこにも（aria-label等にも）出力しない。
+ */
+function renderEnemyDex() {
+  const enemies = getAllEnemiesForDex();
+  const defeatedIds = new Set(loadDefeatedEnemyIds());
+  // 現在存在しないエネミーID（削除・変更されたもの）を発見数に含めないよう、
+  // 保存データ側ではなく、実在するエネミー一覧側を基準に数える。
+  const defeatedCount = enemies.filter((enemy) => defeatedIds.has(enemy.id)).length;
+
+  if (els.enemyDexProgress) {
+    els.enemyDexProgress.textContent = `発見したエネミー　${defeatedCount}／${enemies.length}`;
+  }
+  if (!els.enemyDexGrid) return;
+
+  els.enemyDexGrid.innerHTML = "";
+  for (const enemy of enemies) {
+    const defeated = defeatedIds.has(enemy.id);
+    const card = document.createElement("div");
+    card.className = `enemy-dex-card ${defeated ? "defeated" : "undefeated"}`;
+    // カード全体に aria-label を付け、中の各要素は aria-hidden にすることで、
+    // 読み上げ順（絵文字→名前→紹介文の情報）を1つの文としてまとめて制御する
+    // （未解放時に本来の名前・紹介文が読み上げ内容へ混ざらないようにするため）。
+    card.setAttribute("role", "group");
+
+    if (defeated) {
+      card.setAttribute("aria-label", `${enemy.name}。${enemy.introText}`);
+      card.innerHTML = `
+        <span class="enemy-dex-emoji" aria-hidden="true">${escapeHtml(enemy.emoji)}</span>
+        <span class="enemy-dex-name" aria-hidden="true">${escapeHtml(enemy.name)}</span>
+        <span class="enemy-dex-desc" aria-hidden="true">${escapeHtml(enemy.introText)}</span>
+      `;
+    } else {
+      const hint = getEnemyUnlockHint(enemy);
+      card.setAttribute("aria-label", `まだ倒していないエネミー。${hint}`);
+      card.innerHTML = `
+        <span class="enemy-dex-emoji" aria-hidden="true">❓</span>
+        <span class="enemy-dex-name" aria-hidden="true">？？？</span>
+        <span class="enemy-dex-desc" aria-hidden="true">${escapeHtml(hint)}</span>
+      `;
+    }
+    els.enemyDexGrid.appendChild(card);
+  }
+}
+
+function setupHelpScreens() {
+  els.helpBtn.addEventListener("click", openHelpMenu);
+  els.helpAboutBtn.addEventListener("click", openAboutScreen);
+  els.helpDexBtn.addEventListener("click", openEnemyDexScreen);
+  els.helpMenuBackBtn.addEventListener("click", closeHelpMenuToTitle);
+  els.aboutBackBtn.addEventListener("click", backToHelpMenuFromDetail);
+  els.enemyDexBackBtn.addEventListener("click", backToHelpMenuFromDetail);
+
+  // ヘルプ関連画面が表示されているときだけ、Escキーで1つ前の画面へ戻れるようにする。
+  // ゲーム中（バトル/カウントダウン/結果画面）のキー操作には一切影響しない。
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    const activeId = getActiveScreenId();
+    if (activeId === "screen-about" || activeId === "screen-enemy-dex") {
+      backToHelpMenuFromDetail();
+    } else if (activeId === "screen-help-menu") {
+      closeHelpMenuToTitle();
+    }
+  });
+}
+
 // ============== 結果画面 ==============
 
 const RANGE_LABELS = {
@@ -1635,6 +1776,7 @@ export function initUI(cb) {
   setupRetireDialog();
   setupTrainingStartConfirmDialog();
   setupReviewStartConfirmDialog();
+  setupHelpScreens();
   setupResultScreen();
   setupScoreDelta();
 }

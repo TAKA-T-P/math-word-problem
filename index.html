@@ -15,6 +15,9 @@
   <!-- ============== タイトル・設定画面 ============== -->
   <section id="screen-title" class="screen active-screen">
     <button id="sound-toggle-btn" class="icon-btn" type="button" aria-label="効果音の切り替え">🔊</button>
+    <!-- タイトル画面左上のヘルプボタン（運用開始後に追加）。タイトル画面にしか存在しないため、
+         トレーニング/総復習の選択状態を含め、他画面の状態には一切影響しない。 -->
+    <button id="help-btn" class="icon-btn icon-btn-left" type="button" aria-label="ヘルプを開く">？</button>
 
     <div class="title-block">
       <h1 class="app-title">文章題クエスト！</h1>
@@ -118,6 +121,105 @@
           <button id="review-start-confirm-no" class="dialog-btn" type="button">もどる</button>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- ============== ヘルプメニュー画面（運用開始後に追加） ============== -->
+  <section id="screen-help-menu" class="screen help-menu-screen">
+    <h2 id="help-menu-title" class="help-menu-title" tabindex="-1">ヘルプ</h2>
+    <div class="help-menu-buttons">
+      <button id="help-about-btn" class="primary-btn" type="button">このゲームについて</button>
+      <button id="help-dex-btn" class="primary-btn" type="button">エネミー図鑑</button>
+      <button id="help-menu-back-btn" class="secondary-btn" type="button">もどる</button>
+    </div>
+  </section>
+
+  <!-- ============== 「このゲームについて」画面（運用開始後に追加） ============== -->
+  <section id="screen-about" class="screen help-detail-screen">
+    <header class="help-screen-header">
+      <h2 id="about-title" class="help-screen-title" tabindex="-1">このゲームについて</h2>
+      <button id="about-back-btn" class="help-back-btn" type="button">もどる</button>
+    </header>
+    <div class="help-scroll-area">
+      <div class="help-sections">
+        <section class="help-section">
+          <h3>ゲームの紹介</h3>
+          <p>「さんすう文章題クエスト！」は、文章題を読んで、カードを組み合わせて式をつくり、
+            エネミーとたたかう算数学習ゲームです。</p>
+        </section>
+
+        <section class="help-section">
+          <h3>基本的な遊び方</h3>
+          <div class="help-step">
+            <h4>① 遊ぶモードをえらぼう</h4>
+            <p>「文章題バトル」「トレーニング」「総復習」から、挑戦したいモードをえらびます。</p>
+          </div>
+          <div class="help-step">
+            <h4>② 問題を読もう</h4>
+            <p>何を求める問題なのかを考えながら、文章題をよく読みましょう。</p>
+          </div>
+          <div class="help-step">
+            <h4>③ カードで式をつくろう</h4>
+            <p>数字や計算記号のカードをタップ、またはドラッグして、正しい式をつくります。</p>
+          </div>
+          <div class="help-step">
+            <h4>④ 「＝」ボタンで答えよう</h4>
+            <p>式ができたら、「＝」ボタンを押して答えます。正しい式なら、計算結果が表示されます。</p>
+          </div>
+          <div class="help-step">
+            <h4>⑤ 正解してエネミーをこうげき！</h4>
+            <p>問題に正解すると、エネミーにダメージをあたえます。2つ、3つの式で解く問題では、
+              途中の式をつくって「＝」ボタンを押すと、その答えが次の式で使うカードになります。</p>
+          </div>
+          <div class="help-step">
+            <h4>⑥ エネミーをたおそう！</h4>
+            <p>エネミーのHPを0にするとクリアです。まちがえたり、時間切れになったりすると、
+              ハートが減るモードもあります。</p>
+          </div>
+        </section>
+
+        <section class="help-section">
+          <h3>文章題バトル</h3>
+          <p>学年・学期とレベルをえらんで、エネミーとたたかうモードです。制限時間に気をつけながら
+            問題を解き、エネミーのHPを0にするとクリアです。</p>
+        </section>
+
+        <section class="help-section">
+          <h3>トレーニング</h3>
+          <p>練習したい単元を1つえらび、その単元の問題に5問挑戦するモードです。時間制限やハート、
+            エネミーはいません。まちがえても、正解するまで同じ問題に何度でも挑戦できます。</p>
+        </section>
+
+        <section class="help-section">
+          <h3>総復習</h3>
+          <p>「4年のまとめ」「5年のまとめ」「6年のまとめ」「小学校のまとめ」からえらび、対象と
+            なるすべての単元に1問ずつ挑戦するモードです。時間制限やスコア、ランクはありません。
+            すべての問題を解いて、強敵をたおしましょう。</p>
+        </section>
+
+        <section class="help-section">
+          <h3>操作のヒント</h3>
+          <ul>
+            <li>カードはタップでもドラッグでも動かせます。</li>
+            <li>数字は数字の場所へ、計算記号は記号の場所へ置きましょう。</li>
+            <li>式が完成したら、「＝」ボタンを押して答えましょう。</li>
+            <li>途中式の答えは、次の式で使うカードになります。</li>
+            <li>分からないときは、文章の中の数字と「何を求めるか」をもう一度確認しましょう。</li>
+          </ul>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== エネミー図鑑画面（運用開始後に追加） ============== -->
+  <section id="screen-enemy-dex" class="screen help-detail-screen">
+    <header class="help-screen-header">
+      <h2 id="enemy-dex-title" class="help-screen-title" tabindex="-1">エネミー図鑑</h2>
+      <button id="enemy-dex-back-btn" class="help-back-btn" type="button">もどる</button>
+    </header>
+    <p id="enemy-dex-progress" class="enemy-dex-progress">発見したエネミー　0／0</p>
+    <div class="help-scroll-area">
+      <div id="enemy-dex-grid" class="enemy-dex-grid"></div>
     </div>
   </section>
 
