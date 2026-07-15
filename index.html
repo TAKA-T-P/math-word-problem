@@ -41,8 +41,8 @@
         <button class="range-btn" type="button" data-range="5-2" data-label="小学5年生・2学期">5年2学期</button>
         <button class="range-btn" type="button" data-range="5-3" data-label="小学5年生・3学期">5年3学期</button>
         <button class="range-btn" type="button" data-range="6-1" data-label="小学6年生・1学期">6年1学期</button>
-        <button class="range-btn disabled" type="button" disabled>6年2学期<span class="soon-badge">今後追加</span></button>
-        <button class="range-btn disabled" type="button" disabled>6年3学期<span class="soon-badge">今後追加</span></button>
+        <button class="range-btn" type="button" data-range="6-2" data-label="小学6年生・2学期">6年2学期</button>
+        <button class="range-btn" type="button" data-range="6-3" data-label="小学6年生・3学期">6年3学期</button>
       </div>
 
       <h2 class="setting-heading">レベル</h2>
@@ -121,6 +121,8 @@
       <div id="training-progress" class="training-progress training-only" aria-hidden="true">問題 1／5</div>
       <p id="question-text" class="question-text">もんだいを よみこみちゅう…</p>
       <div id="step-indicator" class="step-indicator" aria-hidden="true"></div>
+      <!-- 比例・反比例の関係表（小学6年生3学期、第12段階で追加）。表を持たない問題では空のまま非表示。 -->
+      <div id="relation-table-container" class="relation-table-wrap" aria-hidden="true"></div>
     </div>
 
     <div class="battle-status-row battle-only">
@@ -168,6 +170,14 @@
   <section id="screen-result" class="screen">
     <div id="result-content" class="result-content">
       <h2 id="result-title" class="result-title">クリア！</h2>
+
+      <!-- そのゲームで登場したエネミーの絵文字・名前と、クリア/ゲームオーバー（リタイア時も同じ）で
+           変わるせりふを表示する。トレーニングモードには敵がいないため battle-only。 -->
+      <div id="result-enemy-comment" class="result-enemy-comment battle-only" aria-hidden="true">
+        <span id="result-enemy-emoji" class="result-enemy-emoji">👹</span>
+        <span id="result-enemy-name" class="result-enemy-name">あかおに</span>
+        <span id="result-enemy-text" class="result-enemy-text"></span>
+      </div>
 
       <div class="result-summary">
         <div class="result-item battle-only"><span class="result-item-label">出題はんい</span><strong id="result-range" class="result-item-value">小学4年生・1学期</strong></div>

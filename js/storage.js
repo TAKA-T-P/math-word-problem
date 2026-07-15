@@ -6,6 +6,11 @@ const SOUND_SETTING_KEY = "mathWordBattle_soundEnabled";
 const SELECTED_RANGE_KEY = "mathWordBattle_selectedGradeTerm";
 const LAST_MODE_KEY = "mathWordBattle_lastMode";
 const LAST_TRAINING_GRADETERM_KEY = "mathWordBattle_lastTrainingGradeTerm";
+// 小学6年生3学期（第12段階）の出題グループ（グループA/B/Cの3グループ）で、
+// 端数（余り）をどのグループから受け取るかのローテーション位置。ゲームを1回開始する
+// たびに js/game.js が進め、複数回プレイしたときに毎回同じグループばかりに
+// 端数が偏らないようにする（question-generator.js の planQuestionSequenceThreeGroup() 参照）。
+const GRADE6_TERM3_ROTATION_KEY = "mathWordBattle_grade6Term3RotationIndex";
 
 let localStorageAvailable = null;
 
@@ -192,6 +197,37 @@ export function saveLastTrainingGradeTerm(gradeTerm) {
   }
   try {
     window.localStorage.setItem(LAST_TRAINING_GRADETERM_KEY, gradeTerm);
+  } catch (error) {
+    // 保存に失敗しても、アプリの動作は継続する
+  }
+}
+
+/**
+ * 小学6年生3学期の出題グループ（グループA/B/C）のローテーション位置を読み込みます
+ * （第12段階で追加）。保存が無い/壊れている/localStorageが使えない場合は 0 を返します。
+ */
+export function loadGrade6Term3RotationIndex() {
+  if (!checkLocalStorageAvailable()) {
+    return 0;
+  }
+  try {
+    const raw = window.localStorage.getItem(GRADE6_TERM3_ROTATION_KEY);
+    const value = Number.parseInt(raw, 10);
+    return Number.isFinite(value) && value >= 0 ? value : 0;
+  } catch (error) {
+    return 0;
+  }
+}
+
+/**
+ * 小学6年生3学期の出題グループのローテーション位置を保存します（第12段階で追加）。
+ */
+export function saveGrade6Term3RotationIndex(index) {
+  if (!checkLocalStorageAvailable()) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(GRADE6_TERM3_ROTATION_KEY, String(index));
   } catch (error) {
     // 保存に失敗しても、アプリの動作は継続する
   }

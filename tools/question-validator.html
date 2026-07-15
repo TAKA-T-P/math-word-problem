@@ -167,6 +167,18 @@
     color: var(--text-dim);
     margin-bottom: 12px;
   }
+  .route-line {
+    margin-bottom: 2px;
+  }
+  .route-id {
+    font-family: "Consolas", "Menlo", monospace;
+    font-size: 0.78rem;
+    color: var(--accent);
+    margin-right: 4px;
+  }
+  .ratio-value {
+    font-weight: 800;
+  }
 </style>
 </head>
 <body>
@@ -209,8 +221,16 @@
     <label>段階
       <select id="filter-questionType">
         <option value="all">すべて</option>
-        <option value="singleStep">1段階のみ</option>
-        <option value="multiStep">2段階のみ</option>
+        <option value="singleStep">単一式のみ</option>
+        <option value="multiStep">複数段階のみ</option>
+      </select>
+    </label>
+    <label>段階数
+      <select id="filter-stepCount">
+        <option value="all">すべて</option>
+        <option value="1">1段階</option>
+        <option value="2">2段階</option>
+        <option value="3">3段階</option>
       </select>
     </label>
     <label>値の種類
@@ -287,7 +307,13 @@
     import { generateQuestionFromTemplate, getContentGroup } from "../js/question-generator.js";
     import { simulateAllRoutesToCompletion } from "../js/multi-step-engine.js";
     import { generateTrainingQuestions, validateTrainingSetGeneration } from "../js/training-mode.js";
-    import { renderValueHtml, renderTextPartsHtml, renderPercentConversionHtml, escapeHtml } from "../js/value-renderer.js";
+    import {
+      renderValueHtml,
+      renderTextPartsHtml,
+      renderPercentConversionHtml,
+      renderRelationTableHtml,
+      escapeHtml
+    } from "../js/value-renderer.js";
     import { isPercentValue } from "../js/value-utils.js";
 
     const SINGLE_STEP_SAMPLE_COUNT = 30;
@@ -310,14 +336,30 @@
     /**
      * 生成された問題の例を、実際のゲームと同じ縦型分数を含むHTML断片として組み立てる。
      * 分数を含む問題文は problem.textParts を使って描画する。
+     * 2〜3段階問題は、登録されているすべての解法ルートを表示する（採点は複数ルートを
+     * 同時に受け付けるため、1本目のルートだけを見ても正解条件を確認できない）。
      */
     function formatExample(problem) {
       const textHtml = problem.textParts ? renderTextPartsHtml(problem.textParts) : escapeHtml(problem.text);
       if (problem.questionType === "multiStep") {
-        const stepsHtml = problem.solutionRoutes[0].steps
-          .map((s, i) => `式${i + 1}: ${renderValueHtml(s.left)}${s.operator}${renderValueHtml(s.right)}=${renderValueHtml(s.result)}`)
-          .join(" / ");
-        return { textHtml, formulaHtml: stepsHtml, resultHtml: renderValueHtml(problem.answer), unit: problem.answerUnit };
+        const routesHtml = problem.solutionRoutes
+          .map((route) => {
+            const stepsHtml = route.steps
+              .map((s, i) => `式${i + 1}: ${renderValueHtml(s.left)}${s.operator}${renderValueHtml(s.right)}=${renderValueHtml(s.result)}`)
+              .join(" / ");
+            return `<div class="route-line"><span class="route-id">[${escapeHtml(route.id)}]</span> ${stepsHtml}</div>`;
+          })
+          .join("");
+        return {
+          textHtml,
+          formulaHtml: routesHtml,
+          resultHtml: renderValueHtml(problem.answer),
+          unit: problem.answerUnit,
+          isMultiRoute: true,
+          routeCount: problem.solutionRoutes.length,
+          // 比例・反比例の関係表（小学6年生3学期、第12段階で追加）。表を持たない問題では null。
+          relationTableHtml: problem.relationTable ? renderRelationTableHtml(problem.relationTable) : null
+        };
       }
       // 「割合・百分率」のように答えそのものが百分率の場合は、小数と百分率の両方を
       // 「0.5→50%」の形式で示す（実際のゲーム画面と同じ扱い）。
@@ -352,6 +394,7 @@
           difficulty: template ? template.difficulty : "-",
           questionType: template ? template.questionType : "-",
           generatorType: template ? template.generatorType : "-",
+          stepCount: template ? (template.questionType === "multiStep" ? template.totalSteps : 1) : "-",
           contentGroup: template ? getContentGroup(template) : "-",
           valueType: classifyValueType(template),
           sampleCount,
@@ -404,8 +447,10 @@
       const exampleHtml = row.example
         ? `<div class="template-example">
              <div>例: ${row.example.textHtml}</div>
-             <div>正解式: ${row.example.formulaHtml}${row.questionType === "multiStep" ? "" : ` = ${row.example.resultHtml}${escapeHtml(row.example.unit || "")}`}</div>
-             ${row.questionType === "multiStep" ? `<div>答え: ${row.example.resultHtml}${escapeHtml(row.example.unit || "")}</div>` : ""}
+             ${row.example.relationTableHtml ? `<div>関係表:</div>${row.example.relationTableHtml}` : ""}
+             ${row.example.isMultiRoute
+               ? `<div>正解ルート（全${row.example.routeCount}本）:</div>${row.example.formulaHtml}<div>答え: ${row.example.resultHtml}${escapeHtml(row.example.unit || "")}</div>`
+               : `<div>正解式: ${row.example.formulaHtml} = ${row.example.resultHtml}${escapeHtml(row.example.unit || "")}</div>`}
            </div>`
         : "";
 
@@ -423,7 +468,7 @@
         <div class="template-meta">
           gradeTerm: ${escapeHtml(row.gradeTerm)} / difficulty: ${escapeHtml(row.difficulty)} /
           questionType: ${escapeHtml(row.questionType)} / generatorType: ${escapeHtml(row.generatorType)} /
-          値の種類: ${VALUE_TYPE_LABELS[row.valueType] || row.valueType}
+          段階数: ${row.stepCount} / 値の種類: ${VALUE_TYPE_LABELS[row.valueType] || row.valueType}
         </div>
         <div class="template-sample">生成テスト: ${row.sampleSuccessCount} / ${row.sampleCount} 回成功</div>
         ${exampleHtml}
@@ -460,6 +505,7 @@
       const gradeTerm = document.getElementById("filter-gradeTerm").value;
       const category = document.getElementById("filter-category").value;
       const questionType = document.getElementById("filter-questionType").value;
+      const stepCount = document.getElementById("filter-stepCount").value;
       const valueType = document.getElementById("filter-valueType").value;
       const validity = document.getElementById("filter-validity").value;
 
@@ -467,6 +513,7 @@
         if (gradeTerm !== "all" && row.gradeTerm !== gradeTerm) return false;
         if (category !== "all" && row.category !== category) return false;
         if (questionType !== "all" && row.questionType !== questionType) return false;
+        if (stepCount !== "all" && String(row.stepCount) !== stepCount) return false;
         if (valueType !== "all" && row.valueType !== valueType) return false;
         if (validity === "ok" && !row.overallValid) return false;
         if (validity === "error" && row.overallValid) return false;
@@ -501,7 +548,7 @@
     }
 
     document.getElementById("rerun-btn").addEventListener("click", render);
-    for (const id of ["filter-gradeTerm", "filter-category", "filter-questionType", "filter-valueType", "filter-validity"]) {
+    for (const id of ["filter-gradeTerm", "filter-category", "filter-questionType", "filter-stepCount", "filter-valueType", "filter-validity"]) {
       document.getElementById(id).addEventListener("change", renderList);
     }
     render();
@@ -615,13 +662,17 @@
           <span class="template-category">${escapeHtml(problem.category)}</span>
         </div>
         <div class="template-meta">
-          questionType: ${escapeHtml(problem.questionType)} / 値の種類: ${escapeHtml(classifyValueType(problem.template))} /
+          questionType: ${escapeHtml(problem.questionType)} /
+          段階数: ${problem.questionType === "multiStep" ? (problem.totalSteps || (problem.solutionRoutes && problem.solutionRoutes[0].steps.length) || "-") : 1} /
+          値の種類: ${escapeHtml(classifyValueType(problem.template))} /
           選択肢カード数: ${problem.choices.length}
         </div>
         <div class="template-example">
           <div>問題文: ${example.textHtml}</div>
-          <div>正解式: ${example.formulaHtml}${problem.questionType === "multiStep" ? "" : ` = ${example.resultHtml}${escapeHtml(example.unit || "")}`}</div>
-          ${problem.questionType === "multiStep" ? `<div>答え: ${example.resultHtml}${escapeHtml(example.unit || "")}</div>` : ""}
+          ${example.relationTableHtml ? `<div>関係表:</div>${example.relationTableHtml}` : ""}
+          ${example.isMultiRoute
+            ? `<div>正解ルート:</div>${example.formulaHtml}<div>答え: ${example.resultHtml}${escapeHtml(example.unit || "")}</div>`
+            : `<div>正解式: ${example.formulaHtml} = ${example.resultHtml}${escapeHtml(example.unit || "")}</div>`}
         </div>
       `;
       return card;

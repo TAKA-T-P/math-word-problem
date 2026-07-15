@@ -27,6 +27,7 @@
 import { matchesStep } from "./answer-checker.js";
 import { buildChoiceCards } from "./question-generator.js";
 import { renderValueHtml } from "./value-renderer.js";
+import { areValuesEqual, valueKey } from "./value-utils.js";
 
 const DEFAULT_TOTAL_STEPS = 2;
 
@@ -59,30 +60,53 @@ function getActiveStepDefs(problem, state) {
  * 複数の解法ルートが候補として残っている場合、それぞれのルートが必要とする
  * 数値・演算記号をすべて選択肢に含めます（どちらの式で答えても正解にできるように）。
  * 中間結果（前のステップまでに確定した値）は "intermediate" として区別します。
+ *
+ * 1つのステップの left と right がたまたま同じ値になる場合（例:
+ * 「比を使った数量」で単位量と比の項がどちらも6になり、正解式が6×6になる場合）は、
+ * カードが2枚必要です。以前はここを値そのものをキーにした Map で1枚に集約してしまい、
+ * 「6のカードが1枚しか出現せず解答不可能」というバグがありました（第11段階で発見・修正）。
+ * そのため、各ルートのステップごとに「値ごとに何回登場するか」を数え、
+ * 複数ルートが候補に残っている場合は、その最大値（＝どのルートを選んでも組み立てられる枚数）
+ * を採用します。値の同一判定は分数・百分率・比でも正しく行えるよう valueKey() を使います。
  */
 function buildChoicesForActiveStep(problem, state) {
   const activeStepDefs = getActiveStepDefs(problem, state);
-  const intermediateValues = new Set(Object.values(state.intermediateResults));
+  const intermediateKeys = new Set(Object.values(state.intermediateResults).map((v) => valueKey(v)));
 
-  const numberMap = new Map();
   const operators = [];
   const stepResults = [];
+  const maxCountsByKey = new Map();
 
   for (const { step } of activeStepDefs) {
     if (!operators.includes(step.operator)) {
       operators.push(step.operator);
     }
     stepResults.push(step.result);
+
+    const routeCounts = new Map();
     for (const value of [step.left, step.right]) {
-      const isIntermediate = intermediateValues.has(value);
-      const existing = numberMap.get(value);
-      if (!existing || (isIntermediate && existing.source !== "intermediate")) {
-        numberMap.set(value, { value, source: isIntermediate ? "intermediate" : "variable" });
+      const key = valueKey(value);
+      const isIntermediate = intermediateKeys.has(key);
+      const entry = routeCounts.get(key) || { value, source: isIntermediate ? "intermediate" : "variable", count: 0 };
+      entry.count += 1;
+      routeCounts.set(key, entry);
+    }
+
+    for (const [key, entry] of routeCounts) {
+      const existing = maxCountsByKey.get(key);
+      if (!existing || entry.count > existing.count) {
+        maxCountsByKey.set(key, entry);
       }
     }
   }
 
-  const realNumbers = Array.from(numberMap.values());
+  const realNumbers = [];
+  for (const { value, source, count } of maxCountsByKey.values()) {
+    for (let i = 0; i < count; i++) {
+      realNumbers.push({ value, source });
+    }
+  }
+
   const finalAnswer = problem.answer !== undefined ? problem.answer : problem.result;
   return buildChoiceCards(realNumbers, operators, [...stepResults, finalAnswer]);
 }
@@ -217,6 +241,11 @@ export function buildHistoryEntry(problem) {
     questionType: "multiStep",
     category: problem.category,
     text: problem.text,
+    // 分数・比の値が問題文に直接登場するテンプレート（小学6年生2学期、第11段階で追加）は
+    // textParts を持つ。1段階問題の履歴と同じく、ui.js が縦型分数・比として描画する。
+    textParts: problem.textParts || null,
+    // 比例・反比例の関係表（小学6年生3学期、第12段階で追加）。表を持たない問題では null。
+    relationTable: problem.relationTable || null,
     answerUnit: problem.answerUnit,
     finalAnswer: problem.answer !== undefined ? problem.answer : problem.result,
     steps,
@@ -281,11 +310,17 @@ export function simulateAllRoutesToCompletion(problem) {
       }
       const numberValues = currentChoices.filter((c) => c.type === "number").map((c) => c.value);
       const operatorValues = currentChoices.filter((c) => c.type === "operator").map((c) => c.value);
-      if (!numberValues.includes(step.left)) {
-        errors.push(`[${routeId}] ステップ${stepIndex + 1}: 必要な数値カードがありません: ${step.left}`);
+      // 分数の値は、複数ルートが共有する同じ値でも、ルートごとに別々のオブジェクトとして
+      // 計算されるため、参照が一致するとは限らない（Array.includes() は参照比較のため、
+      // 値としては等しいカードがあるのに「無い」と誤判定してしまう）。実際のゲーム進行での
+      // 正誤判定（answer-checker.js の matchesStep）はもともと値ベースの比較のため、この問題は
+      // このシミュレーション関数だけの誤判定だった（第11段階で発見・修正。「比を使った数量」の
+      // カード不足バグの調査中に見つかった）。
+      if (!numberValues.some((value) => areValuesEqual(value, step.left))) {
+        errors.push(`[${routeId}] ステップ${stepIndex + 1}: 必要な数値カードがありません: ${JSON.stringify(step.left)}`);
       }
-      if (!numberValues.includes(step.right)) {
-        errors.push(`[${routeId}] ステップ${stepIndex + 1}: 必要な数値カードがありません: ${step.right}`);
+      if (!numberValues.some((value) => areValuesEqual(value, step.right))) {
+        errors.push(`[${routeId}] ステップ${stepIndex + 1}: 必要な数値カードがありません: ${JSON.stringify(step.right)}`);
       }
       if (!operatorValues.includes(step.operator)) {
         errors.push(`[${routeId}] ステップ${stepIndex + 1}: 必要な演算記号カードがありません: ${step.operator}`);
@@ -307,8 +342,13 @@ export function simulateAllRoutesToCompletion(problem) {
       if (stepIndex === route.steps.length - 1 && !outcome.isFinal) {
         errors.push(`[${routeId}] 最終ステップのはずが isFinal になりませんでした`);
       }
-      if (outcome.isFinal && outcome.stepResult !== (problem.answer !== undefined ? problem.answer : problem.result)) {
-        errors.push(`[${routeId}] 最終結果が答えと一致しません: ${outcome.stepResult}`);
+      // 分数・百分率の値はステップごとに新しいオブジェクトとして計算されるため、
+      // 参照が一致するとは限らない（値として等しくても !== は true になる）。
+      // 型を意識せず正しく比較できる areValuesEqual() を使う（第11段階で修正。
+      // 分数の速さのように、複数ルートの最終結果が分数になるケースで、
+      // 以前は誤って「一致しない」と判定されるバグがあった）。
+      if (outcome.isFinal && !areValuesEqual(outcome.stepResult, finalAnswer)) {
+        errors.push(`[${routeId}] 最終結果が答えと一致しません: ${JSON.stringify(outcome.stepResult)} !== ${JSON.stringify(finalAnswer)}`);
       }
     }
   }

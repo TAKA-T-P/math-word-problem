@@ -37,6 +37,8 @@ import {
   fractionToNumber
 } from "./fraction-utils.js";
 import { normalizePercent, percentToRatio, formatPercent, arePercentValuesEqual } from "./percentage-utils.js";
+import { formatRatio, isValidRatio } from "./ratio-utils.js";
+import { formatScale, isValidScale, areScalesEqual } from "./scale-utils.js";
 
 /**
  * 値が分数オブジェクトかどうかを判定します。
@@ -57,6 +59,23 @@ export function isPercentValue(value) {
  */
 export function isNumberValue(value) {
   return typeof value === "number";
+}
+
+/**
+ * 値が比オブジェクトかどうかを判定します（小学6年生2学期、第11段階で追加）。
+ * 比は計算式（カード・解答欄）には登場せず、問題文・メタデータ・履歴・デバッグ表示専用の値です。
+ */
+export function isRatioValue(value) {
+  return !!value && typeof value === "object" && value.type === "ratio";
+}
+
+/**
+ * 値が縮尺オブジェクトかどうかを判定します（小学6年生3学期、第12段階で追加）。
+ * 縮尺は比と同じく、計算式（カード・解答欄）には登場せず、問題文・メタデータ・
+ * 履歴・デバッグ表示専用の値です。
+ */
+export function isScaleValue(value) {
+  return !!value && typeof value === "object" && value.type === "scale";
 }
 
 /**
@@ -93,6 +112,8 @@ export function normalizeValue(value) {
 export function getValueType(value) {
   if (isFractionValue(value)) return "fraction";
   if (isPercentValue(value)) return "percent";
+  if (isRatioValue(value)) return "ratio";
+  if (isScaleValue(value)) return "scale";
   return "number";
 }
 
@@ -262,6 +283,15 @@ export function areValuesEqual(a, b) {
   if (isPercentValue(a) || isPercentValue(b)) {
     return arePercentValuesEqual(a, b);
   }
+  // 縮尺・比は式の計算には使わない表示専用の値だが、「縮尺を求める」（第12段階で追加）では
+  // 縮尺そのものが最終的な答えになるため、areValuesEqual() でも正しく比較できる必要がある
+  // （分子は常に1のため、分母どうしの比較で十分）。
+  if (isScaleValue(a) || isScaleValue(b)) {
+    return areScalesEqual(a, b);
+  }
+  if (isRatioValue(a) || isRatioValue(b)) {
+    return isValidRatio(a) && isValidRatio(b) && a.antecedent === b.antecedent && a.consequent === b.consequent;
+  }
   if (isFractionValue(a) && isFractionValue(b)) {
     return areFractionsEqual(a, b);
   }
@@ -289,6 +319,12 @@ export function formatValue(value, { simplify = true } = {}) {
   }
   if (isPercentValue(value)) {
     return formatPercent(value);
+  }
+  if (isRatioValue(value)) {
+    return formatRatio(value);
+  }
+  if (isScaleValue(value)) {
+    return formatScale(value);
   }
   return formatNumber(value);
 }
@@ -327,6 +363,12 @@ export function valueKey(value) {
   }
   if (isPercentValue(value)) {
     return `percent:${normalizeNumber(value.value)}`;
+  }
+  if (isRatioValue(value)) {
+    return `ratio:${value.antecedent}:${value.consequent}`;
+  }
+  if (isScaleValue(value)) {
+    return `scale:${value.numerator}:${value.denominator}`;
   }
   if (typeof value === "number") {
     return `number:${normalizeNumber(value)}`;
@@ -379,5 +421,25 @@ export function isZeroValue(value) {
   return value === 0;
 }
 
+/**
+ * left ÷ right を、必ず正確な分数として計算します（小学6年生2学期、第11段階で追加）。
+ * 通常の calculateValues() の整数・小数どうしのわり算（divideNumbers）は「割り切れる場合だけ
+ * 商を返す」という安全設計のため、`20÷60` のような割り切れない組み合わせは null になり、
+ * `30÷60` のような割り切れる組み合わせも小数（0.5）になってしまいます。分数の速さ
+ * （時間の単位変換）・分数の割合（比べる量÷もとにする量）のように、**割り切れるかどうかに
+ * 関わらず必ず分数として表示したい**場面のために、整数・分数のどちらでも受け付けて
+ * 必ず分数を返す（0でわる場合だけ null を返す）この関数を用意しています。
+ * `js/question-generator.js` の `resultType:"fraction"` 指定時に、通常の計算の代わりに使います。
+ */
+export function divideValuesAsFraction(left, right) {
+  const leftFraction = toFractionValue(left);
+  const rightFraction = toFractionValue(right);
+  if (!leftFraction || !rightFraction) return null;
+  const divided = divideFractions(leftFraction, rightFraction);
+  return divided === null ? null : normalizeValue(divided);
+}
+
 export { isValidFraction };
 export { isValidPercent } from "./percentage-utils.js";
+export { isValidRatio, formatRatio } from "./ratio-utils.js";
+export { isValidScale, formatScale, areScalesEqual } from "./scale-utils.js";

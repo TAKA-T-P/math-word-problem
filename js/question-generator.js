@@ -15,9 +15,21 @@ import { safeCalculate } from "./answer-checker.js";
 import { validateGeneratedQuestion } from "./question-validator.js";
 import { initializeMultiStepQuestion } from "./multi-step-engine.js";
 import { normalizeNumber, multiplyDecimal } from "./number-utils.js";
-import { valueKey, isFractionValue, isPercentValue, formatValue, calculateValues } from "./value-utils.js";
-import { fractionToNumber } from "./fraction-utils.js";
+import {
+  valueKey,
+  isFractionValue,
+  isPercentValue,
+  isRatioValue,
+  isScaleValue,
+  formatValue,
+  calculateValues,
+  divideValuesAsFraction
+} from "./value-utils.js";
+import { fractionToNumber, gcd } from "./fraction-utils.js";
 import { percentToRatio, ratioToPercent, formatPercent } from "./percentage-utils.js";
+import { formatRatio, createRatio } from "./ratio-utils.js";
+import { formatScale, createScale } from "./scale-utils.js";
+import { convertLength } from "./unit-utils.js";
 
 export const OPERATORS = ["+", "-", "×", "÷"];
 
@@ -309,25 +321,280 @@ function generatePercentageValues(variables, quantityRelation) {
 }
 
 /**
+ * 「aKey × bKey = productKey」という関係を持つ2つの値（分数どうし、または整数×分数）を
+ * 独立に生成し、積を value-utils.js の calculateValues() で計算する、分数版の汎用生成ロジックです
+ * （小学6年生1学期、第10段階で追加。単位量あたり・分数版と共有するために汎用化）。
+ * 小数版の generateProportionalValues() と同じ考え方ですが、掛け算に multiplyDecimal ではなく
+ * calculateValues() を使う点だけが異なります（整数×分数・分数×分数のどちらも正しく計算できるため、
+ * 分数専用の掛け算処理をここに個別に書く必要はありません）。答えが整数になる場合（例: 6×2/3＝4）は
+ * calculateValues 自身が自動的に整数へ約分・変換します。分数倍（base×multiplier=compared）と
+ * 単位量あたり・分数版（unitCount×perUnit=total）は、どちらも「2つの既知の値から積にあたる
+ * 3つ目の値を求める」という同じ構造を持つため、この1つの関数を共有します。
+ */
+function generateFractionProportionalValues(variables, aKey, bKey, productKey) {
+  const aValue = pickValueForRange(variables[aKey]);
+  const bValue = pickValueForRange(variables[bKey]);
+  const productValue = calculateValues(aValue, "×", bValue);
+  return { [aKey]: aValue, [bKey]: bValue, [productKey]: productValue };
+}
+
+/**
  * 分数倍（比べる量・もとの量）専用の生成ルール（小学6年生1学期、第10段階で追加）。
  * quantityRelation（baseKey・comparedKey・multiplierKey）が指す変数名を使って、
- * もとにする量(base、整数)・分数倍(multiplier、分数)を独立に生成し、
- * 比べる量(compared) = base × multiplier を計算します。base×multiplier の計算は
- * 小数倍のときの multiplyDecimal ではなく、value-utils.js の calculateValues() に委譲します
- * （左が整数・右が分数の組み合わせは value-utils.js が「整数×分数」として正確に計算するため、
- * 分数専用の掛け算処理をここで書く必要はありません）。答えが整数になる場合（例: 6×2/3＝4）は
- * calculateValues 自身が自動的に整数へ約分・変換します。「何が未知か」は solutionRoutes 側が
- * 決めるため、比べる量・もとの量のどちらのカテゴリでもこの1つの関数を共有できます。
+ * generateFractionProportionalValues() に委譲します（base×multiplier=compared）。
+ * 「何が未知か」は solutionRoutes 側が決めるため、比べる量・もとの量のどちらのカテゴリでも
+ * この1つの関数を共有できます。
  */
 function generateFractionMultiplicativeComparisonValues(variables, quantityRelation) {
   if (!quantityRelation) {
     throw new Error("quantityRelation が指定されていないテンプレートです（分数倍には必須です）。");
   }
   const { baseKey, comparedKey, multiplierKey } = quantityRelation;
-  const baseValue = pickValueForRange(variables[baseKey]);
-  const multiplierValue = pickValueForRange(variables[multiplierKey]);
-  const comparedValue = calculateValues(baseValue, "×", multiplierValue);
-  return { [baseKey]: baseValue, [multiplierKey]: multiplierValue, [comparedKey]: comparedValue };
+  return generateFractionProportionalValues(variables, baseKey, multiplierKey, comparedKey);
+}
+
+/**
+ * 単位量あたり・分数版専用の生成ルール（小学6年生1学期へ後日追加）。
+ * quantityRelation（unitCountKey・perUnitKey・totalKey）が指す変数名を使って、
+ * generateFractionProportionalValues() に委譲します（unitCount×perUnit=total）。
+ * 小数版の単位量あたり（5年生2学期）と数量関係としては同じ構造ですが、
+ * 単位数・1単位あたりの量のどちらも分数になりうる点が異なるため、専用の generatorType・
+ * quantityRelation.type（"fraction-unit-rate"）を用意しています。
+ */
+function generateFractionUnitRateValues(variables, quantityRelation) {
+  if (!quantityRelation) {
+    throw new Error("quantityRelation が指定されていないテンプレートです（単位量あたり・分数版には必須です）。");
+  }
+  const { unitCountKey, perUnitKey, totalKey } = quantityRelation;
+  return generateFractionProportionalValues(variables, unitCountKey, perUnitKey, totalKey);
+}
+
+/**
+ * 分数割合（比べる量・割合・もとにする量）専用の生成ルール（小学6年生2学期、第11段階で追加）。
+ * quantityRelation（baseKey・comparedKey・rateKey）が指す変数名を使って、
+ * generateFractionProportionalValues() に委譲します（base×rate=compared）。
+ * 小学5年生3学期の割合（百分率）と数量関係としては同じ構造ですが、割合を百分率ではなく
+ * 分数として扱う点が異なります（rate は `{type:"fraction",...}` の変数）。
+ * 「割合を求める」問題（unknown:"rate"）は、solutionRoutes 側に resultType:"fraction" を
+ * 指定することで、12÷20のような「小数としては割り切れる」組み合わせも必ず分数（3/5）として
+ * 表示されます（詳しくは computeStepResult() を参照）。
+ */
+function generateFractionRateValues(variables, quantityRelation) {
+  if (!quantityRelation) {
+    throw new Error("quantityRelation が指定されていないテンプレートです（分数割合には必須です）。");
+  }
+  const { baseKey, comparedKey, rateKey } = quantityRelation;
+  return generateFractionProportionalValues(variables, baseKey, rateKey, comparedKey);
+}
+
+/**
+ * 比を使った数量・比例配分専用の、比の前項・後項を選ぶ共通ヘルパー（第11段階で追加）。
+ * 比の左右の数字が「互いに素」（最大公約数が1）で、かつどちらも1ではない整数になるよう、
+ * 条件を満たすまで variables の範囲から選び直します（わる数・商を先に決めてから逆算する
+ * exactDivision と同じ「条件を満たすまでランダムに選び直す」設計です）。
+ * 1を除外するのは、比の一方が1だと「比を使う」問題としての手応えが薄れてしまうため。
+ * 互いに素であることを求めるのは、6：4のような約分できる比を避け、教科書どおりの
+ * 「これ以上簡単にできない比」だけを出題するためです。
+ */
+function pickCoprimeRatioTerms(firstRange, secondRange) {
+  const MAX_ATTEMPTS = 500;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const first = pickValueForRange(firstRange);
+    const second = pickValueForRange(secondRange);
+    if (first !== 1 && second !== 1 && gcd(first, second) === 1) {
+      return [first, second];
+    }
+  }
+  throw new Error("互いに素な比の組み合わせが見つかりませんでした（variables の範囲を見直してください）。");
+}
+
+/**
+ * 比を使った数量専用の生成ルール（小学6年生2学期、第11段階で追加）。
+ * quantityRelation（firstRatioKey・secondRatioKey・firstAmountKey・secondAmountKey）が指す
+ * 変数名を使って、比の前項・後項（firstRatio・secondRatio）と、内部でだけ使う
+ * 「1あたりの量」（variables.unitAmount。問題文にもカードにも出てこない生成専用の値）を
+ * 独立に生成し、firstAmount＝unitAmount×firstRatio、secondAmount＝unitAmount×secondRatio を
+ * 計算します。こうして両方の数量を「割り切れる」形で生成するのは、既存の exactDivision
+ * （わる数・商を先に決めてからわられる数を逆算する）と同じ考え方です。
+ * どちらが「既知」でどちらが「未知」かは、テンプレートごとの textParts・solutionRoutes 側が
+ * 決めるため、この関数は常に両方の数量を生成するだけで、正・逆どちらの向きのテンプレートでも
+ * 使えます。ratioValue（問題文に表示する比そのもの）もここで一緒に作ります。
+ */
+function generateRatioApplicationValues(variables, quantityRelation) {
+  if (!quantityRelation) {
+    throw new Error("quantityRelation が指定されていないテンプレートです（比を使った数量には必須です）。");
+  }
+  const { firstRatioKey, secondRatioKey, firstAmountKey, secondAmountKey } = quantityRelation;
+  const [firstRatioValue, secondRatioValue] = pickCoprimeRatioTerms(variables[firstRatioKey], variables[secondRatioKey]);
+  const unitAmount = pickValueForRange(variables.unitAmount);
+  const firstAmountValue = normalizeNumber(multiplyDecimal(unitAmount, firstRatioValue));
+  const secondAmountValue = normalizeNumber(multiplyDecimal(unitAmount, secondRatioValue));
+  return {
+    [firstRatioKey]: firstRatioValue,
+    [secondRatioKey]: secondRatioValue,
+    [firstAmountKey]: firstAmountValue,
+    [secondAmountKey]: secondAmountValue,
+    ratioValue: createRatio(firstRatioValue, secondRatioValue)
+  };
+}
+
+/**
+ * 比例配分専用の生成ルール（小学6年生2学期、第11段階で追加）。
+ * quantityRelation（firstRatioKey・secondRatioKey・totalKey）が指す変数名を使って、
+ * 比の前項・後項（firstRatio・secondRatio）と、内部でだけ使う「1あたりの量」
+ * （variables.unitAmount）を独立に生成し、全体量（totalKey）＝1あたりの量×比の和 を
+ * 計算します。「全体量÷比の和」が必ず割り切れる（＝式2の答えが整数になる）よう、
+ * ratioApplication と同じ「1あたりの量を先に決めてから全体量を逆算する」設計にしています。
+ */
+function generateProportionalAllocationValues(variables, quantityRelation) {
+  if (!quantityRelation) {
+    throw new Error("quantityRelation が指定されていないテンプレートです（比例配分には必須です）。");
+  }
+  const { firstRatioKey, secondRatioKey, totalKey } = quantityRelation;
+  const [firstRatioValue, secondRatioValue] = pickCoprimeRatioTerms(variables[firstRatioKey], variables[secondRatioKey]);
+  const unitAmount = pickValueForRange(variables.unitAmount);
+  const ratioSum = firstRatioValue + secondRatioValue;
+  const totalValue = normalizeNumber(multiplyDecimal(unitAmount, ratioSum));
+  return {
+    [firstRatioKey]: firstRatioValue,
+    [secondRatioKey]: secondRatioValue,
+    [totalKey]: totalValue,
+    ratioValue: createRatio(firstRatioValue, secondRatioValue)
+  };
+}
+
+/**
+ * 分数の時間専用の生成ルール（小学6年生2学期、第11段階で追加）。
+ * 「分数の速さ」「分数の道のり」は distance・speed を独立に生成する standard のままで
+ * よいが、「分数の時間」だけは答え（分）が必ず整数になってほしいという要望があったため、
+ * 専用の生成ルールに切り替えている。
+ * 道のり（distance）は既存どおり独立に生成し、答えになる「分」（variables.answerMinutes、
+ * きりのよい分の一覧から選ぶ）を先に決めてから、速さ（speed）を
+ * 「道のり ÷（分÷60）」として逆算する（わり算専用の生成ルールと同じ、
+ * 先に商にあたる値を決めてから残りを逆算する考え方）。分数のわり算は必ず正確に計算できる
+ * ため（割り切れることの事前保証が不要。第10段階の設計と同じ）、この逆算で得られる速さが
+ * どんな分子・分母になっても、2つの解法ルートのどちらで計算しても最終的な答え（分）は
+ * 常に variables.answerMinutes で選んだ整数と厳密に一致する。
+ */
+function generateFractionTimeWithMinuteConversionValues(variables, quantityRelation) {
+  if (!quantityRelation) {
+    throw new Error("quantityRelation が指定されていないテンプレートです（分数の時間には必須です）。");
+  }
+  const { distanceKey, speedKey } = quantityRelation;
+  const distanceValue = pickValueForRange(variables[distanceKey]);
+  const minutesCandidates = variables.answerMinutes.values;
+  const minutesValue = minutesCandidates[pickInt(0, minutesCandidates.length - 1)];
+  const hoursAsFraction = { type: "fraction", numerator: minutesValue, denominator: 60 };
+  const speedValue = calculateValues(distanceValue, "÷", hoursAsFraction);
+  return { [distanceKey]: distanceValue, [speedKey]: speedValue };
+}
+
+/**
+ * 2つの範囲から、互いに異なる値の組を選ぶ共通ヘルパー（小学6年生3学期、第12段階で追加）。
+ * 比例・対応する量の knownX/targetX、反比例・対応する量の knownX/targetX が、
+ * たまたま同じ値になってしまう（＝「変化しない対応」になり問題として不自然）ことを防ぎます。
+ * pickCoprimeRatioTerms() と同じ「条件を満たすまで選び直す」設計です。
+ */
+function pickDistinctValuePair(rangeA, rangeB) {
+  const MAX_ATTEMPTS = 200;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const a = pickValueForRange(rangeA);
+    const b = pickValueForRange(rangeB);
+    if (a !== b) {
+      return [a, b];
+    }
+  }
+  throw new Error("異なる値の組み合わせが見つかりませんでした（variables の範囲を見直してください）。");
+}
+
+/**
+ * 比例・対応する量専用の生成ルール（小学6年生3学期、第12段階で追加）。
+ * quantityRelation（knownXKey・knownYKey・targetXKey・targetYKey・constantKey）が指す
+ * 変数名を使って、比例定数（constantKey。問題文にもカードにも出てこない生成専用の値）を
+ * 先に決め、knownX・targetX から knownY＝定数×knownX、targetY＝定数×targetX を計算します
+ * （「わる数・商を先に決めてからわられる数を逆算する」exactDivision と同じ考え方で、
+ * 比例定数×knownX＝knownY の除算（式1の正解ルートA）が必ず割り切れることを保証します）。
+ * 比例定数そのものは、式1で児童が求める中間結果であり、最終的な答えとしては出題しません。
+ */
+function generateDirectProportionValues(variables, quantityRelation) {
+  if (!quantityRelation) {
+    throw new Error("quantityRelation が指定されていないテンプレートです（比例・対応する量には必須です）。");
+  }
+  const { knownXKey, knownYKey, targetXKey, targetYKey, constantKey } = quantityRelation;
+  const constant = pickValueForRange(variables[constantKey]);
+  const [knownX, targetX] = pickDistinctValuePair(variables[knownXKey], variables[targetXKey]);
+  const knownY = normalizeNumber(multiplyDecimal(constant, knownX));
+  const targetY = normalizeNumber(multiplyDecimal(constant, targetX));
+  return {
+    [knownXKey]: knownX,
+    [knownYKey]: knownY,
+    [targetXKey]: targetX,
+    [targetYKey]: targetY,
+    [constantKey]: constant
+  };
+}
+
+/**
+ * 反比例・対応する量専用の生成ルール（小学6年生3学期、第12段階で追加）。
+ * quantityRelation（knownXKey・knownYKey・targetXKey・targetYKey・productKey）が指す
+ * 変数名を使って、knownX・targetX（異なる値）と、内部でだけ使う倍率
+ * （variables.scaleFactor。問題文には出てこない生成専用の値）を選び、
+ * knownY＝targetX×倍率、targetY＝knownX×倍率 を計算します。この作り方だと、
+ * knownX×knownY と targetX×targetY は常に等しくなり（どちらも knownX×targetX×倍率）、
+ * 一定の積（productKey）を必ず整数のまま管理できます（反比例の関係
+ * 「一方が増えるともう一方が減る」も、この構成なら自動的に成り立ちます）。
+ */
+function generateInverseProportionValues(variables, quantityRelation) {
+  if (!quantityRelation) {
+    throw new Error("quantityRelation が指定されていないテンプレートです（反比例・対応する量には必須です）。");
+  }
+  const { knownXKey, knownYKey, targetXKey, targetYKey, productKey } = quantityRelation;
+  const [knownX, targetX] = pickDistinctValuePair(variables[knownXKey], variables[targetXKey]);
+  const scaleFactor = pickValueForRange(variables.scaleFactor);
+  const knownY = normalizeNumber(multiplyDecimal(targetX, scaleFactor));
+  const targetY = normalizeNumber(multiplyDecimal(knownX, scaleFactor));
+  const product = normalizeNumber(multiplyDecimal(knownX, knownY));
+  return {
+    [knownXKey]: knownX,
+    [knownYKey]: knownY,
+    [targetXKey]: targetX,
+    [targetYKey]: targetY,
+    [productKey]: product
+  };
+}
+
+/**
+ * 縮尺・実際の長さ／縮尺・地図上の長さ／縮尺を求める、の3カテゴリで共有する生成ルール
+ * （小学6年生3学期、第12段階で追加）。quantityRelation（scaleKey・mapLengthKey・
+ * actualLengthKey・actualLengthUnit）が指す変数名を使って、縮尺の分母（scaleKey。
+ * 普通の整数として式に使う）と地図上の長さ（mapLengthKey、cm）を独立に生成し、
+ * 実際の長さ（cm）＝地図上の長さ×縮尺の分母 を計算してから、テンプレートごとに指定された
+ * 単位（km または m）に変換します（js/unit-utils.js の convertLength()。常に10の累乗での
+ * 割り算のため、変換後の値は必ず有限小数になります）。
+ * どの量が「未知（答え）」かは、テンプレートごとの textParts・solutionRoutes 側が決めるため、
+ * この関数は常に3つの量すべてを生成するだけで、3カテゴリのどのテンプレートでも使えます
+ * （比を使った数量が firstAmount/secondAmount のどちらが既知でも同じ生成関数を使うのと同じ設計）。
+ * scaleValue（問題文に表示する縮尺そのもの、{type:"scale",...}）もここで一緒に作ります
+ * （ratioValue と同じ、固定名の表示専用メタデータ）。
+ */
+function generateScaleLengthValues(variables, quantityRelation) {
+  if (!quantityRelation) {
+    throw new Error("quantityRelation が指定されていないテンプレートです（縮尺の問題には必須です）。");
+  }
+  const { scaleKey, mapLengthKey, actualLengthKey, actualLengthUnit } = quantityRelation;
+  // 縮尺の分母は、地図として自然な「きりのよい」値の一覧（variables[scaleKey].values）から選ぶ
+  // （分数の時間の answerMinutes と同じ、値の一覧から選ぶ設計。min/max/step の連続範囲ではない）。
+  const scaleDenominatorCandidates = variables[scaleKey].values;
+  const scaleDenominatorValue = scaleDenominatorCandidates[pickInt(0, scaleDenominatorCandidates.length - 1)];
+  const mapLengthValue = pickValueForRange(variables[mapLengthKey]);
+  const actualLengthInCm = normalizeNumber(multiplyDecimal(mapLengthValue, scaleDenominatorValue));
+  const actualLengthValue = convertLength(actualLengthInCm, "cm", actualLengthUnit);
+  return {
+    [scaleKey]: scaleDenominatorValue,
+    scaleValue: createScale(scaleDenominatorValue),
+    [mapLengthKey]: mapLengthValue,
+    [actualLengthKey]: actualLengthValue
+  };
 }
 
 const GENERATOR_TYPE_HANDLERS = {
@@ -405,6 +672,37 @@ const GENERATOR_TYPE_HANDLERS = {
     generateFractionMultiplicativeComparisonValues(variables, template.quantityRelation),
   fractionMultiplierFindBase: (variables, template) =>
     generateFractionMultiplicativeComparisonValues(variables, template.quantityRelation),
+  // 単位量あたり・分数版（小学6年生1学期へ後日追加）。
+  fractionUnitRate: (variables, template) => generateFractionUnitRateValues(variables, template.quantityRelation),
+  // 分数の速さ・道のり（小学6年生2学期、第11段階で追加、2段階問題）。standard のエイリアス。
+  // distance/speed を独立に生成するだけでよく、専用の生成関数は不要です（分から時間への変換・
+  // km/時↔km/分の変換は、値の生成ではなく resolveMultiStepRoutes() が各ルートのステップ
+  // （{source:"literal", value:60} を使った÷60など）を計算する際に自動的に求まります）。
+  fractionSpeedWithMinuteConversion: (variables) => generateStandardValues(variables),
+  fractionDistanceWithMinuteConversion: (variables) => generateStandardValues(variables),
+  // 分数の時間（小学6年生2学期、第11段階で追加、2段階問題）。答え（分）が必ず整数になるよう、
+  // distance・answerMinutesを先に決めてから speed を逆算する専用の生成関数を使う
+  // （generateFractionTimeWithMinuteConversionValues() 参照。standard のエイリアスではない）。
+  fractionTimeWithMinuteConversion: (variables, template) =>
+    generateFractionTimeWithMinuteConversionValues(variables, template.quantityRelation),
+  // 分数割合（比べる量・割合・もとにする量。小学6年生2学期、第11段階で追加）。
+  // もとにする量×分数割合＝比べる量の関係を持つ3つのカテゴリで共有します。
+  fractionRateFindCompared: (variables, template) => generateFractionRateValues(variables, template.quantityRelation),
+  fractionRateFindRate: (variables, template) => generateFractionRateValues(variables, template.quantityRelation),
+  fractionRateFindBase: (variables, template) => generateFractionRateValues(variables, template.quantityRelation),
+  // 比を使った数量（小学6年生2学期、第11段階で追加、2段階問題）。
+  ratioApplication: (variables, template) => generateRatioApplicationValues(variables, template.quantityRelation),
+  // 比例配分（小学6年生2学期、第11段階で追加、3段階問題）。
+  proportionalAllocation: (variables, template) => generateProportionalAllocationValues(variables, template.quantityRelation),
+  // 比例・対応する量／反比例・対応する量（小学6年生3学期、第12段階で追加、2段階問題）。
+  findDirectProportionValue: (variables, template) => generateDirectProportionValues(variables, template.quantityRelation),
+  findInverseProportionValue: (variables, template) => generateInverseProportionValues(variables, template.quantityRelation),
+  // 縮尺・実際の長さ／縮尺・地図上の長さ／縮尺を求める（小学6年生3学期、第12段階で追加、
+  // 2段階問題）。もとにする量が異なるだけで同じ「地図上の長さ×縮尺の分母＝実際の長さ（cm）」の
+  // 関係を持つ3つのカテゴリで共有します。
+  findActualLengthFromScale: (variables, template) => generateScaleLengthValues(variables, template.quantityRelation),
+  findMapLengthFromScale: (variables, template) => generateScaleLengthValues(variables, template.quantityRelation),
+  findScale: (variables, template) => generateScaleLengthValues(variables, template.quantityRelation),
   multiStepDivideFirst: (variables) => generateMultiStepDivideFirstValues(variables),
   multiStepSumToDivisible: (variables) => generateMultiStepSumToDivisibleValues(variables)
 };
@@ -435,7 +733,11 @@ const QUANTITY_RELATION_GENERATOR_TYPES = new Set([
   "percentageFindRate",
   "percentageFindBase",
   "fractionMultiplierFindCompared",
-  "fractionMultiplierFindBase"
+  "fractionMultiplierFindBase",
+  "fractionUnitRate",
+  "fractionRateFindCompared",
+  "fractionRateFindRate",
+  "fractionRateFindBase"
 ]);
 
 function generateValuesForTemplate(template) {
@@ -447,10 +749,15 @@ export function renderTemplateText(template, values) {
   return template.template.replace(/\{(\w+)\}/g, (match, key) => {
     if (!Object.prototype.hasOwnProperty.call(values, key)) return match;
     const value = values[key];
-    // 百分率は "[object Object]" にならないよう "20%" の形式に変換する（第9段階で追加）。
-    // 数値はこれまでどおり String(value) のまま（桁区切りカンマを付けない。カンマ付き表示が
-    // 必要な場面＝カード・結果・履歴は、すべて renderValueHtml() 経由で別途行っている）。
-    return isPercentValue(value) ? formatPercent(value) : String(value);
+    // 百分率・比は "[object Object]" にならないよう "20%"／"5：3" の形式に変換する
+    // （百分率は第9段階、比は第11段階で追加）。数値はこれまでどおり String(value) のまま
+    // （桁区切りカンマを付けない。カンマ付き表示が必要な場面＝カード・結果・履歴は、
+    // すべて renderValueHtml() 経由で別途行っている）。分数の値を問題文に含める場合は、
+    // このtemplate文字列ではなく縦型表示に対応した textParts を使ってください。
+    if (isPercentValue(value)) return formatPercent(value);
+    if (isRatioValue(value)) return formatRatio(value);
+    if (isScaleValue(value)) return formatScale(value);
+    return String(value);
   });
 }
 
@@ -499,15 +806,32 @@ function getVisibleNumbers(template, values) {
 }
 
 /**
- * calculateValues() の計算結果に、solutionRoutes（またはステップ）が指定する
- * resultType を適用します（第9段階で追加）。
- * 現状で使うのは resultType:"percent" だけで、「数値÷数値」の計算結果（例: 0.3）を
- * 百分率表示（30%）に変換したい場合に使います（15÷50＝30%のような「割合を求める」問題）。
- * 計算結果がすでに百分率・分数の場合や、resultType が指定されていない場合は何もしません。
+ * left operator right の計算結果に、solutionRoutes（またはステップ）が指定する
+ * resultType を適用して求めます（第9段階で百分率、第11段階で分数を追加）。
+ * - resultType:"percent" ... 数値÷数値の計算結果（例: 0.3）を百分率表示（30%）に変換する
+ *   （15÷50＝30%のような「割合を求める」問題）。
+ * - resultType:"fraction" ... わり算を、割り切れるかどうかに関わらず必ず正確な分数として
+ *   計算し直す（例: 20÷60＝1/3、12÷20＝3/5）。通常の safeCalculate() の整数・小数どうしの
+ *   わり算は「割り切れる場合だけ商を返す」（かつ割り切れても小数のまま返す）という安全設計のため、
+ *   分数の速さの単位変換・分数の割合のように「必ず分数として表示したい」場面では、
+ *   value-utils.js の divideValuesAsFraction() で計算し直す（0でわる場合は null のまま）。
+ * - resultType が指定されていない場合（"number"／"numberOrFraction" を含む）は、
+ *   通常どおり safeCalculate() の結果をそのまま返す（型は左右の値から自動的に決まる）。
  */
-function applyResultType(result, resultType) {
+function computeStepResult(left, operator, right, resultType) {
+  if (resultType === "fraction" && operator === "÷") {
+    const forced = divideValuesAsFraction(left, right);
+    if (forced !== null) return forced;
+  }
+  const result = safeCalculate(left, operator, right);
   if (resultType === "percent" && typeof result === "number") {
     return ratioToPercent(result);
+  }
+  // 「縮尺を求める」（小学6年生3学期、第12段階で追加）: 数値÷数値の結果（縮尺の分母にあたる
+  // 整数）を、縮尺の値オブジェクト（分子は常に1）に変換する。ratioToPercent と同じ考え方で、
+  // 計算自体は普通の整数の割り算だが、表示だけ縮尺（1：n）にしたい場合に使う。
+  if (resultType === "scaleDenominator" && typeof result === "number") {
+    return createScale(result);
   }
   return result;
 }
@@ -521,7 +845,7 @@ function resolveSolutionRoutes(template, values) {
     const left = values[route.left];
     const right = values[route.right];
     const operator = route.operator;
-    const result = applyResultType(safeCalculate(left, operator, right), route.resultType);
+    const result = computeStepResult(left, operator, right, route.resultType);
     // resultType もそのまま複製する。question-validator.js が生成結果を独自に再計算して
     // 照合する際、resultType を知らないと「0.3」と「30%」を一致しないと誤判定してしまうため
     // （resultType の変換は、この関数の中だけでなく、検証側でも同じロジックを再現する必要がある）。
@@ -542,7 +866,7 @@ function resolveMultiStepRoutes(template, values) {
       const left = resolveOperand(stepDef.left, values, localResults);
       const right = resolveOperand(stepDef.right, values, localResults);
       const operator = stepDef.operator;
-      const result = applyResultType(safeCalculate(left, operator, right), stepDef.resultType);
+      const result = computeStepResult(left, operator, right, stepDef.resultType);
       if (stepDef.resultKey) {
         localResults[stepDef.resultKey] = result;
       }
@@ -859,13 +1183,23 @@ function generateMultiStepQuestionFromTemplate(template) {
 
   questionSequence += 1;
 
+  // 分数・比の値が問題文に直接登場するテンプレート（小学6年生2学期、第11段階で追加）は、
+  // 1段階問題と同じく textParts を使う。1段階問題の generateQuestionFromTemplate() と
+  // 全く同じ分岐・関数（resolveTextParts / flattenTextPartsToPlainText）を再利用している。
+  const resolvedTextParts = template.textParts ? resolveTextParts(template, values) : null;
+  const text = resolvedTextParts ? flattenTextPartsToPlainText(resolvedTextParts) : renderTemplateText(template, values);
+  // 比例・反比例の関係表（小学6年生3学期、第12段階で追加）。表を持たないテンプレートでは null。
+  const relationTable = template.relationTable ? resolveRelationTable(template, values) : null;
+
   const problem = {
     id: `q_${Date.now()}_${questionSequence}`,
     templateId: template.id,
     gradeTerm: template.gradeTerm,
     category: template.category,
     questionType: "multiStep",
-    text: renderTemplateText(template, values),
+    text,
+    textParts: resolvedTextParts,
+    relationTable,
     values,
     solutionRoutes: resolvedRoutes,
     answerUnit: template.answerUnit,
@@ -879,6 +1213,21 @@ function generateMultiStepQuestionFromTemplate(template) {
   };
 
   return initializeMultiStepQuestion(problem);
+}
+
+/**
+ * テンプレートの relationTable（{type:"value",ref:変数名} または {type:"unknown"} が並ぶ
+ * 宣言的な定義）を、実際に生成された値へ解決します（小学6年生3学期、第12段階で追加）。
+ * 児童が求める値のセルは {type:"unknown"} のまま残し、value-renderer.js の
+ * renderRelationTableHtml() が「？」として表示します（答えを関係表に漏らさないため）。
+ */
+function resolveRelationTable(template, values) {
+  return {
+    rowHeaders: template.relationTable.rowHeaders,
+    columns: template.relationTable.columns.map((column) =>
+      column.map((cell) => (cell.type === "unknown" ? cell : values[cell.ref]))
+    )
+  };
 }
 
 /**
@@ -981,6 +1330,21 @@ const GRADE_TERM_PLAN_CONFIG = {
   "6-1": {
     newContentGradeTerms: ["6-1"],
     reviewGradeTerms: ["4-1", "4-2", "4-3", "4-multi-step", "5-1", "5-2", "5-3"]
+  },
+  // 小学6年生2学期（第11段階）：新内容は6-2の8カテゴリ、復習内容は4年生1〜3学期
+  // （整数の2段階文章題を含む）・5年生1〜3学期・6年生1学期から偏りなく選ぶ。
+  "6-2": {
+    newContentGradeTerms: ["6-2"],
+    reviewGradeTerms: ["4-1", "4-2", "4-3", "4-multi-step", "5-1", "5-2", "5-3", "6-1"]
+  },
+  // 小学6年生3学期（第12段階）：新内容は6-3の5カテゴリ、復習内容は5年生1〜3学期・
+  // 6年生1〜2学期（小学4年生の内容は含めない）。この一覧は getCandidateTemplatesForSlot()
+  // がスロットからテンプレート集合を引くために使うだけで、実際の出題比率（グループA/B/Cを
+  // 長期的に1:1:1にする）は既存の新内容50%/復習50%方式を使わず、
+  // planQuestionSequenceThreeGroup() が別途管理します（後述）。
+  "6-3": {
+    newContentGradeTerms: ["6-3"],
+    reviewGradeTerms: ["5-1", "5-2", "5-3", "6-1", "6-2"]
   }
 };
 
@@ -1078,17 +1442,27 @@ export function buildNewContentCategoryGroups(templateSets, currentGradeTerm) {
  * 特定の学期・カテゴリだけに偏らないよう、出題プランはこの2段構えの構造を使って
  * 「学期を選ぶ→その学期のカテゴリを選ぶ→テンプレートを選ぶ」の順で選択します。
  */
-function buildReviewGroupsByTerm(templateSets, currentGradeTerm) {
-  const config = GRADE_TERM_PLAN_CONFIG[currentGradeTerm];
+/**
+ * gradeTermキーの配列から、学期ごと・カテゴリごとに2段構えでグループ化します
+ * （第12段階で buildReviewGroupsByTerm() から切り出し、6年3学期のグループA/Bのように
+ * 「GRADE_TERM_PLAN_CONFIG に登録された学期の一覧」以外の任意の学期リストからも
+ * 同じ2段構えの構造を作れるようにしました）。
+ */
+function buildGroupsByTermList(templateSets, sourceGradeTerms) {
   const byTerm = new Map();
-  if (!config) return byTerm;
-  for (const sourceGradeTerm of config.reviewGradeTerms) {
+  for (const sourceGradeTerm of sourceGradeTerms) {
     const categoryMap = groupTemplatesByCategory([sourceGradeTerm], templateSets);
     if (categoryMap.size > 0) {
       byTerm.set(sourceGradeTerm, categoryMap);
     }
   }
   return byTerm;
+}
+
+function buildReviewGroupsByTerm(templateSets, currentGradeTerm) {
+  const config = GRADE_TERM_PLAN_CONFIG[currentGradeTerm];
+  if (!config) return new Map();
+  return buildGroupsByTermList(templateSets, config.reviewGradeTerms);
 }
 
 // 「3問以上連続しない並び」を再抽選（シャッフルし直し）で探すときの最大試行回数。
@@ -1150,25 +1524,29 @@ function buildRoundRobinLabels(groupsByKey, count) {
 }
 
 /**
- * 復習内容のスロットを reviewCount 個作ります。
+ * 学期リスト（sourceGradeTerms）から、questionGroup ラベル付きのスロットを count 個作ります。
  * 「学期を選ぶ→その学期の中でカテゴリを選ぶ」の2段階を、それぞれラウンドロビンで行うことで、
- * 特定の学期・特定のカテゴリだけに偏らないようにします。
+ * 特定の学期・特定のカテゴリだけに偏らないようにします（第12段階で planReviewSlots() から
+ * 切り出し、6年3学期のグループA/Bのように「復習内容だが対象学期がGRADE_TERM_PLAN_CONFIGの
+ * 一覧全体ではなく一部だけ」のケースにも使えるようにしました）。
+ * questionGroup は、6年3学期のグループA/B/Cを区別するための追加ラベルで、
+ * 既存の4-2/4-3などの2グループ方式では null のまま使われません（後方互換）。
  */
-function planReviewSlots(reviewCount, templateSets, currentGradeTerm) {
-  const byTerm = buildReviewGroupsByTerm(templateSets, currentGradeTerm);
+function planSlotsForTermList(count, templateSets, sourceGradeTerms, questionGroup) {
+  const byTerm = buildGroupsByTermList(templateSets, sourceGradeTerms);
   if (byTerm.size === 0) {
-    return Array.from({ length: reviewCount }, () => ({ contentGroup: "review", reviewGradeTerm: null, category: null }));
+    return Array.from({ length: count }, () => ({ contentGroup: "review", questionGroup, reviewGradeTerm: null, category: null }));
   }
 
-  const termLabels = buildRoundRobinLabels(byTerm, reviewCount);
+  const termLabels = buildRoundRobinLabels(byTerm, count);
   const countsByTerm = new Map();
   for (const term of termLabels) {
     countsByTerm.set(term, (countsByTerm.get(term) || 0) + 1);
   }
 
   const categoryQueueByTerm = new Map();
-  for (const [term, count] of countsByTerm) {
-    categoryQueueByTerm.set(term, buildRoundRobinLabels(byTerm.get(term), count));
+  for (const [term, termCount] of countsByTerm) {
+    categoryQueueByTerm.set(term, buildRoundRobinLabels(byTerm.get(term), termCount));
   }
 
   const cursorByTerm = new Map();
@@ -1176,8 +1554,17 @@ function planReviewSlots(reviewCount, templateSets, currentGradeTerm) {
     const cursor = cursorByTerm.get(term) || 0;
     const category = categoryQueueByTerm.get(term)[cursor];
     cursorByTerm.set(term, cursor + 1);
-    return { contentGroup: "review", reviewGradeTerm: term, category };
+    return { contentGroup: "review", questionGroup, reviewGradeTerm: term, category };
   });
+}
+
+/**
+ * 復習内容のスロットを reviewCount 個作ります（4-2/4-3などの既存の2グループ方式専用）。
+ */
+function planReviewSlots(reviewCount, templateSets, currentGradeTerm) {
+  const config = GRADE_TERM_PLAN_CONFIG[currentGradeTerm];
+  const sourceGradeTerms = config ? config.reviewGradeTerms : [];
+  return planSlotsForTermList(reviewCount, templateSets, sourceGradeTerms, null);
 }
 
 /**
@@ -1208,6 +1595,74 @@ export function planQuestionSequence(totalQuestions, templateSets, currentGradeT
     (slot) => (slot.contentGroup === "review" ? "review" : slot.category),
     2
   );
+}
+
+// 小学6年生3学期（第12段階）の出題グループ定義。
+//   グループA(grade5)       : 小学5年生1〜3学期の復習
+//   グループB(grade6Review) : 小学6年生1〜2学期の復習
+//   グループC(grade6Term3)  : 小学6年生3学期の新内容（比例・反比例・縮尺の5カテゴリ）
+// 小学4年生の内容は意図的に含めません（依頼文の指示どおり）。
+const GRADE6_TERM3_GROUP_SOURCE_TERMS = {
+  grade5: ["5-1", "5-2", "5-3"],
+  grade6Review: ["6-1", "6-2"]
+};
+const GRADE6_TERM3_QUESTION_GROUPS = ["grade5", "grade6Review", "grade6Term3"];
+
+/**
+ * totalQuestions を3グループにできるだけ均等に配分します。
+ * 3で割り切れない余り（0〜2問）は、rotationIndex を起点にグループの順番をずらしながら
+ * 配ることで、複数回プレイしたときに毎回同じグループばかりが多く（または少なく）
+ * ならないようにします（依頼文の「余りを受け取るグループをローテーションする」設計）。
+ * rotationIndex は呼び出し側（js/game.js）が js/storage.js 経由で永続化し、
+ * ゲームを1回開始するたびに進めます。このファイル自体は localStorage に触れない
+ * 「副作用のない純粋関数」のままにするため、rotationIndex は必ず引数で受け取ります。
+ */
+function buildGrade6Term3GroupCounts(totalQuestions, rotationIndex) {
+  const base = Math.floor(totalQuestions / 3);
+  const remainder = totalQuestions - base * 3; // 0, 1, または 2
+  const counts = { grade5: base, grade6Review: base, grade6Term3: base };
+  for (let i = 0; i < remainder; i++) {
+    const group = GRADE6_TERM3_QUESTION_GROUPS[(rotationIndex + i) % GRADE6_TERM3_QUESTION_GROUPS.length];
+    counts[group] += 1;
+  }
+  return counts;
+}
+
+/**
+ * 小学6年生3学期モード用の出題プランを作成します（第12段階で追加）。
+ * 4-2/4-3などの既存モードが使う「新内容50%・復習50%」の2グループ方式ではなく、
+ * グループA（5年生1〜3学期の復習）・グループB（6年生1〜2学期の復習）・
+ * グループC（6年生3学期の新内容）の3グループを、長期的におよそ1:1:1にします。
+ * グループA・Bの内部は、既存の planReviewSlots() と同じ「学期→カテゴリ」の
+ * 2段階ラウンドロビンで均等に配分します（planSlotsForTermList() を対象学期を
+ * 絞って再利用）。グループCの内部は、既存の新内容カテゴリと同じラウンドロビンで
+ * 5カテゴリに配分します（buildRoundRobinLabels()）。
+ * @param {number} totalQuestions
+ * @param {Record<string, Array>} templateSets
+ * @param {number} rotationIndex - 余りを受け取るグループのローテーション位置（0始まり）
+ * @returns {Array<{contentGroup:string, questionGroup:string, reviewGradeTerm?:string, category:string}>}
+ */
+export function planQuestionSequenceThreeGroup(totalQuestions, templateSets, rotationIndex = 0) {
+  const counts = buildGrade6Term3GroupCounts(totalQuestions, rotationIndex);
+
+  const grade5Slots = planSlotsForTermList(counts.grade5, templateSets, GRADE6_TERM3_GROUP_SOURCE_TERMS.grade5, "grade5");
+  const grade6ReviewSlots = planSlotsForTermList(
+    counts.grade6Review,
+    templateSets,
+    GRADE6_TERM3_GROUP_SOURCE_TERMS.grade6Review,
+    "grade6Review"
+  );
+
+  const grade6Term3CategoryGroups = groupTemplatesByCategory(["6-3"], templateSets);
+  const grade6Term3Labels = buildRoundRobinLabels(grade6Term3CategoryGroups, counts.grade6Term3);
+  const grade6Term3Slots = grade6Term3Labels.map((label) => ({
+    contentGroup: "new",
+    questionGroup: "grade6Term3",
+    category: label
+  }));
+
+  const shuffled = shuffleArray([...grade5Slots, ...grade6ReviewSlots, ...grade6Term3Slots]);
+  return limitConsecutiveRuns(shuffled, (slot) => slot.questionGroup, 2);
 }
 
 /**

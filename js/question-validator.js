@@ -3,10 +3,24 @@
 // （tools/question-validator.html）の両方から使われる、副作用のない純粋関数群です。
 
 import { safeCalculate } from "./answer-checker.js";
-import { areValuesEqual, isValueNegative, isFractionValue, isValidFraction, isPercentValue, isValidPercent, isZeroValue } from "./value-utils.js";
+import {
+  areValuesEqual,
+  isValueNegative,
+  isFractionValue,
+  isValidFraction,
+  isPercentValue,
+  isValidPercent,
+  isRatioValue,
+  isScaleValue,
+  isZeroValue,
+  divideValuesAsFraction
+} from "./value-utils.js";
 import { areNumbersEqual, getDecimalPlaces, formatNumber, parseFormattedNumber } from "./number-utils.js";
-import { renderValueHtml, buildFractionAriaLabel } from "./value-renderer.js";
+import { renderValueHtml, buildFractionAriaLabel, buildRatioAriaLabel } from "./value-renderer.js";
 import { ratioToPercent } from "./percentage-utils.js";
+import { isValidRatio } from "./ratio-utils.js";
+import { isValidScale, createScale } from "./scale-utils.js";
+import { gcd } from "./fraction-utils.js";
 
 // このアプリで扱う小数点以下の最大桁数（4.15 のような2桁まで）。
 // これを超える場合は「小学4年生として不自然」と判断してエラーにします。
@@ -19,7 +33,7 @@ const MAX_REASONABLE_FRACTION_DENOMINATOR = 12;
 // 現在 data/index.js に登録されている出題範囲キー。新しい学期を追加したら、
 // ここにも追加してください（data/index.js から自動取得すると循環参照になりやすいため、
 // 検証専用の一覧として独立させています）。
-const VALID_GRADE_TERMS = ["4-1", "4-2", "4-3", "4-multi-step", "5-1", "5-2", "5-3", "6-1"];
+const VALID_GRADE_TERMS = ["4-1", "4-2", "4-3", "4-multi-step", "5-1", "5-2", "5-3", "6-1", "6-2", "6-3"];
 
 // generatorType がこの集合に含まれるときだけ、生成された分数の分母が一致しているかを確認する
 // （異分母分数のたし算・ひき算には適用しない。第8段階で追加）。
@@ -249,11 +263,113 @@ const GENERATOR_TYPE_RULES = {
     requiredVariableKeys: [],
     computedVariables: [],
     requiresQuantityRelation: true
+  },
+  // 単位量あたり・分数版（小学6年生1学期へ後日追加）。
+  fractionUnitRate: {
+    requiredVariableKeys: [],
+    computedVariables: [],
+    requiresQuantityRelation: true
+  },
+  // 分数の速さ・道のり・時間（小学6年生2学期、第11段階で追加、2段階問題）。
+  // distance/minutes/speed のうちどの2つが variables に定義されるかはテンプレートごとに
+  // 異なる（速さを求める→distance・minutes、道のりを求める→speed・minutes、
+  // 時間を求める→distance・speed）ため、既存の「常に同じ2キーを既知として扱う」
+  // QUANTITY_RELATION_TYPE_CONFIG の型には当てはまらない。そのため
+  // requiresQuantityRelation ではなく、専用の requiresSpeedUnitConversionShape で
+  // validateSpeedWithUnitConversion() による個別の構造検証を行う。
+  fractionSpeedWithMinuteConversion: {
+    requiredVariableKeys: [],
+    computedVariables: [],
+    requiresSpeedUnitConversionShape: true
+  },
+  fractionDistanceWithMinuteConversion: {
+    requiredVariableKeys: [],
+    computedVariables: [],
+    requiresSpeedUnitConversionShape: true
+  },
+  // 「分数の時間」だけは、答え（分）を必ず整数にするため専用の生成ルールを使い、
+  // variables.answerMinutes（きりのよい分の一覧）から答えを選んでから速さを逆算する
+  // （generateFractionTimeWithMinuteConversionValues() 参照。第11段階で追加）。
+  fractionTimeWithMinuteConversion: {
+    requiredVariableKeys: ["answerMinutes"],
+    computedVariables: [],
+    requiresSpeedUnitConversionShape: true
+  },
+  // 分数割合（比べる量・割合・もとにする量。小学6年生2学期、第11段階で追加）は、
+  // 速さ・割合と同じ理由（キー名がquantityRelationで動的に決まる）で requiresQuantityRelation を使う。
+  fractionRateFindCompared: {
+    requiredVariableKeys: [],
+    computedVariables: [],
+    requiresQuantityRelation: true
+  },
+  fractionRateFindRate: {
+    requiredVariableKeys: [],
+    computedVariables: [],
+    requiresQuantityRelation: true
+  },
+  fractionRateFindBase: {
+    requiredVariableKeys: [],
+    computedVariables: [],
+    requiresQuantityRelation: true
+  },
+  // 比を使った数量（小学6年生2学期、第11段階で追加、2段階問題）。
+  // variables には firstRatio・secondRatio・unitAmount（1あたりの量。問題文には出てこない
+  // 生成専用の変数）に加えて firstAmount・secondAmount のどちらか一方（既知の側）が定義される
+  // ため、こちらも固定の2キー構成に当てはまらない。専用の requiresRatioApplicationShape で
+  // validateRatioApplication() による個別の構造検証を行う。
+  ratioApplication: {
+    requiredVariableKeys: ["unitAmount"],
+    // ratioValue（問題文に表示する比そのもの）は variables には定義されない、
+    // 生成関数が常に追加する固定名の計算値のため、computedVariables に登録しておく。
+    computedVariables: ["ratioValue"],
+    requiresRatioApplicationShape: true
+  },
+  // 比例配分（小学6年生2学期、第11段階で追加、3段階問題）。
+  proportionalAllocation: {
+    requiredVariableKeys: ["unitAmount"],
+    computedVariables: ["ratioValue"],
+    requiresProportionalAllocationShape: true
+  },
+  // 比例・対応する量／反比例・対応する量（小学6年生3学期、第12段階で追加、2段階問題）。
+  // knownX・targetX（＋反比例は一定の積を作るための隠し変数 scaleFactor）が variables に
+  // 定義される一方、knownY・targetY・比例定数／一定の積は生成時に自動計算される値のため、
+  // 固定の2キー構成に当てはまらない。専用の requiresDirectProportionShape /
+  // requiresInverseProportionShape で個別の構造検証を行う。
+  findDirectProportionValue: {
+    requiredVariableKeys: [],
+    computedVariables: [],
+    requiresDirectProportionShape: true
+  },
+  findInverseProportionValue: {
+    requiredVariableKeys: ["scaleFactor"],
+    computedVariables: [],
+    requiresInverseProportionShape: true
+  },
+  // 縮尺・実際の長さ／縮尺・地図上の長さ／縮尺を求める（小学6年生3学期、第12段階で追加、
+  // 2段階問題）。速さ・道のり・時間（fractionSpeedWithMinuteConversion等）と同じ理由で、
+  // どの量が「未知」かによって variables に定義されるキーの組み合わせが変わるため、
+  // requiresScaleLengthShape で validateScaleLength() による個別の構造検証を行う。
+  findActualLengthFromScale: {
+    requiredVariableKeys: [],
+    computedVariables: ["scaleValue"],
+    requiresScaleLengthShape: true
+  },
+  findMapLengthFromScale: {
+    requiredVariableKeys: [],
+    computedVariables: ["scaleValue"],
+    requiresScaleLengthShape: true
+  },
+  findScale: {
+    requiredVariableKeys: [],
+    computedVariables: ["scaleValue"],
+    requiresScaleLengthShape: true
   }
 };
 
-// 2段階問題は、今回のバージョンではすべてちょうど2つの式で解く問題に限定する。
-const REQUIRED_MULTI_STEP_COUNT = 2;
+// 多段階問題（questionType:"multiStep"）の式の数は、1〜3個の範囲に限定する
+// （小学6年生2学期・第11段階で、2段階固定から1〜3段階へ拡張。4段階以上の問題は今回出題しない）。
+const MIN_MULTI_STEP_COUNT = 1;
+const MAX_MULTI_STEP_COUNT = 3;
 
 export const VALID_GENERATOR_TYPES = Object.keys(GENERATOR_TYPE_RULES);
 
@@ -279,15 +395,26 @@ function isValidLiteralOperandValue(value) {
 }
 
 /**
- * question-generator.js の applyResultType() と同じ変換を、検証側でも独立に再現します
- * （第9段階で追加）。question-generator.js から直接 import すると循環参照になるため、
- * この小さな純粋関数だけを重複して持たせています。route.resultType:"percent" が
- * 指定されている場合、safeCalculate() の生の計算結果（例: 0.3）を百分率（30%）に変換してから
- * route.result と比較しないと、「0.3 と 30% は一致しない」という誤判定になってしまいます。
+ * question-generator.js の computeStepResult() と同じ変換を、検証側でも独立に再現します
+ * （第9段階で百分率、第11段階で分数を追加）。question-generator.js から直接 import すると
+ * 循環参照になるため、この小さな純粋関数だけを重複して持たせています。
+ * resultType:"percent" が指定されている場合、safeCalculate() の生の計算結果（例: 0.3）を
+ * 百分率（30%）に変換してから期待値と比較しないと、「0.3 と 30% は一致しない」という
+ * 誤判定になってしまいます。resultType:"fraction" が指定されている場合も同様に、
+ * 「割り切れる場合だけ商を返す」通常のわり算ではなく、divideValuesAsFraction() で
+ * 独立に再計算しないと、20÷60 のような組み合わせを「計算不能」と誤判定してしまいます。
  */
-function applyResultTypeForValidation(result, resultType) {
+function computeStepResultForValidation(left, operator, right, resultType) {
+  if (resultType === "fraction" && operator === "÷") {
+    const forced = divideValuesAsFraction(left, right);
+    if (forced !== null) return forced;
+  }
+  const result = safeCalculate(left, operator, right);
   if (resultType === "percent" && typeof result === "number") {
     return ratioToPercent(result);
+  }
+  if (resultType === "scaleDenominator" && typeof result === "number") {
+    return createScale(result);
   }
   return result;
 }
@@ -331,6 +458,18 @@ const QUANTITY_RELATION_TYPE_CONFIG = {
     knownKeyFields: ["baseKey", "multiplierKey"],
     computedKeyField: "comparedKey",
     unknownValues: ["base", "compared", "multiplier"]
+  },
+  // 単位量あたり・分数版（小学6年生1学期へ後日追加）: 単位数×1単位あたりの量＝全体量
+  "fraction-unit-rate": {
+    knownKeyFields: ["unitCountKey", "perUnitKey"],
+    computedKeyField: "totalKey",
+    unknownValues: ["total", "unitCount", "perUnit"]
+  },
+  // 分数割合（小学6年生2学期、第11段階で追加）: もとにする量×分数割合＝比べる量
+  "fraction-rate": {
+    knownKeyFields: ["baseKey", "rateKey"],
+    computedKeyField: "comparedKey",
+    unknownValues: ["compared", "rate", "base"]
   }
 };
 
@@ -351,9 +490,20 @@ function getKnownVariableKeys(template, rule) {
   const qr = template.quantityRelation;
   if (qr && typeof qr === "object") {
     const config = QUANTITY_RELATION_TYPE_CONFIG[qr.type];
-    const computedKeyField = config ? config.computedKeyField : "comparedKey";
-    if (typeof qr[computedKeyField] === "string") {
-      keys.add(qr[computedKeyField]);
+    if (config) {
+      keys.add(qr[config.computedKeyField]);
+    } else {
+      // QUANTITY_RELATION_TYPE_CONFIG に登録されていない type（比を使った数量・比例配分など、
+      // 「既知の2キー＋自動計算の1キー」という固定パターンに当てはまらない専用の型。第11段階で追加）は、
+      // quantityRelation オブジェクトの "○○Key" という名前のフィールドすべてを既知の変数名として
+      // 扱う（firstRatioKey・secondRatioKey のように variables に実在するキーを指すものは
+      // 重複登録になるだけで無害、firstAmountKey・secondAmountKey・totalKey のように
+      // 生成時に自動計算されるキーを指すものはここで初めて「既知」として認識される）。
+      for (const [field, value] of Object.entries(qr)) {
+        if (field.endsWith("Key") && typeof value === "string") {
+          keys.add(value);
+        }
+      }
     }
   }
   return keys;
@@ -375,7 +525,7 @@ function validateQuantityRelation(template, errors) {
     errors.push(
       `quantityRelation.type が不正です: ${qr.type}` +
         `（"multiplicative-comparison"／"average"／"unit-rate"／"speed"／"percentage"／` +
-        `"fraction-multiplicative-comparison" のいずれか）`
+        `"fraction-multiplicative-comparison"／"fraction-unit-rate"／"fraction-rate" のいずれか）`
     );
     return;
   }
@@ -421,6 +571,615 @@ function validateQuantityRelation(template, errors) {
 }
 
 /**
+ * 分数の速さ・道のり・時間（quantityRelation.type:"speed-with-unit-conversion"）専用の構造検証です
+ * （小学6年生2学期、第11段階で追加）。distance/minuteTime/speedのうち「既知」の2つは
+ * テンプレートごとに異なる（速さを求める問題ではdistance・minutes、道のりを求める問題では
+ * speed・minutes、時間を求める問題ではdistance・speed）ため、既存の
+ * QUANTITY_RELATION_TYPE_CONFIG（常に同じ2キーを既知として扱う）には当てはまらず、
+ * 個別にこの関数で検証します。
+ * - 必ず2段階問題（multiStep、steps.length===2）であること
+ * - 必ず2つの解法ルートを持つこと（依頼文の「原則として2つの正解ルートを登録する」）
+ * - 少なくとも1つのステップが「60」を使った単位変換（source:"literal", value:60）であること
+ */
+function validateSpeedWithUnitConversion(template, errors) {
+  const qr = template.quantityRelation;
+  if (!qr || typeof qr !== "object" || qr.type !== "speed-with-unit-conversion") {
+    errors.push(`generatorType="${template.generatorType}" には quantityRelation.type:"speed-with-unit-conversion" が必要です`);
+    return;
+  }
+  for (const field of ["distanceKey", "minuteTimeKey", "speedKey"]) {
+    if (typeof qr[field] !== "string" || qr[field].length === 0) {
+      errors.push(`quantityRelation.${field} が文字列で指定されていません`);
+    }
+  }
+  if (!["distance", "minuteTime", "speed"].includes(qr.unknown)) {
+    errors.push(`quantityRelation.unknown が不正です: ${qr.unknown}（"distance"／"minuteTime"／"speed" のいずれか）`);
+  }
+
+  if (template.questionType !== "multiStep") {
+    errors.push(`generatorType="${template.generatorType}" は questionType:"multiStep" である必要があります`);
+    return;
+  }
+  if (!Array.isArray(template.solutionRoutes) || template.solutionRoutes.length !== 2) {
+    errors.push(
+      `generatorType="${template.generatorType}" には2つの解法ルートが必要です（実際: ${Array.isArray(template.solutionRoutes) ? template.solutionRoutes.length : 0}）`
+    );
+  }
+  if (!Array.isArray(template.solutionRoutes)) return;
+
+  for (const route of template.solutionRoutes) {
+    if (!route || !Array.isArray(route.steps)) continue;
+    if (route.steps.length !== 2) {
+      errors.push(`[${route.id}] 分数の速さ・道のり・時間は必ず2段階である必要があります（実際: ${route.steps.length}）`);
+    }
+    const hasMinuteConversion = route.steps.some(
+      (step) =>
+        step &&
+        (isLiteralOperand(step.left, 60) || isLiteralOperand(step.right, 60))
+    );
+    if (!hasMinuteConversion) {
+      errors.push(`[${route.id}] 時間と分の単位変換（60を使ったステップ）が見つかりません`);
+    }
+  }
+}
+
+/**
+ * 比を使った数量（quantityRelation.type:"ratio-application"）専用の構造検証です
+ * （小学6年生2学期、第11段階で追加）。
+ * - firstRatioKey・secondRatioKey は variables に存在すること
+ * - firstAmountKey・secondAmountKey は（生成時に自動計算される値のため）variables に
+ *   含めないこと
+ * - known/unknown が firstAmount/secondAmount の組み合わせであること
+ * - 必ず2段階問題（steps.length===2）であること
+ */
+function validateRatioApplication(template, errors) {
+  const qr = template.quantityRelation;
+  if (!qr || typeof qr !== "object" || qr.type !== "ratio-application") {
+    errors.push(`generatorType="${template.generatorType}" には quantityRelation.type:"ratio-application" が必要です`);
+    return;
+  }
+  const hasVariables = template.variables && typeof template.variables === "object";
+  for (const field of ["firstRatioKey", "secondRatioKey", "firstAmountKey", "secondAmountKey"]) {
+    if (typeof qr[field] !== "string" || qr[field].length === 0) {
+      errors.push(`quantityRelation.${field} が文字列で指定されていません`);
+    }
+  }
+  if (hasVariables) {
+    for (const field of ["firstRatioKey", "secondRatioKey"]) {
+      const key = qr[field];
+      if (typeof key === "string" && !(key in template.variables)) {
+        errors.push(`quantityRelation.${field} が variables に存在しません: ${key}`);
+      }
+    }
+    for (const field of ["firstAmountKey", "secondAmountKey"]) {
+      const key = qr[field];
+      if (typeof key === "string" && key in template.variables) {
+        errors.push(`quantityRelation.${field} は生成時に自動計算される値です。variables に含めないでください: ${key}`);
+      }
+    }
+  }
+  const validSides = ["firstAmount", "secondAmount"];
+  if (!validSides.includes(qr.known) || !validSides.includes(qr.unknown) || qr.known === qr.unknown) {
+    errors.push(
+      `quantityRelation.known/unknown が不正です: known=${qr.known}, unknown=${qr.unknown}（"firstAmount"／"secondAmount" の異なる組み合わせである必要があります）`
+    );
+  }
+
+  if (template.questionType !== "multiStep") {
+    errors.push(`generatorType="${template.generatorType}" は questionType:"multiStep" である必要があります`);
+    return;
+  }
+  if (!Array.isArray(template.solutionRoutes)) return;
+
+  // 標準ルート（standard-two-step-route）に加えて、「未知の比の項÷既知の比の項＝何倍か」→
+  // 「既知の量×何倍か＝答え」という別解ルート（multiplier-first-route）を任意で登録できます
+  // （運用開始後に追加。比例・対応する量の multiplier-first-route と同じ考え方。
+  // 例:「犬とねこの比は4：3、ねこ15頭のとき犬は？」で `4÷3=4/3→15×4/3=20`）。
+  const REQUIRED_ROUTE_IDS = ["standard-two-step-route"];
+  const OPTIONAL_ROUTE_IDS = ["multiplier-first-route"];
+  const ALLOWED_ROUTE_IDS = [...REQUIRED_ROUTE_IDS, ...OPTIONAL_ROUTE_IDS];
+  const routeIds = template.solutionRoutes.map((route) => route && route.id);
+  for (const requiredId of REQUIRED_ROUTE_IDS) {
+    if (!routeIds.includes(requiredId)) {
+      errors.push(`比を使った数量には正解ルート "${requiredId}" が必要です`);
+    }
+  }
+  for (const id of routeIds) {
+    if (!ALLOWED_ROUTE_IDS.includes(id)) {
+      errors.push(
+        `比を使った数量の正解ルートIDが不正です: ${id}（"standard-two-step-route"／"multiplier-first-route" のいずれかである必要があります）`
+      );
+    }
+  }
+
+  const knownAmountKey = typeof qr.known === "string" ? qr[`${qr.known}Key`] : undefined;
+  const knownRatioKey = qr.known === "firstAmount" ? qr.firstRatioKey : qr.secondRatioKey;
+  const unknownRatioKey = qr.known === "firstAmount" ? qr.secondRatioKey : qr.firstRatioKey;
+
+  for (const route of template.solutionRoutes) {
+    if (!route || !Array.isArray(route.steps)) continue;
+    if (route.steps.length !== 2) {
+      errors.push(`[${route.id}] 比を使った数量は必ず2段階である必要があります（実際: ${route.steps.length}）`);
+      continue;
+    }
+    if (route.id === "multiplier-first-route") {
+      const [step1, step2] = route.steps;
+      const operators = route.steps.map((s) => s && s.operator).join(",");
+      if (operators !== "÷,×") {
+        errors.push(
+          `[multiplier-first-route] 演算記号の順序が想定と異なります: ${operators}（"÷,×"＝何倍かを先に求める、である必要があります）`
+        );
+      }
+      if (!step1 || step1.resultType !== "fraction") {
+        errors.push(
+          `[multiplier-first-route] 1つ目の式には resultType:"fraction" が必要です（割り切れない場合でも何倍かを分数のまま扱うため）`
+        );
+      }
+      if (
+        knownRatioKey &&
+        unknownRatioKey &&
+        !(step1 && step1.left && step1.left.key === unknownRatioKey && step1.right && step1.right.key === knownRatioKey)
+      ) {
+        errors.push(
+          `[multiplier-first-route] 1つ目の式は「未知の比の項(${unknownRatioKey})÷既知の比の項(${knownRatioKey})」である必要があります`
+        );
+      }
+      if (knownAmountKey && !(step2 && step2.left && step2.left.key === knownAmountKey)) {
+        errors.push(`[multiplier-first-route] 2つ目の式の左辺は既知の量(${knownAmountKey})である必要があります`);
+      }
+    }
+  }
+}
+
+/**
+ * 比例配分（quantityRelation.type:"proportional-allocation"）専用の構造検証です
+ * （小学6年生2学期、第11段階で追加）。
+ * - firstRatioKey・secondRatioKey は variables に存在すること
+ * - totalKey は（生成時に自動計算される値のため）variables に含めないこと
+ * - target が "first"／"second" のいずれかであること
+ * - 必ず3段階問題（steps.length===3）で、式1が「＋」、式2が「÷」、式3が「×」であること
+ *   （依頼文の「比の和→1あたりの量→対象の比の項」という順序どおりであることを確認する）
+ */
+function validateProportionalAllocation(template, errors) {
+  const qr = template.quantityRelation;
+  if (!qr || typeof qr !== "object" || qr.type !== "proportional-allocation") {
+    errors.push(`generatorType="${template.generatorType}" には quantityRelation.type:"proportional-allocation" が必要です`);
+    return;
+  }
+  const hasVariables = template.variables && typeof template.variables === "object";
+  for (const field of ["firstRatioKey", "secondRatioKey", "totalKey"]) {
+    if (typeof qr[field] !== "string" || qr[field].length === 0) {
+      errors.push(`quantityRelation.${field} が文字列で指定されていません`);
+    }
+  }
+  if (hasVariables) {
+    for (const field of ["firstRatioKey", "secondRatioKey"]) {
+      const key = qr[field];
+      if (typeof key === "string" && !(key in template.variables)) {
+        errors.push(`quantityRelation.${field} が variables に存在しません: ${key}`);
+      }
+    }
+    if (typeof qr.totalKey === "string" && qr.totalKey in template.variables) {
+      errors.push(`quantityRelation.totalKey は生成時に自動計算される値です。variables に含めないでください: ${qr.totalKey}`);
+    }
+  }
+  if (!["first", "second"].includes(qr.target)) {
+    errors.push(`quantityRelation.target が不正です: ${qr.target}（"first"／"second" のいずれか）`);
+  }
+
+  if (template.questionType !== "multiStep") {
+    errors.push(`generatorType="${template.generatorType}" は questionType:"multiStep" である必要があります`);
+    return;
+  }
+  if (!Array.isArray(template.solutionRoutes)) return;
+
+  // 標準ルート（standard-three-step-route。比の和→1あたりの量→対象の比の項）に加えて、
+  // 「対象の比の項÷比の和＝何倍か」→「合計×何倍か＝答え」という別解ルート
+  // （ratio-fraction-route）を任意で登録できます（運用開始後に追加。例:
+  // 「布28mを4：3に分ける、白い布は？」で `4+3=7→4÷7=4/7→28×4/7=16`）。どちらのルートも
+  // 演算記号の並びが「+,÷,×」で同じになるため、並びだけでルートの種類を判定せず、
+  // ルートIDごとに参照している変数・resultTypeまで個別に検証します。依頼文で明示的に
+  // 禁止されている「合計÷片方の比の項×もう片方の比の項」という2段階のショートカット計算は、
+  // そもそも3段階（steps.length===3）の要件を満たさないため、このチェックだけで
+  // 自動的に排除されます。
+  const REQUIRED_ROUTE_IDS = ["standard-three-step-route"];
+  const OPTIONAL_ROUTE_IDS = ["ratio-fraction-route"];
+  const ALLOWED_ROUTE_IDS = [...REQUIRED_ROUTE_IDS, ...OPTIONAL_ROUTE_IDS];
+  const routeIds = template.solutionRoutes.map((route) => route && route.id);
+  for (const requiredId of REQUIRED_ROUTE_IDS) {
+    if (!routeIds.includes(requiredId)) {
+      errors.push(`比例配分には正解ルート "${requiredId}" が必要です`);
+    }
+  }
+  for (const id of routeIds) {
+    if (!ALLOWED_ROUTE_IDS.includes(id)) {
+      errors.push(
+        `比例配分の正解ルートIDが不正です: ${id}（"standard-three-step-route"／"ratio-fraction-route" のいずれかである必要があります）`
+      );
+    }
+  }
+
+  const targetRatioKey = qr.target === "first" ? qr.firstRatioKey : qr.secondRatioKey;
+
+  for (const route of template.solutionRoutes) {
+    if (!route || !Array.isArray(route.steps)) continue;
+    if (route.steps.length !== 3) {
+      errors.push(`[${route.id}] 比例配分は必ず3段階である必要があります（実際: ${route.steps.length}）`);
+      continue;
+    }
+    const operators = route.steps.map((s) => s && s.operator);
+    if (operators[0] !== "+" || operators[1] !== "÷" || operators[2] !== "×") {
+      errors.push(
+        `[${route.id}] 比例配分の演算記号の順序が想定と異なります: ${operators.join(",")}（"+","÷","×" の順である必要があります）`
+      );
+    }
+    if (route.id === "ratio-fraction-route") {
+      const [, step2, step3] = route.steps;
+      if (!step2 || step2.resultType !== "fraction") {
+        errors.push(
+          `[ratio-fraction-route] 2つ目の式には resultType:"fraction" が必要です（割り切れない場合でも何倍かを分数のまま扱うため）`
+        );
+      }
+      if (targetRatioKey && !(step2 && step2.left && step2.left.key === targetRatioKey)) {
+        errors.push(`[ratio-fraction-route] 2つ目の式の左辺は対象の比の項(${targetRatioKey})である必要があります`);
+      }
+      if (!(step3 && step3.left && step3.left.key === qr.totalKey)) {
+        errors.push(`[ratio-fraction-route] 3つ目の式の左辺は合計(${qr.totalKey})である必要があります`);
+      }
+    }
+  }
+}
+
+/**
+ * multiStepのステップのオペランド（{source, key} または {source:"literal", value}）が、
+ * 指定した値のリテラルかどうかを判定します（時間と分の単位変換「60」の検出に使用）。
+ */
+function isLiteralOperand(operand, expectedValue) {
+  return !!operand && operand.source === "literal" && operand.value === expectedValue;
+}
+
+/**
+ * 比例・対応する量（quantityRelation.type:"direct-proportion"）専用の構造検証です
+ * （小学6年生3学期、第12段階で追加）。
+ * - knownXKey・targetXKey は variables に存在すること
+ * - knownYKey・targetYKey・constantKey は（生成時に自動計算される値のため）variables に
+ *   含めないこと
+ * - unknown が "targetY" であること（比例定数そのものを最終的な答えにする問題は出題しない）
+ * - 必ず2つの正解ルートを持ち、それぞれ2段階（「÷→×」＝1つ分の量を求める、
+ *   「×→÷」＝比例式に相当する計算）で、2つのルートが異なる手順になっていること
+ */
+function validateDirectProportion(template, errors) {
+  const qr = template.quantityRelation;
+  if (!qr || typeof qr !== "object" || qr.type !== "direct-proportion") {
+    errors.push(`generatorType="${template.generatorType}" には quantityRelation.type:"direct-proportion" が必要です`);
+    return;
+  }
+  for (const field of ["knownXKey", "knownYKey", "targetXKey", "targetYKey", "constantKey"]) {
+    if (typeof qr[field] !== "string" || qr[field].length === 0) {
+      errors.push(`quantityRelation.${field} が文字列で指定されていません`);
+    }
+  }
+  const hasVariables = template.variables && typeof template.variables === "object";
+  if (hasVariables) {
+    // knownX・targetX・比例定数（constantKey）は、いずれも generateDirectProportionValues() が
+    // 独立に生成する値のため variables に必要（比例定数は先に決め、そこから knownY・targetY を
+    // 逆算する設計）。knownY・targetY だけが、生成時に自動計算される値のため variables に
+    // 含めてはいけない。
+    for (const field of ["knownXKey", "targetXKey", "constantKey"]) {
+      const key = qr[field];
+      if (typeof key === "string" && !(key in template.variables)) {
+        errors.push(`quantityRelation.${field} が variables に存在しません: ${key}`);
+      }
+    }
+    for (const field of ["knownYKey", "targetYKey"]) {
+      const key = qr[field];
+      if (typeof key === "string" && key in template.variables) {
+        errors.push(`quantityRelation.${field} は生成時に自動計算される値です。variables に含めないでください: ${key}`);
+      }
+    }
+  }
+  if (qr.unknown !== "targetY") {
+    errors.push(
+      `quantityRelation.unknown が不正です: ${qr.unknown}（比例・対応する量は常に"targetY"である必要があります。比例定数そのものを答えさせる問題は出題しません）`
+    );
+  }
+
+  if (template.questionType !== "multiStep") {
+    errors.push(`generatorType="${template.generatorType}" は questionType:"multiStep" である必要があります`);
+    return;
+  }
+
+  // 比例・対応する量には、必ず2つの正解ルート（1つ分の量を求める／比例式に相当する計算）を
+  // 登録し、さらに次の2つを任意で追加登録できます（どちらも運用開始後に追加。ユーザー報告の
+  // とおり、後項÷前項・前項÷後項のどちらから「何倍か」を求める解き方も教科書的に正しい別解の
+  // ため）。
+  //   - multiplier-first-route: targetX÷knownX＝何倍、knownY×何倍＝答え（例: 5÷4=5/4→300×5/4=375）
+  //   - divisor-first-route   : knownX÷targetX＝倍率、knownY÷倍率＝答え（例: 8÷2=4→160÷4=40）
+  // unit-value-route と multiplier-first-route は演算記号の並びがどちらも「÷,×」で同じになる
+  // ため、演算記号の並びだけでルートの種類を判定せず、ルートIDごとに参照している変数・
+  // resultTypeまで個別に検証します。
+  const REQUIRED_ROUTE_IDS = ["unit-value-route", "cross-multiplication-route"];
+  const OPTIONAL_ROUTE_IDS = ["multiplier-first-route", "divisor-first-route"];
+  const ALLOWED_ROUTE_IDS = [...REQUIRED_ROUTE_IDS, ...OPTIONAL_ROUTE_IDS];
+
+  if (
+    !Array.isArray(template.solutionRoutes) ||
+    template.solutionRoutes.length < REQUIRED_ROUTE_IDS.length ||
+    template.solutionRoutes.length > ALLOWED_ROUTE_IDS.length
+  ) {
+    errors.push(
+      `generatorType="${template.generatorType}" には2〜4個の解法ルートが必要です（実際: ${Array.isArray(template.solutionRoutes) ? template.solutionRoutes.length : 0}）`
+    );
+  }
+  if (!Array.isArray(template.solutionRoutes)) return;
+
+  const routeIds = template.solutionRoutes.map((route) => route && route.id);
+  for (const requiredId of REQUIRED_ROUTE_IDS) {
+    if (!routeIds.includes(requiredId)) {
+      errors.push(`比例・対応する量には正解ルート "${requiredId}" が必要です`);
+    }
+  }
+  for (const id of routeIds) {
+    if (!ALLOWED_ROUTE_IDS.includes(id)) {
+      errors.push(
+        `比例・対応する量の正解ルートIDが不正です: ${id}（"unit-value-route"／"cross-multiplication-route"／"multiplier-first-route"／"divisor-first-route" のいずれかである必要があります）`
+      );
+    }
+  }
+
+  for (const route of template.solutionRoutes) {
+    if (!route || !Array.isArray(route.steps)) continue;
+    if (route.steps.length !== 2) {
+      errors.push(`[${route.id}] 比例・対応する量は必ず2段階である必要があります（実際: ${route.steps.length}）`);
+      continue;
+    }
+    const operators = route.steps.map((s) => s && s.operator).join(",");
+    if (route.id === "unit-value-route") {
+      if (operators !== "÷,×") {
+        errors.push(`[unit-value-route] 演算記号の順序が想定と異なります: ${operators}（"÷,×"＝1つ分の量を求める、である必要があります）`);
+      }
+    } else if (route.id === "cross-multiplication-route") {
+      if (operators !== "×,÷") {
+        errors.push(`[cross-multiplication-route] 演算記号の順序が想定と異なります: ${operators}（"×,÷"＝比例式に相当する計算、である必要があります）`);
+      }
+    } else if (route.id === "multiplier-first-route") {
+      if (operators !== "÷,×") {
+        errors.push(`[multiplier-first-route] 演算記号の順序が想定と異なります: ${operators}（"÷,×"＝何倍かを先に求める、である必要があります）`);
+      }
+      if (!route.steps[0] || route.steps[0].resultType !== "fraction") {
+        errors.push(
+          `[multiplier-first-route] 1つ目の式（targetX÷knownX）には resultType:"fraction" が必要です（割り切れる場合でも「何倍か」を分数のまま扱うため）`
+        );
+      }
+    } else if (route.id === "divisor-first-route") {
+      if (operators !== "÷,÷") {
+        errors.push(`[divisor-first-route] 演算記号の順序が想定と異なります: ${operators}（"÷,÷"＝knownX÷targetXの倍率で答えを求める、である必要があります）`);
+      }
+      if (!route.steps[0] || route.steps[0].resultType !== "fraction") {
+        errors.push(
+          `[divisor-first-route] 1つ目の式（knownX÷targetX）には resultType:"fraction" が必要です（割り切れない場合でも倍率を分数のまま扱うため）`
+        );
+      }
+    }
+  }
+}
+
+/**
+ * 反比例・対応する量（quantityRelation.type:"inverse-proportion"）専用の構造検証です
+ * （小学6年生3学期、第12段階で追加）。
+ * - knownXKey・targetXKey は variables に存在すること
+ * - knownYKey・targetYKey・productKey は（生成時に自動計算される値のため）variables に
+ *   含めないこと
+ * - unknown が "targetY" であること（一定の積そのものを最終的な答えにする問題は出題しない）
+ * - 必ず1つの正解ルート・2段階（×→÷）で、式1（knownX×knownY）に commutative:true が
+ *   指定されていること（依頼文の「式1のかけ算では交換法則を認めてください」）
+ */
+function validateInverseProportion(template, errors) {
+  const qr = template.quantityRelation;
+  if (!qr || typeof qr !== "object" || qr.type !== "inverse-proportion") {
+    errors.push(`generatorType="${template.generatorType}" には quantityRelation.type:"inverse-proportion" が必要です`);
+    return;
+  }
+  for (const field of ["knownXKey", "knownYKey", "targetXKey", "targetYKey", "productKey"]) {
+    if (typeof qr[field] !== "string" || qr[field].length === 0) {
+      errors.push(`quantityRelation.${field} が文字列で指定されていません`);
+    }
+  }
+  const hasVariables = template.variables && typeof template.variables === "object";
+  if (hasVariables) {
+    for (const field of ["knownXKey", "targetXKey"]) {
+      const key = qr[field];
+      if (typeof key === "string" && !(key in template.variables)) {
+        errors.push(`quantityRelation.${field} が variables に存在しません: ${key}`);
+      }
+    }
+    for (const field of ["knownYKey", "targetYKey", "productKey"]) {
+      const key = qr[field];
+      if (typeof key === "string" && key in template.variables) {
+        errors.push(`quantityRelation.${field} は生成時に自動計算される値です。variables に含めないでください: ${key}`);
+      }
+    }
+  }
+  if (qr.unknown !== "targetY") {
+    errors.push(
+      `quantityRelation.unknown が不正です: ${qr.unknown}（反比例・対応する量は常に"targetY"である必要があります。一定の積そのものを答えさせる問題は出題しません）`
+    );
+  }
+
+  if (template.questionType !== "multiStep") {
+    errors.push(`generatorType="${template.generatorType}" は questionType:"multiStep" である必要があります`);
+    return;
+  }
+
+  // 標準ルート（product-first-route。一定の積を求めてから÷targetX）に加えて、次の2つを
+  // 任意で追加登録できます（どちらも運用開始後に追加。ユーザー報告のとおり、反比例でも
+  // 「何倍になったか」から直接答えを求める別解が考えられるため）。
+  //   - target-over-known-route: targetX÷knownX＝増えた倍率、knownY÷増えた倍率＝答え
+  //     （例: 6人→9日、9÷6=3/2→72÷3/2=48。Xが増えた分だけYを割って減らす）
+  //   - known-over-target-route: knownX÷targetX＝減る倍率、knownY×減る倍率＝答え
+  //     （例: 6÷9=2/3→72×2/3=48。増えた倍率の逆数を先に求め、それをYに掛ける）
+  // target-over-known-route と known-over-target-route は演算子の並びがそれぞれ「÷,÷」
+  // 「÷,×」で、product-first-route（「×,÷」）とは異なるため区別できますが、
+  // どちらも1つ目の式でどちらの変数を分子・分母にするかを取り違えやすいため、
+  // ルートIDごとに参照している変数・resultTypeまで個別に検証します。
+  const REQUIRED_ROUTE_IDS = ["product-first-route"];
+  const OPTIONAL_ROUTE_IDS = ["target-over-known-route", "known-over-target-route"];
+  const ALLOWED_ROUTE_IDS = [...REQUIRED_ROUTE_IDS, ...OPTIONAL_ROUTE_IDS];
+
+  if (
+    !Array.isArray(template.solutionRoutes) ||
+    template.solutionRoutes.length < REQUIRED_ROUTE_IDS.length ||
+    template.solutionRoutes.length > ALLOWED_ROUTE_IDS.length
+  ) {
+    errors.push(
+      `generatorType="${template.generatorType}" には1〜3個の解法ルートが必要です（実際: ${Array.isArray(template.solutionRoutes) ? template.solutionRoutes.length : 0}）`
+    );
+  }
+  if (!Array.isArray(template.solutionRoutes)) return;
+
+  const routeIds = template.solutionRoutes.map((route) => route && route.id);
+  for (const requiredId of REQUIRED_ROUTE_IDS) {
+    if (!routeIds.includes(requiredId)) {
+      errors.push(`反比例・対応する量には正解ルート "${requiredId}" が必要です`);
+    }
+  }
+  for (const id of routeIds) {
+    if (!ALLOWED_ROUTE_IDS.includes(id)) {
+      errors.push(
+        `反比例・対応する量の正解ルートIDが不正です: ${id}（"product-first-route"／"target-over-known-route"／"known-over-target-route" のいずれかである必要があります）`
+      );
+    }
+  }
+
+  for (const route of template.solutionRoutes) {
+    if (!route || !Array.isArray(route.steps)) continue;
+    if (route.steps.length !== 2) {
+      errors.push(`[${route.id}] 反比例・対応する量は必ず2段階である必要があります（実際: ${route.steps.length}）`);
+      continue;
+    }
+    const [step1, step2] = route.steps;
+    const operators = route.steps.map((s) => s && s.operator);
+    if (route.id === "product-first-route") {
+      if (operators[0] !== "×" || operators[1] !== "÷") {
+        errors.push(
+          `[product-first-route] 演算記号の順序が想定と異なります: ${operators.join(",")}（"×","÷" の順である必要があります）`
+        );
+      }
+      if (!step1 || step1.commutative !== true) {
+        errors.push(`[product-first-route] 式1（knownX×knownY）には commutative:true が必要です`);
+      }
+    } else if (route.id === "target-over-known-route") {
+      if (operators[0] !== "÷" || operators[1] !== "÷") {
+        errors.push(
+          `[target-over-known-route] 演算記号の順序が想定と異なります: ${operators.join(",")}（"÷,÷" の順である必要があります）`
+        );
+      }
+      if (!step1 || step1.resultType !== "fraction") {
+        errors.push(`[target-over-known-route] 1つ目の式（targetX÷knownX）には resultType:"fraction" が必要です`);
+      }
+      if (!(step1 && step1.left && step1.left.key === qr.targetXKey && step1.right && step1.right.key === qr.knownXKey)) {
+        errors.push(`[target-over-known-route] 1つ目の式は「targetX÷knownX」である必要があります`);
+      }
+      if (!(step2 && step2.left && step2.left.key === qr.knownYKey)) {
+        errors.push(`[target-over-known-route] 2つ目の式の左辺は knownY である必要があります`);
+      }
+    } else if (route.id === "known-over-target-route") {
+      if (operators[0] !== "÷" || operators[1] !== "×") {
+        errors.push(
+          `[known-over-target-route] 演算記号の順序が想定と異なります: ${operators.join(",")}（"÷,×" の順である必要があります）`
+        );
+      }
+      if (!step1 || step1.resultType !== "fraction") {
+        errors.push(`[known-over-target-route] 1つ目の式（knownX÷targetX）には resultType:"fraction" が必要です`);
+      }
+      if (!(step1 && step1.left && step1.left.key === qr.knownXKey && step1.right && step1.right.key === qr.targetXKey)) {
+        errors.push(`[known-over-target-route] 1つ目の式は「knownX÷targetX」である必要があります`);
+      }
+      if (!(step2 && step2.left && step2.left.key === qr.knownYKey)) {
+        errors.push(`[known-over-target-route] 2つ目の式の左辺は knownY である必要があります`);
+      }
+    }
+  }
+}
+
+/**
+ * 縮尺・実際の長さ／縮尺・地図上の長さ／縮尺を求める（quantityRelation.type:"scale-length"）
+ * 専用の構造検証です（小学6年生3学期、第12段階で追加）。
+ * - scaleKey・mapLengthKey は variables に存在すること（どちらが「未知」でも、この2つは
+ *   常に generateScaleLengthValues() が独立に生成する。詳しくはREADME参照）
+ * - actualLengthKey は（生成時に自動計算される値のため）variables に含めないこと
+ * - actualLengthUnit が "km"／"m" のいずれかであること
+ * - unknown が "actualLength"／"mapLength"／"scale" のいずれかであること
+ * - 必ず1つの正解ルート・2段階で、長さの単位変換（km なら100000、m なら100を使った
+ *   ステップ）が含まれていること
+ * - unknown が "scale" の場合、最終ステップに resultType:"scaleDenominator" が
+ *   指定されていること（数値ではなく縮尺の値オブジェクトとして表示するため）
+ */
+function validateScaleLength(template, errors) {
+  const qr = template.quantityRelation;
+  if (!qr || typeof qr !== "object" || qr.type !== "scale-length") {
+    errors.push(`generatorType="${template.generatorType}" には quantityRelation.type:"scale-length" が必要です`);
+    return;
+  }
+  for (const field of ["scaleKey", "mapLengthKey", "actualLengthKey"]) {
+    if (typeof qr[field] !== "string" || qr[field].length === 0) {
+      errors.push(`quantityRelation.${field} が文字列で指定されていません`);
+    }
+  }
+  if (!["km", "m"].includes(qr.actualLengthUnit)) {
+    errors.push(`quantityRelation.actualLengthUnit が不正です: ${qr.actualLengthUnit}（"km"／"m" のいずれか）`);
+  }
+  if (!["actualLength", "mapLength", "scale"].includes(qr.unknown)) {
+    errors.push(`quantityRelation.unknown が不正です: ${qr.unknown}（"actualLength"／"mapLength"／"scale" のいずれか）`);
+  }
+  const hasVariables = template.variables && typeof template.variables === "object";
+  if (hasVariables) {
+    for (const field of ["scaleKey", "mapLengthKey"]) {
+      const key = qr[field];
+      if (typeof key === "string" && !(key in template.variables)) {
+        errors.push(`quantityRelation.${field} が variables に存在しません: ${key}`);
+      }
+    }
+    if (typeof qr.actualLengthKey === "string" && qr.actualLengthKey in template.variables) {
+      errors.push(
+        `quantityRelation.actualLengthKey は生成時に自動計算される値です。variables に含めないでください: ${qr.actualLengthKey}`
+      );
+    }
+  }
+
+  if (template.questionType !== "multiStep") {
+    errors.push(`generatorType="${template.generatorType}" は questionType:"multiStep" である必要があります`);
+    return;
+  }
+  if (!Array.isArray(template.solutionRoutes) || template.solutionRoutes.length !== 1) {
+    errors.push(
+      `generatorType="${template.generatorType}" には正解ルートが1つだけ必要です（実際: ${Array.isArray(template.solutionRoutes) ? template.solutionRoutes.length : 0}）`
+    );
+  }
+  if (!Array.isArray(template.solutionRoutes)) return;
+  const expectedFactor = qr.actualLengthUnit === "km" ? 100000 : 100;
+  for (const route of template.solutionRoutes) {
+    if (!route || !Array.isArray(route.steps)) continue;
+    if (route.steps.length !== 2) {
+      errors.push(`[${route.id}] 縮尺の問題は必ず2段階である必要があります（実際: ${route.steps.length}）`);
+      continue;
+    }
+    const hasUnitConversion = route.steps.some(
+      (step) => step && (isLiteralOperand(step.left, expectedFactor) || isLiteralOperand(step.right, expectedFactor))
+    );
+    if (!hasUnitConversion) {
+      errors.push(`[${route.id}] 長さの単位変換（${expectedFactor}を使ったステップ）が見つかりません`);
+    }
+    if (qr.unknown === "scale") {
+      const lastStep = route.steps[route.steps.length - 1];
+      if (!lastStep || lastStep.resultType !== "scaleDenominator") {
+        errors.push(`[${route.id}] 縮尺を求める問題の最終ステップには resultType:"scaleDenominator" が必要です`);
+      }
+    }
+  }
+}
+
+/**
  * textParts（{type:"text", value:string} と {type:"value", ref:変数名} の配列）の
  * 構造を検証します。ref は variables（または generatorType が計算する変数）の
  * キー名と一致している必要があります。
@@ -454,6 +1213,72 @@ function validateTextParts(template, rule, errors) {
     } else {
       errors.push(`textParts[${i}] のtypeが不正です: ${part.type}（"text" か "value" のみ）`);
     }
+  });
+}
+
+/**
+ * template.hiddenIntermediateKeys（比例定数・反比例の一定の積など、児童が式1で
+ * 求める必要がある中間結果の変数名の一覧）が、問題文（textParts）に直接参照されていないかを
+ * 検証します（小学6年生3学期、第12段階で追加）。
+ * 依頼文の指示どおり、単純な文字列一致（生成後の数値がたまたま問題文の別の数値と一致するかどうか）
+ * ではなく、textParts の ref（どの変数を参照しているか）を見て判定します。これにより、
+ * 「別の意味で同じ数値が偶然登場した」だけの誤検出を避けられます。
+ */
+function validateHiddenIntermediateKeys(template, errors) {
+  const hiddenKeys = template.hiddenIntermediateKeys;
+  if (!Array.isArray(hiddenKeys) || hiddenKeys.length === 0) return;
+  if (!Array.isArray(template.textParts)) return;
+  const referencedRefs = new Set(
+    template.textParts.filter((part) => part && part.type === "value" && typeof part.ref === "string").map((part) => part.ref)
+  );
+  for (const key of hiddenKeys) {
+    if (referencedRefs.has(key)) {
+      errors.push(
+        `hiddenIntermediateKeys に含まれる変数 "${key}" が問題文（textParts）で直接参照されています（式1で児童が求める中間結果を問題文に記載してはいけません）`
+      );
+    }
+  }
+}
+
+/**
+ * template.relationTable（比例・反比例の関係表の宣言的な定義）の構造を検証します
+ * （小学6年生3学期、第12段階で追加）。表を持たないテンプレートでは何もしません。
+ * - rowHeaders は文字列の配列であること
+ * - columns の各列が rowHeaders と同じ長さの配列であること
+ * - 各セルが {type:"value", ref:変数名}（variables または生成時の計算値を参照）
+ *   または {type:"unknown"}（児童が求める値。「？」として表示される）のいずれかであること
+ */
+function validateRelationTable(template, rule, errors) {
+  const table = template.relationTable;
+  if (!table) return;
+  if (!Array.isArray(table.rowHeaders) || table.rowHeaders.some((h) => typeof h !== "string")) {
+    errors.push("relationTable.rowHeaders は文字列の配列である必要があります");
+    return;
+  }
+  if (!Array.isArray(table.columns) || table.columns.length === 0) {
+    errors.push("relationTable.columns は空でない配列である必要があります");
+    return;
+  }
+  const hasVariables = template.variables && typeof template.variables === "object";
+  const knownVariableKeys = rule && hasVariables ? getKnownVariableKeys(template, rule) : null;
+  table.columns.forEach((column, columnIndex) => {
+    if (!Array.isArray(column) || column.length !== table.rowHeaders.length) {
+      errors.push(`relationTable.columns[${columnIndex}] は rowHeaders と同じ長さの配列である必要があります`);
+      return;
+    }
+    column.forEach((cell, rowIndex) => {
+      if (!cell || typeof cell !== "object") {
+        errors.push(`relationTable.columns[${columnIndex}][${rowIndex}] がオブジェクトではありません`);
+      } else if (cell.type === "value") {
+        if (typeof cell.ref !== "string" || cell.ref.length === 0) {
+          errors.push(`relationTable.columns[${columnIndex}][${rowIndex}] のrefは変数名（文字列）で指定してください`);
+        } else if (knownVariableKeys && !knownVariableKeys.has(cell.ref)) {
+          errors.push(`relationTable.columns[${columnIndex}][${rowIndex}].ref が未定義の変数です: ${cell.ref}`);
+        }
+      } else if (cell.type !== "unknown") {
+        errors.push(`relationTable.columns[${columnIndex}][${rowIndex}] のtypeが不正です: ${cell.type}（"value" か "unknown" のみ）`);
+      }
+    });
   });
 }
 
@@ -641,6 +1466,12 @@ export function validateTemplate(template) {
   if (hasTextParts && rule) {
     validateTextParts(template, rule, errors);
   }
+  if (hasTextParts) {
+    validateHiddenIntermediateKeys(template, errors);
+  }
+  if (template.relationTable) {
+    validateRelationTable(template, rule, errors);
+  }
   if (hasVariables && rule) {
     for (const requiredKey of rule.requiredVariableKeys) {
       if (!(requiredKey in template.variables)) {
@@ -651,6 +1482,25 @@ export function validateTemplate(template) {
 
   if (rule && rule.requiresQuantityRelation) {
     validateQuantityRelation(template, errors);
+  }
+
+  if (rule && rule.requiresSpeedUnitConversionShape) {
+    validateSpeedWithUnitConversion(template, errors);
+  }
+  if (rule && rule.requiresRatioApplicationShape) {
+    validateRatioApplication(template, errors);
+  }
+  if (rule && rule.requiresProportionalAllocationShape) {
+    validateProportionalAllocation(template, errors);
+  }
+  if (rule && rule.requiresDirectProportionShape) {
+    validateDirectProportion(template, errors);
+  }
+  if (rule && rule.requiresInverseProportionShape) {
+    validateInverseProportion(template, errors);
+  }
+  if (rule && rule.requiresScaleLengthShape) {
+    validateScaleLength(template, errors);
   }
 
   if (rule && rule.divisorRange && hasVariables && template.variables.divisor) {
@@ -751,6 +1601,16 @@ function validateMultiStepSolutionRoutes(template, rule, errors) {
     errors.push(`solutionRoutes内でルートIDが重複しています: ${[...new Set(duplicateRouteIds)].join(", ")}`);
   }
 
+  // 同じ問題内の複数の解法ルートは、原則として同じ段階数にする（第11段階で追加）。
+  // 分数の速さ・道のり・時間の2つのルートは、どちらも必ず2段階で解ける設計のため、
+  // 片方だけが1段階・3段階になっている場合は、テンプレートの定義ミスとして検出する。
+  const stepCounts = template.solutionRoutes
+    .map((r) => (r && Array.isArray(r.steps) ? r.steps.length : null))
+    .filter((n) => n !== null);
+  if (stepCounts.length > 1 && new Set(stepCounts).size > 1) {
+    errors.push(`solutionRoutes間で段階数が揃っていません: ${stepCounts.join(", ")}`);
+  }
+
   const knownVariableKeys = rule ? getKnownVariableKeys(template, rule) : null;
 
   template.solutionRoutes.forEach((route, routeIndex) => {
@@ -765,9 +1625,9 @@ function validateMultiStepSolutionRoutes(template, rule, errors) {
       errors.push(`solutionRoutes[${routeIndex}(${route.id})].steps が配列ではありません`);
       return;
     }
-    if (route.steps.length !== REQUIRED_MULTI_STEP_COUNT) {
+    if (route.steps.length < MIN_MULTI_STEP_COUNT || route.steps.length > MAX_MULTI_STEP_COUNT) {
       errors.push(
-        `solutionRoutes[${routeIndex}(${route.id})].steps は${REQUIRED_MULTI_STEP_COUNT}つである必要があります（実際: ${route.steps.length}）`
+        `solutionRoutes[${routeIndex}(${route.id})].steps は${MIN_MULTI_STEP_COUNT}〜${MAX_MULTI_STEP_COUNT}個である必要があります（実際: ${route.steps.length}）`
       );
     }
 
@@ -1002,7 +1862,7 @@ export function validateGeneratedQuestion(problem) {
       }
     }
 
-    const computed = applyResultTypeForValidation(safeCalculate(route.left, route.operator, route.right), route.resultType);
+    const computed = computeStepResultForValidation(route.left, route.operator, route.right, route.resultType);
     if (computed === null) {
       errors.push(`式が計算できません（わり切れない場合も含む）: ${route.left}${route.operator}${route.right}`);
       continue;
@@ -1125,7 +1985,7 @@ function validateGeneratedMultiStepQuestion(problem) {
           break;
         }
       }
-      const computed = applyResultTypeForValidation(safeCalculate(step.left, step.operator, step.right), step.resultType);
+      const computed = computeStepResultForValidation(step.left, step.operator, step.right, step.resultType);
       if (computed === null) {
         errors.push(`[${route.id}] 式が計算できません: ${JSON.stringify(step.left)}${step.operator}${JSON.stringify(step.right)}`);
         routeValid = false;
@@ -1161,6 +2021,27 @@ function validateGeneratedMultiStepQuestion(problem) {
     if (anyMismatch) {
       errors.push(`solutionRoutes間で最終的な答えが一致しません: ${JSON.stringify(finalResultsByRoute)}`);
     }
+  }
+
+  // 比を使った数量・比例配分（quantityRelation.type が "ratio-application"／
+  // "proportional-allocation" のテンプレート）は、出題される比の前項・後項が
+  // 「互いに素」（最大公約数が1）で、かつどちらも1ではない整数になっている必要があります
+  // （第11段階で追加。generateRatioApplicationValues()/generateProportionalAllocationValues()
+  //  の pickCoprimeRatioTerms() が生成時に保証していますが、将来テンプレートの範囲が
+  //  変わっても壊れないよう、生成済み問題の側でも検証しておきます）。
+  if (isValidRatio(problem.values && problem.values.ratioValue)) {
+    const { antecedent, consequent } = problem.values.ratioValue;
+    if (antecedent === 1 || consequent === 1) {
+      errors.push(`比の前項・後項に1が含まれています: ${antecedent}：${consequent}`);
+    } else if (gcd(antecedent, consequent) !== 1) {
+      errors.push(`比の前項・後項が互いに素ではありません: ${antecedent}：${consequent}`);
+    }
+  }
+
+  // 「縮尺を求める」（小学6年生3学期、第12段階で追加）: 最終的な答えが縮尺の値オブジェクトの
+  // 場合、分子が1・分母が正の整数であることを確認する（js/scale-utils.js の isValidScale()）。
+  if (finalAnswer !== undefined && isScaleValue(finalAnswer) && !isValidScale(finalAnswer)) {
+    errors.push(`縮尺の値が不正です: ${JSON.stringify(finalAnswer)}（分子は1、分母は正の整数である必要があります）`);
   }
 
   if (!Array.isArray(problem.choices)) {

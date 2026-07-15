@@ -328,6 +328,122 @@ export const categoryRegistry = [
     gradeLabel: "小学6年生・1学期",
     enabledInTraining: true,
     order: 37
+  },
+  {
+    id: "fraction-unit-rate",
+    label: "単位量あたり(分数)",
+    gradeTerm: "6-1",
+    gradeLabel: "小学6年生・1学期",
+    enabledInTraining: true,
+    order: 38
+  },
+
+  // ---- 小学6年生・2学期 ----
+  {
+    id: "fraction-speed-find-speed",
+    label: "分数の速さ",
+    gradeTerm: "6-2",
+    gradeLabel: "小学6年生・2学期",
+    enabledInTraining: true,
+    order: 39
+  },
+  {
+    id: "fraction-speed-find-distance",
+    label: "分数の道のり",
+    gradeTerm: "6-2",
+    gradeLabel: "小学6年生・2学期",
+    enabledInTraining: true,
+    order: 40
+  },
+  {
+    id: "fraction-speed-find-time",
+    label: "分数の時間",
+    gradeTerm: "6-2",
+    gradeLabel: "小学6年生・2学期",
+    enabledInTraining: true,
+    order: 41
+  },
+  {
+    id: "fraction-rate-compared-amount",
+    label: "分数割合・比べる量",
+    gradeTerm: "6-2",
+    gradeLabel: "小学6年生・2学期",
+    enabledInTraining: true,
+    order: 42
+  },
+  {
+    id: "fraction-rate-rate",
+    label: "分数割合・割合",
+    gradeTerm: "6-2",
+    gradeLabel: "小学6年生・2学期",
+    enabledInTraining: true,
+    order: 43
+  },
+  {
+    id: "fraction-rate-base-amount",
+    label: "分数割合・もとにする量",
+    gradeTerm: "6-2",
+    gradeLabel: "小学6年生・2学期",
+    enabledInTraining: true,
+    order: 44
+  },
+  {
+    id: "ratio-application",
+    label: "比を使った数量",
+    gradeTerm: "6-2",
+    gradeLabel: "小学6年生・2学期",
+    enabledInTraining: true,
+    order: 45
+  },
+  {
+    id: "proportional-allocation",
+    label: "比例配分",
+    gradeTerm: "6-2",
+    gradeLabel: "小学6年生・2学期",
+    enabledInTraining: true,
+    order: 46
+  },
+
+  // ---- 小学6年生・3学期 ----
+  {
+    id: "proportion-corresponding-value",
+    label: "比例・対応する量",
+    gradeTerm: "6-3",
+    gradeLabel: "小学6年生・3学期",
+    enabledInTraining: true,
+    order: 47
+  },
+  {
+    id: "inverse-proportion-corresponding-value",
+    label: "反比例・対応する量",
+    gradeTerm: "6-3",
+    gradeLabel: "小学6年生・3学期",
+    enabledInTraining: true,
+    order: 48
+  },
+  {
+    id: "scale-find-actual-length",
+    label: "縮尺・実際の長さ",
+    gradeTerm: "6-3",
+    gradeLabel: "小学6年生・3学期",
+    enabledInTraining: true,
+    order: 49
+  },
+  {
+    id: "scale-find-map-length",
+    label: "縮尺・地図上の長さ",
+    gradeTerm: "6-3",
+    gradeLabel: "小学6年生・3学期",
+    enabledInTraining: true,
+    order: 50
+  },
+  {
+    id: "scale-find-scale",
+    label: "縮尺を求める",
+    gradeTerm: "6-3",
+    gradeLabel: "小学6年生・3学期",
+    enabledInTraining: true,
+    order: 51
   }
 ];
 

@@ -8,7 +8,9 @@
 import { formatNumber } from "./number-utils.js";
 import { simplifyFraction } from "./fraction-utils.js";
 import { formatPercent, percentToRatio } from "./percentage-utils.js";
-import { isFractionValue, isPercentValue } from "./value-utils.js";
+import { formatRatio } from "./ratio-utils.js";
+import { formatScale } from "./scale-utils.js";
+import { isFractionValue, isPercentValue, isRatioValue, isScaleValue } from "./value-utils.js";
 
 export function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (c) => (
@@ -26,6 +28,22 @@ export function escapeHtml(value) {
 export function buildFractionAriaLabel(fraction, { simplify = true } = {}) {
   const s = simplify ? simplifyFraction(fraction) : fraction;
   return `${s.denominator}分の${s.numerator}`;
+}
+
+/**
+ * 比の読み上げ用ラベルを「前項対後項」の形式で返します（小学6年生2学期、第11段階で追加）。
+ * 例: 前項5・後項3 → "5対3"
+ */
+export function buildRatioAriaLabel(ratio) {
+  return `${ratio.antecedent}対${ratio.consequent}`;
+}
+
+/**
+ * 縮尺の読み上げ用ラベルを「n分の1の縮尺」の形式で返します（小学6年生3学期、第12段階で追加）。
+ * 例: 分母25000 → "25000分の1の縮尺"
+ */
+export function buildScaleAriaLabel(scale) {
+  return `${scale.denominator}分の${scale.numerator}の縮尺`;
 }
 
 /**
@@ -66,6 +84,17 @@ export function renderValueHtml(value, { useSeparator = true, simplify = true } 
   if (isPercentValue(value)) {
     return escapeHtml(formatNumber(percentToRatio(value), { useSeparator }));
   }
+  if (isRatioValue(value)) {
+    // 比は「5：3」のように前項・後項の間で改行させたくないため、no-wrapのspanで包む
+    // （小学6年生2学期、第11段階で追加。分数と違って縦組みは不要）。
+    const label = buildRatioAriaLabel(value);
+    return `<span class="ratio-value" aria-label="${escapeHtml(label)}">${escapeHtml(formatRatio(value))}</span>`;
+  }
+  if (isScaleValue(value)) {
+    // 縮尺も比と同じく「1：25,000」が改行されないようにする（小学6年生3学期、第12段階で追加）。
+    const label = buildScaleAriaLabel(value);
+    return `<span class="scale-value" aria-label="${escapeHtml(label)}">${escapeHtml(formatScale(value))}</span>`;
+  }
   return escapeHtml(formatNumber(value, { useSeparator }));
 }
 
@@ -81,6 +110,29 @@ export function renderPercentConversionHtml(value, { useSeparator = true } = {})
   const ratioHtml = escapeHtml(formatNumber(percentToRatio(value), { useSeparator }));
   const percentHtml = escapeHtml(formatPercent(value));
   return `${ratioHtml}→${percentHtml}`;
+}
+
+/**
+ * 比例・反比例の関係表（problem.relationTable、値が解決済みのもの）を、
+ * table要素のHTML文字列に変換します（小学6年生3学期、第12段階で追加）。
+ * 見出しセルには th を使い、行・列の意味をスクリーンリーダーでも読み取れるようにします。
+ * 未知（児童が求める値）のセルは resolveRelationTable() が {type:"unknown"} に
+ * 変換しているため、そこだけ通常の値ではなく「？」を表示します（実際の答えの数値を
+ * 関係表に漏らさないようにするため）。
+ * @param {{rowHeaders: string[], columns: Array<Array<*>>}} table
+ */
+export function renderRelationTableHtml(table) {
+  const rows = table.rowHeaders.map((header, rowIndex) => {
+    const cellsHtml = table.columns
+      .map((column) => {
+        const cell = column[rowIndex];
+        const cellHtml = cell && cell.type === "unknown" ? "？" : renderValueHtml(cell, { useSeparator: true });
+        return `<td>${cellHtml}</td>`;
+      })
+      .join("");
+    return `<tr><th scope="row">${escapeHtml(header)}</th>${cellsHtml}</tr>`;
+  });
+  return `<table class="relation-table">${rows.join("")}</table>`;
 }
 
 /**

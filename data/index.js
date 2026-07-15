@@ -31,10 +31,12 @@ import { grade5Term2Templates } from "./grade5-term2.js";
 import { grade5Term3Templates } from "./grade5-term3.js";
 // 小学6年生・1学期の新内容（分数×整数、分数×分数、分数÷整数、整数÷分数、分数÷分数、分数倍）。
 import { grade6Term1Templates } from "./grade6-term1.js";
+// 小学6年生・2学期の新内容（分数の速さ・道のり・時間、分数割合、比を使った数量、比例配分）。
+import { grade6Term2Templates } from "./grade6-term2.js";
+// 小学6年生・3学期の新内容（比例・反比例・対応する量、縮尺）。
+import { grade6Term3Templates } from "./grade6-term3.js";
 
 // 将来追加する学期データは、ここに import 文を追加していきます。
-// import { grade6Term2Templates } from "./grade6-term2.js";
-// import { grade6Term3Templates } from "./grade6-term3.js";
 
 /**
  * 出題範囲キー（gradeTerm）ごとの問題テンプレート一覧。
@@ -52,9 +54,9 @@ export const TEMPLATE_SETS_BY_GRADE_TERM = {
   "5-1": grade5Term1Templates,
   "5-2": grade5Term2Templates,
   "5-3": grade5Term3Templates,
-  "6-1": grade6Term1Templates
-  // "6-2": grade6Term2Templates,
-  // "6-3": grade6Term3Templates
+  "6-1": grade6Term1Templates,
+  "6-2": grade6Term2Templates,
+  "6-3": grade6Term3Templates
 };
 
 /**

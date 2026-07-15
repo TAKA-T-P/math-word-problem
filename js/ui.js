@@ -7,7 +7,13 @@
 import { formatNumber } from "./number-utils.js";
 import { percentToRatio } from "./percentage-utils.js";
 import { isFractionValue, isPercentValue, computeUnsimplifiedFractionResult } from "./value-utils.js";
-import { renderValueHtml, renderTextPartsHtml, renderPercentConversionHtml, escapeHtml } from "./value-renderer.js";
+import {
+  renderValueHtml,
+  renderTextPartsHtml,
+  renderPercentConversionHtml,
+  renderRelationTableHtml,
+  escapeHtml
+} from "./value-renderer.js";
 import {
   loadSelectedGradeTerm,
   saveSelectedGradeTerm,
@@ -85,6 +91,7 @@ function cacheElements() {
     enemyHpFill: qs("enemy-hp-fill"),
     questionText: qs("question-text"),
     stepIndicator: qs("step-indicator"),
+    relationTableContainer: qs("relation-table-container"),
     intermediateMark: qs("intermediate-mark"),
     heartsContainer: qs("hearts-container"),
     timerFill: qs("timer-fill"),
@@ -106,6 +113,10 @@ function cacheElements() {
     screenBattle: qs("screen-battle"),
 
     resultTitle: qs("result-title"),
+    resultEnemyComment: qs("result-enemy-comment"),
+    resultEnemyEmoji: qs("result-enemy-emoji"),
+    resultEnemyName: qs("result-enemy-name"),
+    resultEnemyText: qs("result-enemy-text"),
     resultRange: qs("result-range"),
     resultLevel: qs("result-level"),
     resultCorrectCount: qs("result-correct-count"),
@@ -599,10 +610,25 @@ function renderQuestionText(problem) {
     : escapeHtml(problem.text);
 }
 
+/**
+ * 比例・反比例の関係表（problem.relationTable）を表示する（小学6年生3学期、第12段階で追加）。
+ * 表を持たない問題（大半のテンプレート）では、コンテナを空にして非表示のままにする。
+ */
+function renderRelationTable(problem) {
+  if (problem.relationTable) {
+    els.relationTableContainer.innerHTML = renderRelationTableHtml(problem.relationTable);
+    els.relationTableContainer.setAttribute("aria-hidden", "false");
+  } else {
+    els.relationTableContainer.innerHTML = "";
+    els.relationTableContainer.setAttribute("aria-hidden", "true");
+  }
+}
+
 export function renderProblem(problem) {
   currentSimplifyFractions = problem.simplifyFractions !== false;
   renderQuestionText(problem);
   updateStepIndicator(problem);
+  renderRelationTable(problem);
   slots = [null, null, null];
   allCards = problem.choices.map((c) => ({ ...c }));
   renderSlots();
@@ -627,22 +653,30 @@ export function renderStepChoices(problem) {
 }
 
 /**
- * 2段階問題の進行表示を更新する。1つ目の式のときは「式を2つ答えよう！」、
- * 2つ目の式のときは、直前に正解した式（例: "22+138=160"）に続けて
- * 「の続きを答えよう」と表示する。
+ * 2〜3段階問題の進行表示を更新する。「式 ○／○」のような進行番号は表示しない。
+ * 1つ目の式のときは「式を2つ答えよう！」（totalStepsに応じて「3つ」等に変わる）、
+ * 2つ目以降の式のときは、それまでに正解した式をすべて「→」でつなげて
+ * （例: 3段階問題の3つ目の式では "4+5=9 → 90÷9＝10"）、続けて「の続きを答えよう」と
+ * 表示する（第12段階で、直前の1つの式だけを表示していたのを、それまでの全ての式を
+ * 表示するよう変更）。
  */
 function updateStepIndicator(problem) {
   if (problem.questionType === "multiStep" && problem.multiStep) {
     const state = problem.multiStep;
-    const prevStep = state.completedSteps.find((s) => s.stepIndex === state.currentStepIndex - 1);
+    const prevSteps = state.completedSteps
+      .filter((s) => s.stepIndex < state.currentStepIndex)
+      .sort((a, b) => a.stepIndex - b.stepIndex);
     let html;
-    if (prevStep) {
-      const formulaHtml =
-        `${renderValueHtml(prevStep.left)}${escapeHtml(prevStep.operator)}${renderValueHtml(prevStep.right)}` +
-        `＝${renderValueHtml(prevStep.result)}`;
+    if (prevSteps.length > 0) {
+      const formulaHtml = prevSteps
+        .map(
+          (step) =>
+            `${renderValueHtml(step.left)}${escapeHtml(step.operator)}${renderValueHtml(step.right)}＝${renderValueHtml(step.result)}`
+        )
+        .join(escapeHtml(" → "));
       html = `<span class="step-indicator-prev">${formulaHtml}</span>${escapeHtml("の続きを答えよう")}`;
     } else {
-      html = escapeHtml("式を2つ答えよう！");
+      html = escapeHtml(`式を${state.totalSteps}つ答えよう！`);
     }
     els.stepIndicator.innerHTML = html;
     els.stepIndicator.classList.add("show");
@@ -1124,7 +1158,9 @@ const RANGE_LABELS = {
   "5-1": "小学5年生・1学期",
   "5-2": "小学5年生・2学期",
   "5-3": "小学5年生・3学期",
-  "6-1": "小学6年生・1学期"
+  "6-1": "小学6年生・1学期",
+  "6-2": "小学6年生・2学期",
+  "6-3": "小学6年生・3学期"
 };
 
 // 内部レベル（レベルMAXの計算には6を使う）を、タイトル画面のボタンと同じ表示ラベルに変換する。
@@ -1138,6 +1174,17 @@ export function showResultScreen(data) {
   els.resultTitle.className = `result-title ${data.variant || ""}`;
   qs("screen-result").classList.toggle("result-bright", data.variant === "clear");
   qs("screen-result").classList.toggle("result-dark", data.variant === "gameover");
+
+  // その回のバトルに登場したエネミーの絵文字・名前と、クリア/ゲームオーバーで異なるせりふを表示する。
+  // リタイア時は、ゲームオーバー時と同じせりふ（gameOverText）を使う。
+  if (data.enemy) {
+    els.resultEnemyEmoji.textContent = data.enemy.emoji;
+    els.resultEnemyName.textContent = data.enemy.name;
+    els.resultEnemyText.textContent = data.variant === "clear" ? data.enemy.clearText : data.enemy.gameOverText;
+    els.resultEnemyComment.setAttribute("aria-hidden", "false");
+  } else {
+    els.resultEnemyComment.setAttribute("aria-hidden", "true");
+  }
 
   els.resultRange.textContent = RANGE_LABELS[data.gradeTerm] || data.gradeTerm;
   els.resultLevel.textContent = `レベル${formatLevelLabel(data.level)}`;
@@ -1240,6 +1287,10 @@ function buildSingleStepHistoryHtml(entry, index) {
 }
 
 function buildMultiStepHistoryHtml(entry, index) {
+  // 分数・比を含む問題文は entry.textParts（value-renderer.js で縦型分数・比として描画）を使う。
+  // 整数・小数のみの問題は textParts を持たないため、entry.text をそのまま表示する
+  // （1段階問題の buildSingleStepHistoryHtml() と同じ分岐。第11段階で追加）。
+  const questionTextHtml = entry.textParts ? renderTextPartsHtml(entry.textParts) : escapeHtml(entry.text);
   const stepsHtml = entry.steps
     .map((step) => {
       if (step.completed) {
@@ -1259,12 +1310,16 @@ function buildMultiStepHistoryHtml(entry, index) {
     ? `<p class="history-final">答え：${renderValueHtml(entry.finalAnswer, { useSeparator: false })}${escapeHtml(entry.answerUnit || "")}</p>`
     : `<p class="history-final history-step-incomplete">状態：解答途中</p>`;
 
+  // 比例・反比例の関係表（小学6年生3学期、第12段階で追加）。表を持たない問題では空文字列。
+  const relationTableHtml = entry.relationTable ? renderRelationTableHtml(entry.relationTable) : "";
+
   return `
     <div class="history-item-head">
       <span class="history-index">第${index + 1}問</span>
       <span class="history-category">${escapeHtml(entry.category)}</span>
     </div>
-    <p class="history-text">${escapeHtml(entry.text)}</p>
+    <p class="history-text">${questionTextHtml}</p>
+    ${relationTableHtml}
     ${stepsHtml}
     ${answerLine}
     ${buildHistoryCountsHtml(entry.incorrectCount, entry.timeoutCount)}

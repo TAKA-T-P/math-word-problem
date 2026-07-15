@@ -4,13 +4,21 @@
 import {
   generateQuestion,
   planQuestionSequence,
+  planQuestionSequenceThreeGroup,
   getCandidateTemplatesForSlot,
   getContentGroup,
   shouldDisplayFractionsUnsimplified
 } from "./question-generator.js";
 import { checkAnswer } from "./answer-checker.js";
 import { calculateQuestionScore, calculateRank, toTimeRatioPercent, formatFinalRank } from "./score.js";
-import { loadHighScore, saveHighScoreIfBetter, loadSoundSetting, saveSoundSetting } from "./storage.js";
+import {
+  loadHighScore,
+  saveHighScoreIfBetter,
+  loadSoundSetting,
+  saveSoundSetting,
+  loadGrade6Term3RotationIndex,
+  saveGrade6Term3RotationIndex
+} from "./storage.js";
 import { filterValidTemplateSets } from "./question-validator.js";
 import { getDecimalPlaces } from "./number-utils.js";
 import { formatValue, isFractionValue, computeUnsimplifiedFractionResult } from "./value-utils.js";
@@ -28,8 +36,8 @@ const DEBUG_MODE = new URLSearchParams(window.location.search).get("debug") === 
 
 // 出題プラン（新内容/復習内容がおよそ半分ずつになる仕組み）を使うモード。
 // 4-2（小学4年生2学期）・4-3（小学4年生3学期）・5-1（小学5年生1学期）・5-2（小学5年生2学期）・
-// 5-3（小学5年生3学期）・6-1（小学6年生1学期）が対象。
-const PLANNED_GRADE_TERMS = new Set(["4-2", "4-3", "5-1", "5-2", "5-3", "6-1"]);
+// 5-3（小学5年生3学期）・6-1（小学6年生1学期）・6-2（小学6年生2学期）が対象。
+const PLANNED_GRADE_TERMS = new Set(["4-2", "4-3", "5-1", "5-2", "5-3", "6-1", "6-2"]);
 
 const DAMAGE_ANIMATION_MS = 480;
 const CLEAR_MESSAGE_DELAY_MS = 1400;
@@ -252,6 +260,14 @@ function recoveryAmountForLevel(level) {
  * 内部レベル（レベルMAXは6として扱う）から、初期ハート数を求めます。
  * レベル1〜4は3個、レベル5・レベルMAX（=6）は2個。
  */
+/**
+ * 内部レベル（1〜6）を、デバッグ表示用の表示レベル文字列に変換する（6だけ"MAX"）。
+ * ui.js の formatLevelLabel() と同じ考え方だが、こちらはデバッグパネル専用の軽量な複製。
+ */
+function formatDisplayLevelForDebug(level) {
+  return level === 6 ? "MAX" : String(level);
+}
+
 function heartsForLevel(level) {
   if (level <= 4) return 3;
   return 2;
@@ -319,13 +335,18 @@ function formatSolutionRoutes(problem) {
 function summarizePlanComposition() {
   const byContentGroup = { new: 0, review: 0 };
   const byCategory = {};
+  // 小学6年生3学期（第12段階）のグループA/B/C集計。他のモードでは全て0のまま。
+  const questionGroupCounts = { grade5: 0, grade6Review: 0, grade6Term3: 0 };
   for (const slot of gameState.questionPlan || []) {
     byContentGroup[slot.contentGroup] = (byContentGroup[slot.contentGroup] || 0) + 1;
     const category =
       slot.contentGroup === "review" ? `復習内容(${slot.reviewGradeTerm || "-"}:${slot.category || "-"})` : slot.category;
     byCategory[category] = (byCategory[category] || 0) + 1;
+    if (slot.questionGroup && Object.prototype.hasOwnProperty.call(questionGroupCounts, slot.questionGroup)) {
+      questionGroupCounts[slot.questionGroup] += 1;
+    }
   }
-  return { byContentGroup, byCategory };
+  return { byContentGroup, byCategory, questionGroupCounts };
 }
 
 /**
@@ -405,6 +426,17 @@ function logDebugInfo() {
     fractionCardIds.length > 0 ? `分数カードの一意ID: ${fractionCardIds.join(", ")}` : null,
     composition ? `問題一覧の新内容/復習内容の数: ${JSON.stringify(composition.byContentGroup)}` : null,
     composition ? `問題一覧のカテゴリ構成: ${JSON.stringify(composition.byCategory)}` : null,
+    // 小学6年生3学期（第12段階）のグループA/B/C集計。他のモードでは表示しない。
+    gameState.gradeTerm === "6-3" && composition
+      ? `questionGroupCounts: ${JSON.stringify(composition.questionGroupCounts)}`
+      : null,
+    gameState.gradeTerm === "6-3" && gameState.currentSlot
+      ? `questionGroup(現在の問題): ${gameState.currentSlot.questionGroup || "-"}`
+      : null,
+    `表示レベル: ${formatDisplayLevelForDebug(gameState.level)} / 内部レベル: ${gameState.level}`,
+    `必要正解数: ${gameState.totalQuestions} / ハート数: ${gameState.maxHearts} / 初期制限時間: ${Math.round(120 / gameState.level)}秒`,
+    `現在のタイマー加速倍率: ${speedMultiplier(gameState.solvedQuestions + 1, gameState.totalQuestions).toFixed(3)}倍 / 最大タイマー加速倍率: 2.0倍`,
+    `スコア倍率: 4 / ランク係数: 1600${gameState.level === 6 ? "（MAXのランク分母: 9600）" : ""}`,
     `ゲーム状態: ${JSON.stringify({
       screen: gameState.screen,
       gradeTerm: gameState.gradeTerm,
@@ -487,9 +519,20 @@ export function startNewGame(settings) {
   gameState.usedFormulas = new Set();
   // 4-2（2学期）・4-3（3学期）モードだけ、新内容/復習内容がおよそ半分ずつになる
   // 出題プランを事前に決める（詳しくは question-generator.js の planQuestionSequence）。
-  gameState.questionPlan = PLANNED_GRADE_TERMS.has(gameState.gradeTerm)
-    ? planQuestionSequence(gameState.totalQuestions, templateSets, gameState.gradeTerm)
-    : null;
+  // 6-3（小学6年生3学期、第12段階）だけは、新内容/復習内容の2グループ方式ではなく、
+  // グループA（5年生1〜3学期の復習）/グループB（6年生1〜2学期の復習）/
+  // グループC（6年生3学期の新内容）の3グループを長期的に1:1:1にする専用のプランを使う。
+  // 端数（余り）を受け取るグループのローテーション位置は localStorage に永続化し、
+  // 1ゲーム開始するたびに進める（次の3回のプレイでちょうど1周する）。
+  if (gameState.gradeTerm === "6-3") {
+    const rotationIndex = loadGrade6Term3RotationIndex();
+    gameState.questionPlan = planQuestionSequenceThreeGroup(gameState.totalQuestions, templateSets, rotationIndex);
+    saveGrade6Term3RotationIndex((rotationIndex + 1) % 3);
+  } else {
+    gameState.questionPlan = PLANNED_GRADE_TERMS.has(gameState.gradeTerm)
+      ? planQuestionSequence(gameState.totalQuestions, templateSets, gameState.gradeTerm)
+      : null;
+  }
   isBusy = false;
 
   ui.setEnemy(gameState.enemy);
@@ -848,6 +891,7 @@ function finishGame(type) {
     ui.showResultScreen({
       title,
       variant,
+      enemy: gameState.enemy,
       gradeTerm: gameState.gradeTerm,
       level: gameState.level,
       correctCount: gameState.solvedQuestions,

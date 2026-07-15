@@ -674,7 +674,53 @@ button {
   font-size: 0.95rem;
 }
 
-/* 2段階問題の「式を2つ答えよう！」のような進行表示。1段階問題では非表示のまま。 */
+/* 比の表示（「5：3」。小学6年生2学期、第11段階で追加）。
+   前項・コロン・後項の間で改行させないよう、常に1つの単語として扱う。 */
+.ratio-value {
+  white-space: nowrap;
+  font-weight: 800;
+}
+
+/* 縮尺の表示（「1：25,000」。小学6年生3学期、第12段階で追加）。比と同じく改行させない。 */
+.scale-value {
+  white-space: nowrap;
+  font-weight: 800;
+}
+
+/* 比例・反比例の関係表（小学6年生3学期、第12段階で追加）。
+   横にはみ出す場合は表だけをスクロールさせ、ページ全体は横スクロールさせない。 */
+.relation-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 8px auto;
+}
+
+.relation-table {
+  border-collapse: collapse;
+  margin: 0 auto;
+  font-size: 0.85rem;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.relation-table th,
+.relation-table td {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 6px 12px;
+  text-align: center;
+  white-space: nowrap;
+  min-width: 44px;
+}
+
+.relation-table th[scope="row"] {
+  background: rgba(255, 255, 255, 0.08);
+  font-weight: 700;
+  text-align: left;
+}
+
+/* 2〜3段階問題の「式を3つ答えよう！」／「4+5=9 → 90÷9＝10 の続きを答えよう」のような
+   進行表示（第12段階で「式 ○／○：」の進行番号表示を廃止）。1段階問題では非表示のまま。 */
 .step-indicator {
   display: none;
   margin: 4px auto 0;
@@ -1229,6 +1275,38 @@ button {
 
 .result-title.retire {
   color: var(--color-text-dim);
+}
+
+/* その回のバトルに登場したエネミーの絵文字・名前・せりふ（クリア/ゲームオーバーで文言が変わる）。
+   .result-summary と同じ考え方で、明るい/暗い背景でも文字が読みやすいよう不透明な背景にしている。 */
+.result-enemy-comment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  column-gap: 8px;
+  row-gap: 2px;
+  background: rgba(10, 5, 25, 0.5);
+  border-radius: 10px;
+  padding: 6px 12px;
+  margin: 0 0 8px;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.result-enemy-emoji {
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.result-enemy-name {
+  font-weight: 800;
+  font-size: 0.85rem;
+  color: var(--color-accent);
+}
+
+.result-enemy-text {
+  font-size: 0.85rem;
 }
 
 /* 結果の各項目を1行に2項目ずつ並べ、結果表示ぜんたいをコンパクトにする

@@ -3,9 +3,9 @@
 // このファイルはデータのみを定義します。ゲーム処理は含みません。
 // ゲーム本体は data/index.js 経由でのみこのファイルを読み込みます。
 //
-// 小学6年生・1学期モードで出題する「新内容」は、次の7カテゴリ×5種類＝35テンプレートです。
+// 小学6年生・1学期モードで出題する「新内容」は、次の8カテゴリ×5種類＝40テンプレートです。
 //   - 分数×整数 / 分数×分数 / 分数÷整数 / 整数÷分数 / 分数÷分数 /
-//     分数倍・比べる量 / 分数倍・もとの量
+//     分数倍・比べる量 / 分数倍・もとの量 / 単位量あたり（分数）
 // （復習内容は data/index.js が別途、4年生1〜3学期・5年生1〜3学期のテンプレートから選びます。
 //  出題比率・カテゴリバランスは js/question-generator.js の GRADE_TERM_PLAN_CONFIG["6-1"] が
 //  自動的に処理するため、このファイルには新内容のテンプレートのみを定義します。）
@@ -28,6 +28,13 @@
 // もとにする量（baseKey）は整数、分数倍（multiplierKey）は分数として生成し、
 // 比べる量（comparedKey）＝もとにする量×分数倍を calculateValues() で計算します
 // （整数×分数の交換法則もそのまま利用できるため、専用の乗算処理は不要です）。
+//
+// ---- 単位量あたり（分数）----
+// quantityRelation: { type:"fraction-unit-rate", unitCountKey, perUnitKey, totalKey, unknown }
+// で「単位数×1単位あたりの量＝全体量」の関係を表します。5年生2学期の単位量あたりと同じ構造
+// ですが、単位数（unitCountKey）・1単位あたりの量（perUnitKey）のどちらも分数として生成し、
+// 全体量（totalKey）＝単位数×1単位あたりの量を calculateValues() で計算する点が異なります。
+// 5種類とも unknown:"perUnit"（1単位あたりの量を求める）です。
 
 export const grade6Term1Templates = [
   // ============================================================
@@ -916,5 +923,159 @@ export const grade6Term1Templates = [
     },
     solutionRoutes: [{ left: "comparedAmount", operator: "÷", right: "multiplier", commutative: false }],
     answerUnit: "dL"
+  },
+
+  // ============================================================
+  // 単位量あたり（分数）（5種類、unknown:"perUnit"） generatorType: "fractionUnitRate"
+  // 小学5年生2学期の単位量あたり（unitRate）と数量関係としては同じ（単位数×1単位あたりの量＝全体量）
+  // ですが、単位数・1単位あたりの量のどちらも分数になりうる点が異なるため、
+  // quantityRelation.type は専用の "fraction-unit-rate" を使います（6-1へ後日追加）。
+  // ============================================================
+  {
+    id: "g6t1_frac_unit_rate_001",
+    gradeTerm: "6-1",
+    category: "単位量あたり(分数)",
+    categoryId: "fraction-unit-rate",
+    contentGroup: "new",
+    difficulty: 3,
+    questionType: "singleStep",
+    textParts: [
+      { type: "value", ref: "unitCount" },
+      { type: "text", value: "㎡の畑から、大根が" },
+      { type: "value", ref: "total" },
+      { type: "text", value: "kg収穫できました。この畑1㎡あたりでは、大根は何kg収穫できるか。" }
+    ],
+    variables: {
+      unitCount: { type: "fraction", denominator: 4, numeratorMin: 1, numeratorMax: 3 },
+      perUnit: { type: "fraction", denominator: 5, numeratorMin: 1, numeratorMax: 8 }
+    },
+    generatorType: "fractionUnitRate",
+    quantityRelation: {
+      type: "fraction-unit-rate",
+      unitCountKey: "unitCount",
+      perUnitKey: "perUnit",
+      totalKey: "total",
+      unknown: "perUnit"
+    },
+    solutionRoutes: [{ left: "total", operator: "÷", right: "unitCount", commutative: false }],
+    answerUnit: "kg/㎡"
+  },
+  {
+    id: "g6t1_frac_unit_rate_002",
+    gradeTerm: "6-1",
+    category: "単位量あたり(分数)",
+    categoryId: "fraction-unit-rate",
+    contentGroup: "new",
+    difficulty: 3,
+    questionType: "singleStep",
+    textParts: [
+      { type: "text", value: "自動車が" },
+      { type: "value", ref: "unitCount" },
+      { type: "text", value: "Lのガソリンで、" },
+      { type: "value", ref: "total" },
+      { type: "text", value: "km走りました。この自動車はガソリン1Lあたり何km走ることができるか。" }
+    ],
+    variables: {
+      unitCount: { type: "fraction", denominator: 6, numeratorMin: 1, numeratorMax: 5 },
+      perUnit: { type: "fraction", denominator: 2, numeratorMin: 3, numeratorMax: 20 }
+    },
+    generatorType: "fractionUnitRate",
+    quantityRelation: {
+      type: "fraction-unit-rate",
+      unitCountKey: "unitCount",
+      perUnitKey: "perUnit",
+      totalKey: "total",
+      unknown: "perUnit"
+    },
+    solutionRoutes: [{ left: "total", operator: "÷", right: "unitCount", commutative: false }],
+    answerUnit: "km/L"
+  },
+  {
+    id: "g6t1_frac_unit_rate_003",
+    gradeTerm: "6-1",
+    category: "単位量あたり(分数)",
+    categoryId: "fraction-unit-rate",
+    contentGroup: "new",
+    difficulty: 3,
+    questionType: "singleStep",
+    textParts: [
+      { type: "value", ref: "unitCount" },
+      { type: "text", value: "㎡の布の重さをはかったら、" },
+      { type: "value", ref: "total" },
+      { type: "text", value: "kgでした。この布1㎡あたりの重さは何kgですか。" }
+    ],
+    variables: {
+      unitCount: { type: "fraction", denominator: 3, numeratorMin: 1, numeratorMax: 2 },
+      perUnit: { type: "fraction", denominator: 5, numeratorMin: 1, numeratorMax: 9 }
+    },
+    generatorType: "fractionUnitRate",
+    quantityRelation: {
+      type: "fraction-unit-rate",
+      unitCountKey: "unitCount",
+      perUnitKey: "perUnit",
+      totalKey: "total",
+      unknown: "perUnit"
+    },
+    solutionRoutes: [{ left: "total", operator: "÷", right: "unitCount", commutative: false }],
+    answerUnit: "kg/㎡"
+  },
+  {
+    id: "g6t1_frac_unit_rate_004",
+    gradeTerm: "6-1",
+    category: "単位量あたり(分数)",
+    categoryId: "fraction-unit-rate",
+    contentGroup: "new",
+    difficulty: 3,
+    questionType: "singleStep",
+    textParts: [
+      { type: "text", value: "かべ" },
+      { type: "value", ref: "unitCount" },
+      { type: "text", value: "㎡をぬるのに、ペンキを" },
+      { type: "value", ref: "total" },
+      { type: "text", value: "L使いました。1㎡あたり何Lのペンキを使いましたか。" }
+    ],
+    variables: {
+      unitCount: { type: "fraction", denominator: 4, numeratorMin: 1, numeratorMax: 6 },
+      perUnit: { type: "fraction", denominator: 8, numeratorMin: 1, numeratorMax: 5 }
+    },
+    generatorType: "fractionUnitRate",
+    quantityRelation: {
+      type: "fraction-unit-rate",
+      unitCountKey: "unitCount",
+      perUnitKey: "perUnit",
+      totalKey: "total",
+      unknown: "perUnit"
+    },
+    solutionRoutes: [{ left: "total", operator: "÷", right: "unitCount", commutative: false }],
+    answerUnit: "L/㎡"
+  },
+  {
+    id: "g6t1_frac_unit_rate_005",
+    gradeTerm: "6-1",
+    category: "単位量あたり(分数)",
+    categoryId: "fraction-unit-rate",
+    contentGroup: "new",
+    difficulty: 3,
+    questionType: "singleStep",
+    textParts: [
+      { type: "value", ref: "unitCount" },
+      { type: "text", value: "mのひもの重さをはかったら、" },
+      { type: "value", ref: "total" },
+      { type: "text", value: "kgでした。このひも1mあたりの重さは何kgですか。" }
+    ],
+    variables: {
+      unitCount: { type: "fraction", denominator: 5, numeratorMin: 1, numeratorMax: 4 },
+      perUnit: { type: "fraction", denominator: 6, numeratorMin: 1, numeratorMax: 7 }
+    },
+    generatorType: "fractionUnitRate",
+    quantityRelation: {
+      type: "fraction-unit-rate",
+      unitCountKey: "unitCount",
+      perUnitKey: "perUnit",
+      totalKey: "total",
+      unknown: "perUnit"
+    },
+    solutionRoutes: [{ left: "total", operator: "÷", right: "unitCount", commutative: false }],
+    answerUnit: "kg/m"
   }
 ];
