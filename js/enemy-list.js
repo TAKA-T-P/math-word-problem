@@ -211,3 +211,24 @@ export const ENEMY_LIST = [
     introText: "空と大地を支配する伝説の王で、口から強力な息を放つ。"
   }
 ];
+
+// 総復習モード専用の固定エネミー（運用開始後に追加）。ENEMY_LIST（通常バトルのランダム抽選プール・
+// タイトル画面のプレビュー表示）には含めない（js/review-mode.js だけが参照する）。
+// minLevel を持たないのは、総復習モードにレベルの概念が無いため。
+// 「4年のまとめ」「5年のまとめ」「6年のまとめ」では FORMULA_KAMEN が、
+// その完全上位版である「小学校のまとめ」では FORMULA_KAMEN_ACE が固定で出現する。
+export const FORMULA_KAMEN = {
+  emoji: "🦹",
+  name: "フォーミュラ仮面",
+  clearText: "まさかここまでやるとは……合格よ！",
+  gameOverText: "きちんと復習しないと、おしおきよ！",
+  introText: "数式を自在にあやつり、こうげきをしかけてくるナゾの女戦士。"
+};
+
+export const FORMULA_KAMEN_ACE = {
+  emoji: "🦹‍♂️",
+  name: "フォーミュラ仮面エース",
+  clearText: "すべての問題を完ペキに解ききるとは……まいりました！",
+  gameOverText: "すべて計算どおり！これがエースの実力さ！",
+  introText: "すべての数式を完ペキに使いこなす、フォーミュラ仮面の最強進化形。"
+};

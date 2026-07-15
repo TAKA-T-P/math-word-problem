@@ -118,11 +118,11 @@ export const grade5Term2Templates = [
     difficulty: 3,
     questionType: "singleStep",
     textParts: [
-      { type: "text", value: "遠足で、朝に道のりの" },
+      { type: "text", value: "朝に" },
       { type: "value", ref: "a" },
-      { type: "text", value: "を歩き、昼に" },
+      { type: "text", value: "km歩き、昼に" },
       { type: "value", ref: "b" },
-      { type: "text", value: "を歩きました。道のりの何分のいくつを歩きましたか。" }
+      { type: "text", value: "km歩きました。合わせて何km歩きましたか。" }
     ],
     variables: {
       a: { type: "fraction", denominator: 9, numeratorMin: 1, numeratorMax: 5 },
@@ -130,7 +130,7 @@ export const grade5Term2Templates = [
     },
     generatorType: "unlikeDenominatorFractionAddition",
     solutionRoutes: [{ left: "a", operator: "+", right: "b", commutative: true }],
-    answerUnit: ""
+    answerUnit: "km"
   },
   {
     id: "g5t2_ufa_005",
@@ -261,11 +261,11 @@ export const grade5Term2Templates = [
     difficulty: 3,
     questionType: "singleStep",
     textParts: [
-      { type: "text", value: "遠足の道のりのうち、すでに" },
+      { type: "text", value: "遠足で" },
       { type: "value", ref: "a" },
-      { type: "text", value: "を歩きました。そのうち" },
+      { type: "text", value: "km歩きました。そのうち" },
       { type: "value", ref: "b" },
-      { type: "text", value: "は下り坂でした。下り坂ではない道は道のりの何分のいくつでしたか。" }
+      { type: "text", value: "kmは下り坂でした。下り坂ではない道は何kmありましたか。" }
     ],
     variables: {
       a: { type: "fraction", denominator: 10, numeratorMin: 7, numeratorMax: 9 },
@@ -273,7 +273,7 @@ export const grade5Term2Templates = [
     },
     generatorType: "unlikeDenominatorFractionSubtraction",
     solutionRoutes: [{ left: "a", operator: "-", right: "b", commutative: false }],
-    answerUnit: ""
+    answerUnit: "km"
   },
   {
     id: "g5t2_ufs_005",

@@ -23,7 +23,8 @@ import {
   isScaleValue,
   formatValue,
   calculateValues,
-  divideValuesAsFraction
+  divideValuesAsFraction,
+  areValuesEqual
 } from "./value-utils.js";
 import { fractionToNumber, gcd } from "./fraction-utils.js";
 import { percentToRatio, ratioToPercent, formatPercent } from "./percentage-utils.js";
@@ -222,9 +223,28 @@ function generateExactDecimalDivisionByDecimalValues(variables) {
 }
 
 /**
+ * 「倍」を表す値（小数倍・分数倍の multiplier）を、範囲からちょうど1にならないよう選び直します
+ * （運用開始後に追加）。「○の1倍」は「○と同じ」を回りくどく言っているだけで文章題として
+ * 不自然なため、1倍は出題しません。pickDistinctValuePair() と同じ「条件を満たすまで選び直す」
+ * 設計です。小数・分数どちらの値でも、1と等しいかどうかは areValuesEqual() で型を意識せず
+ * 判定できます。「1あたり」が正当な値になりうる単位量あたり（unitRate）や、「1」が正当な
+ * 値になりうる平均（average）では使わず、あくまで「倍」の意味を持つ multiplier 専用です。
+ */
+function pickMultiplierValueExcludingOne(range) {
+  const MAX_ATTEMPTS = 200;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const value = pickValueForRange(range);
+    if (!areValuesEqual(value, 1)) {
+      return value;
+    }
+  }
+  throw new Error("1にならない「倍」の値が見つかりませんでした（variables の範囲を見直してください）。");
+}
+
+/**
  * 小数倍・もとの量専用の生成ルール（小学5年生1学期）。
  * テンプレートの quantityRelation（baseKey・comparedKey・multiplierKey）が指す
- * 変数名を使って、基準量(base)・何倍(multiplier)を独立に生成し、
+ * 変数名を使って、基準量(base)・何倍(multiplier、1にはならない)を独立に生成し、
  * 比較量(compared) = base × multiplier を誤差の出ない multiplyDecimal で計算します。
  * 「何が未知（答え）か」はテンプレートの solutionRoutes 側が決めるため、
  * この関数は常に3つの値をすべて生成するだけで、小数倍・もとの量の両カテゴリで共通に使えます。
@@ -234,17 +254,22 @@ function generateDecimalMultiplicativeComparisonValues(variables, quantityRelati
     throw new Error("quantityRelation が指定されていないテンプレートです（小数倍・もとの量には必須です）。");
   }
   const { baseKey, comparedKey, multiplierKey } = quantityRelation;
-  return generateProportionalValues(variables, baseKey, multiplierKey, comparedKey);
+  const baseValue = pickValueForRange(variables[baseKey]);
+  const multiplierValue = pickMultiplierValueExcludingOne(variables[multiplierKey]);
+  const comparedValue = normalizeNumber(multiplyDecimal(baseValue, multiplierValue));
+  return { [baseKey]: baseValue, [multiplierKey]: multiplierValue, [comparedKey]: comparedValue };
 }
 
 /**
  * 「aKey × bKey = productKey」という関係を持つ2つの値を独立に生成し、積を
  * 誤差の出ない multiplyDecimal で計算する、汎用の生成ロジックです（第8段階で追加）。
- * 小数倍・もとの量（base×multiplier=compared）、平均（count×average=total）、
- * 単位量あたり・混み具合（unitCount×perUnit=total）は、いずれも「2つの既知の値から
- * 積にあたる3つ目の値を求める」という同じ構造を持つため、この1つの関数を共有しています。
- * 「どれが未知（答え）か」は各テンプレートの solutionRoutes 側が決めるため、
- * この関数は常に3つの値をすべて生成するだけです。
+ * 平均（count×average=total）、単位量あたり・混み具合（unitCount×perUnit=total）は、
+ * いずれも「2つの既知の値から積にあたる3つ目の値を求める」という同じ構造を持つため、
+ * この1つの関数を共有しています。「どれが未知（答え）か」は各テンプレートの
+ * solutionRoutes 側が決めるため、この関数は常に3つの値をすべて生成するだけです。
+ * 小数倍・もとの量（base×multiplier=compared）は、multiplier がちょうど1にならないように
+ * する必要があるため（運用開始後に追加）、この関数は共有せず、
+ * generateDecimalMultiplicativeComparisonValues() が独自に実装しています。
  */
 function generateProportionalValues(variables, aKey, bKey, productKey) {
   const aValue = pickValueForRange(variables[aKey]);
@@ -323,13 +348,13 @@ function generatePercentageValues(variables, quantityRelation) {
 /**
  * 「aKey × bKey = productKey」という関係を持つ2つの値（分数どうし、または整数×分数）を
  * 独立に生成し、積を value-utils.js の calculateValues() で計算する、分数版の汎用生成ロジックです
- * （小学6年生1学期、第10段階で追加。単位量あたり・分数版と共有するために汎用化）。
+ * （小学6年生1学期、第10段階で追加。単位量あたり・分数版で使用）。
  * 小数版の generateProportionalValues() と同じ考え方ですが、掛け算に multiplyDecimal ではなく
  * calculateValues() を使う点だけが異なります（整数×分数・分数×分数のどちらも正しく計算できるため、
  * 分数専用の掛け算処理をここに個別に書く必要はありません）。答えが整数になる場合（例: 6×2/3＝4）は
- * calculateValues 自身が自動的に整数へ約分・変換します。分数倍（base×multiplier=compared）と
- * 単位量あたり・分数版（unitCount×perUnit=total）は、どちらも「2つの既知の値から積にあたる
- * 3つ目の値を求める」という同じ構造を持つため、この1つの関数を共有します。
+ * calculateValues 自身が自動的に整数へ約分・変換します。分数倍（base×multiplier=compared）は、
+ * multiplier がちょうど1にならないようにする必要があるため（運用開始後に追加）、
+ * この関数は共有せず、generateFractionMultiplicativeComparisonValues() が独自に実装しています。
  */
 function generateFractionProportionalValues(variables, aKey, bKey, productKey) {
   const aValue = pickValueForRange(variables[aKey]);
@@ -341,16 +366,22 @@ function generateFractionProportionalValues(variables, aKey, bKey, productKey) {
 /**
  * 分数倍（比べる量・もとの量）専用の生成ルール（小学6年生1学期、第10段階で追加）。
  * quantityRelation（baseKey・comparedKey・multiplierKey）が指す変数名を使って、
- * generateFractionProportionalValues() に委譲します（base×multiplier=compared）。
- * 「何が未知か」は solutionRoutes 側が決めるため、比べる量・もとの量のどちらのカテゴリでも
- * この1つの関数を共有できます。
+ * 基準量(base)・何倍(multiplier、1にはならない。pickMultiplierValueExcludingOne()参照。
+ * 運用開始後に追加)を独立に生成し、比較量(compared) = base × multiplier を
+ * calculateValues() で計算します。「何が未知か」は solutionRoutes 側が決めるため、
+ * この関数は常に3つの値をすべて生成するだけで、比べる量・もとの量のどちらのカテゴリでも
+ * 共有できます（単位量あたり・分数版と共有していた generateFractionProportionalValues() は
+ * 「1あたり」が正当な値のため、multiplier専用のこの関数からは呼びません）。
  */
 function generateFractionMultiplicativeComparisonValues(variables, quantityRelation) {
   if (!quantityRelation) {
     throw new Error("quantityRelation が指定されていないテンプレートです（分数倍には必須です）。");
   }
   const { baseKey, comparedKey, multiplierKey } = quantityRelation;
-  return generateFractionProportionalValues(variables, baseKey, multiplierKey, comparedKey);
+  const baseValue = pickValueForRange(variables[baseKey]);
+  const multiplierValue = pickMultiplierValueExcludingOne(variables[multiplierKey]);
+  const comparedValue = calculateValues(baseValue, "×", multiplierValue);
+  return { [baseKey]: baseValue, [multiplierKey]: multiplierValue, [comparedKey]: comparedValue };
 }
 
 /**
@@ -564,15 +595,16 @@ function generateInverseProportionValues(variables, quantityRelation) {
 }
 
 /**
- * 縮尺・実際の長さ／縮尺・地図上の長さ／縮尺を求める、の3カテゴリで共有する生成ルール
- * （小学6年生3学期、第12段階で追加）。quantityRelation（scaleKey・mapLengthKey・
- * actualLengthKey・actualLengthUnit）が指す変数名を使って、縮尺の分母（scaleKey。
- * 普通の整数として式に使う）と地図上の長さ（mapLengthKey、cm）を独立に生成し、
- * 実際の長さ（cm）＝地図上の長さ×縮尺の分母 を計算してから、テンプレートごとに指定された
- * 単位（km または m）に変換します（js/unit-utils.js の convertLength()。常に10の累乗での
- * 割り算のため、変換後の値は必ず有限小数になります）。
+ * 縮尺・実際の長さ／縮尺・地図上の長さ、の2カテゴリで共有する生成ルール
+ * （小学6年生3学期、第12段階で追加。「縮尺を求める」カテゴリは運用開始後に削除しました）。
+ * quantityRelation（scaleKey・mapLengthKey・actualLengthKey・actualLengthUnit）が指す
+ * 変数名を使って、縮尺の分母（scaleKey。普通の整数として式に使う）と地図上の長さ
+ * （mapLengthKey、cm）を独立に生成し、実際の長さ（cm）＝地図上の長さ×縮尺の分母 を
+ * 計算してから、テンプレートごとに指定された単位（km または m）に変換します
+ * （js/unit-utils.js の convertLength()。常に10の累乗での割り算のため、変換後の値は
+ * 必ず有限小数になります）。
  * どの量が「未知（答え）」かは、テンプレートごとの textParts・solutionRoutes 側が決めるため、
- * この関数は常に3つの量すべてを生成するだけで、3カテゴリのどのテンプレートでも使えます
+ * この関数は常に3つの量すべてを生成するだけで、2カテゴリのどのテンプレートでも使えます
  * （比を使った数量が firstAmount/secondAmount のどちらが既知でも同じ生成関数を使うのと同じ設計）。
  * scaleValue（問題文に表示する縮尺そのもの、{type:"scale",...}）もここで一緒に作ります
  * （ratioValue と同じ、固定名の表示専用メタデータ）。
@@ -697,12 +729,11 @@ const GENERATOR_TYPE_HANDLERS = {
   // 比例・対応する量／反比例・対応する量（小学6年生3学期、第12段階で追加、2段階問題）。
   findDirectProportionValue: (variables, template) => generateDirectProportionValues(variables, template.quantityRelation),
   findInverseProportionValue: (variables, template) => generateInverseProportionValues(variables, template.quantityRelation),
-  // 縮尺・実際の長さ／縮尺・地図上の長さ／縮尺を求める（小学6年生3学期、第12段階で追加、
-  // 2段階問題）。もとにする量が異なるだけで同じ「地図上の長さ×縮尺の分母＝実際の長さ（cm）」の
-  // 関係を持つ3つのカテゴリで共有します。
+  // 縮尺・実際の長さ／縮尺・地図上の長さ（小学6年生3学期、第12段階で追加、2段階問題）。
+  // もとにする量が異なるだけで同じ「地図上の長さ×縮尺の分母＝実際の長さ（cm）」の関係を持つ
+  // 2つのカテゴリで共有します（「縮尺を求める」カテゴリは運用開始後に削除しました）。
   findActualLengthFromScale: (variables, template) => generateScaleLengthValues(variables, template.quantityRelation),
   findMapLengthFromScale: (variables, template) => generateScaleLengthValues(variables, template.quantityRelation),
-  findScale: (variables, template) => generateScaleLengthValues(variables, template.quantityRelation),
   multiStepDivideFirst: (variables) => generateMultiStepDivideFirstValues(variables),
   multiStepSumToDivisible: (variables) => generateMultiStepSumToDivisibleValues(variables)
 };
@@ -826,12 +857,6 @@ function computeStepResult(left, operator, right, resultType) {
   const result = safeCalculate(left, operator, right);
   if (resultType === "percent" && typeof result === "number") {
     return ratioToPercent(result);
-  }
-  // 「縮尺を求める」（小学6年生3学期、第12段階で追加）: 数値÷数値の結果（縮尺の分母にあたる
-  // 整数）を、縮尺の値オブジェクト（分子は常に1）に変換する。ratioToPercent と同じ考え方で、
-  // 計算自体は普通の整数の割り算だが、表示だけ縮尺（1：n）にしたい場合に使う。
-  if (resultType === "scaleDenominator" && typeof result === "number") {
-    return createScale(result);
   }
   return result;
 }
@@ -1325,17 +1350,19 @@ const GRADE_TERM_PLAN_CONFIG = {
     newContentGradeTerms: ["5-3"],
     reviewGradeTerms: ["4-1", "4-2", "4-3", "4-multi-step", "5-1", "5-2"]
   },
-  // 小学6年生1学期（第10段階）：新内容は6-1の7カテゴリ、復習内容は4年生1〜3学期
-  // （整数の2段階文章題を含む）・5年生1〜3学期から偏りなく選ぶ。
+  // 小学6年生1学期（第10段階）：新内容は6-1の7カテゴリ、復習内容は5年生1〜3学期から
+  // 偏りなく選ぶ（運用開始後に変更。以前は4年生1〜3学期の内容も復習に含めていたが、
+  // 4年生の内容は出題しないよう変更した）。
   "6-1": {
     newContentGradeTerms: ["6-1"],
-    reviewGradeTerms: ["4-1", "4-2", "4-3", "4-multi-step", "5-1", "5-2", "5-3"]
+    reviewGradeTerms: ["5-1", "5-2", "5-3"]
   },
-  // 小学6年生2学期（第11段階）：新内容は6-2の8カテゴリ、復習内容は4年生1〜3学期
-  // （整数の2段階文章題を含む）・5年生1〜3学期・6年生1学期から偏りなく選ぶ。
+  // 小学6年生2学期（第11段階）：新内容は6-2の8カテゴリ、復習内容は5年生1〜3学期・
+  // 6年生1学期から偏りなく選ぶ（運用開始後に変更。以前は4年生1〜3学期の内容も復習に
+  // 含めていたが、4年生の内容は出題しないよう変更した）。
   "6-2": {
     newContentGradeTerms: ["6-2"],
-    reviewGradeTerms: ["4-1", "4-2", "4-3", "4-multi-step", "5-1", "5-2", "5-3", "6-1"]
+    reviewGradeTerms: ["5-1", "5-2", "5-3", "6-1"]
   },
   // 小学6年生3学期（第12段階）：新内容は6-3の5カテゴリ、復習内容は5年生1〜3学期・
   // 6年生1〜2学期（小学4年生の内容は含めない）。この一覧は getCandidateTemplatesForSlot()
@@ -1600,7 +1627,7 @@ export function planQuestionSequence(totalQuestions, templateSets, currentGradeT
 // 小学6年生3学期（第12段階）の出題グループ定義。
 //   グループA(grade5)       : 小学5年生1〜3学期の復習
 //   グループB(grade6Review) : 小学6年生1〜2学期の復習
-//   グループC(grade6Term3)  : 小学6年生3学期の新内容（比例・反比例・縮尺の5カテゴリ）
+//   グループC(grade6Term3)  : 小学6年生3学期の新内容（比例・反比例・縮尺の4カテゴリ）
 // 小学4年生の内容は意図的に含めません（依頼文の指示どおり）。
 const GRADE6_TERM3_GROUP_SOURCE_TERMS = {
   grade5: ["5-1", "5-2", "5-3"],
@@ -1636,7 +1663,7 @@ function buildGrade6Term3GroupCounts(totalQuestions, rotationIndex) {
  * グループA・Bの内部は、既存の planReviewSlots() と同じ「学期→カテゴリ」の
  * 2段階ラウンドロビンで均等に配分します（planSlotsForTermList() を対象学期を
  * 絞って再利用）。グループCの内部は、既存の新内容カテゴリと同じラウンドロビンで
- * 5カテゴリに配分します（buildRoundRobinLabels()）。
+ * 4カテゴリに配分します（buildRoundRobinLabels()）。
  * @param {number} totalQuestions
  * @param {Record<string, Array>} templateSets
  * @param {number} rotationIndex - 余りを受け取るグループのローテーション位置（0始まり）

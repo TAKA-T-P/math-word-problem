@@ -436,14 +436,6 @@ export const categoryRegistry = [
     gradeLabel: "小学6年生・3学期",
     enabledInTraining: true,
     order: 50
-  },
-  {
-    id: "scale-find-scale",
-    label: "縮尺を求める",
-    gradeTerm: "6-3",
-    gradeLabel: "小学6年生・3学期",
-    enabledInTraining: true,
-    order: 51
   }
 ];
 
@@ -464,6 +456,18 @@ export function getEnabledTrainingCategories() {
  */
 export function getCategoriesForGradeTerm(gradeTerm) {
   return getEnabledTrainingCategories().filter((c) => c.gradeTerm === gradeTerm);
+}
+
+/**
+ * 指定した学年（"4"|"5"|"6"）に属するカテゴリを、order順に並べて返します
+ * （総復習モードの「○年のまとめ」用。運用開始後に追加。gradeTerm の "学年-学期" 表記のうち
+ * 学年部分だけで絞り込むため、学期をまたいだ学年単位の一覧が得られる）。
+ */
+export function getCategoriesForGrade(grade) {
+  return categoryRegistry
+    .filter((c) => c.gradeTerm.startsWith(`${grade}-`))
+    .slice()
+    .sort((a, b) => a.order - b.order);
 }
 
 /**

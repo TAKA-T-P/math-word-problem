@@ -11,7 +11,6 @@ import {
   isPercentValue,
   isValidPercent,
   isRatioValue,
-  isScaleValue,
   isZeroValue,
   divideValuesAsFraction
 } from "./value-utils.js";
@@ -19,7 +18,6 @@ import { areNumbersEqual, getDecimalPlaces, formatNumber, parseFormattedNumber }
 import { renderValueHtml, buildFractionAriaLabel, buildRatioAriaLabel } from "./value-renderer.js";
 import { ratioToPercent } from "./percentage-utils.js";
 import { isValidRatio } from "./ratio-utils.js";
-import { isValidScale, createScale } from "./scale-utils.js";
 import { gcd } from "./fraction-utils.js";
 
 // このアプリで扱う小数点以下の最大桁数（4.15 のような2桁まで）。
@@ -345,21 +343,17 @@ const GENERATOR_TYPE_RULES = {
     computedVariables: [],
     requiresInverseProportionShape: true
   },
-  // 縮尺・実際の長さ／縮尺・地図上の長さ／縮尺を求める（小学6年生3学期、第12段階で追加、
-  // 2段階問題）。速さ・道のり・時間（fractionSpeedWithMinuteConversion等）と同じ理由で、
-  // どの量が「未知」かによって variables に定義されるキーの組み合わせが変わるため、
-  // requiresScaleLengthShape で validateScaleLength() による個別の構造検証を行う。
+  // 縮尺・実際の長さ／縮尺・地図上の長さ（小学6年生3学期、第12段階で追加、2段階問題。
+  // 「縮尺を求める」カテゴリは運用開始後に削除しました）。速さ・道のり・時間
+  // （fractionSpeedWithMinuteConversion等）と同じ理由で、どの量が「未知」かによって
+  // variables に定義されるキーの組み合わせが変わるため、requiresScaleLengthShape で
+  // validateScaleLength() による個別の構造検証を行う。
   findActualLengthFromScale: {
     requiredVariableKeys: [],
     computedVariables: ["scaleValue"],
     requiresScaleLengthShape: true
   },
   findMapLengthFromScale: {
-    requiredVariableKeys: [],
-    computedVariables: ["scaleValue"],
-    requiresScaleLengthShape: true
-  },
-  findScale: {
     requiredVariableKeys: [],
     computedVariables: ["scaleValue"],
     requiresScaleLengthShape: true
@@ -412,9 +406,6 @@ function computeStepResultForValidation(left, operator, right, resultType) {
   const result = safeCalculate(left, operator, right);
   if (resultType === "percent" && typeof result === "number") {
     return ratioToPercent(result);
-  }
-  if (resultType === "scaleDenominator" && typeof result === "number") {
-    return createScale(result);
   }
   return result;
 }
@@ -1103,17 +1094,16 @@ function validateInverseProportion(template, errors) {
 }
 
 /**
- * 縮尺・実際の長さ／縮尺・地図上の長さ／縮尺を求める（quantityRelation.type:"scale-length"）
- * 専用の構造検証です（小学6年生3学期、第12段階で追加）。
+ * 縮尺・実際の長さ／縮尺・地図上の長さ（quantityRelation.type:"scale-length"）
+ * 専用の構造検証です（小学6年生3学期、第12段階で追加。「縮尺を求める」カテゴリは
+ * 運用開始後に削除しました）。
  * - scaleKey・mapLengthKey は variables に存在すること（どちらが「未知」でも、この2つは
  *   常に generateScaleLengthValues() が独立に生成する。詳しくはREADME参照）
  * - actualLengthKey は（生成時に自動計算される値のため）variables に含めないこと
  * - actualLengthUnit が "km"／"m" のいずれかであること
- * - unknown が "actualLength"／"mapLength"／"scale" のいずれかであること
+ * - unknown が "actualLength"／"mapLength" のいずれかであること
  * - 必ず1つの正解ルート・2段階で、長さの単位変換（km なら100000、m なら100を使った
  *   ステップ）が含まれていること
- * - unknown が "scale" の場合、最終ステップに resultType:"scaleDenominator" が
- *   指定されていること（数値ではなく縮尺の値オブジェクトとして表示するため）
  */
 function validateScaleLength(template, errors) {
   const qr = template.quantityRelation;
@@ -1129,8 +1119,8 @@ function validateScaleLength(template, errors) {
   if (!["km", "m"].includes(qr.actualLengthUnit)) {
     errors.push(`quantityRelation.actualLengthUnit が不正です: ${qr.actualLengthUnit}（"km"／"m" のいずれか）`);
   }
-  if (!["actualLength", "mapLength", "scale"].includes(qr.unknown)) {
-    errors.push(`quantityRelation.unknown が不正です: ${qr.unknown}（"actualLength"／"mapLength"／"scale" のいずれか）`);
+  if (!["actualLength", "mapLength"].includes(qr.unknown)) {
+    errors.push(`quantityRelation.unknown が不正です: ${qr.unknown}（"actualLength"／"mapLength" のいずれか）`);
   }
   const hasVariables = template.variables && typeof template.variables === "object";
   if (hasVariables) {
@@ -1169,12 +1159,6 @@ function validateScaleLength(template, errors) {
     );
     if (!hasUnitConversion) {
       errors.push(`[${route.id}] 長さの単位変換（${expectedFactor}を使ったステップ）が見つかりません`);
-    }
-    if (qr.unknown === "scale") {
-      const lastStep = route.steps[route.steps.length - 1];
-      if (!lastStep || lastStep.resultType !== "scaleDenominator") {
-        errors.push(`[${route.id}] 縮尺を求める問題の最終ステップには resultType:"scaleDenominator" が必要です`);
-      }
     }
   }
 }
@@ -2036,12 +2020,6 @@ function validateGeneratedMultiStepQuestion(problem) {
     } else if (gcd(antecedent, consequent) !== 1) {
       errors.push(`比の前項・後項が互いに素ではありません: ${antecedent}：${consequent}`);
     }
-  }
-
-  // 「縮尺を求める」（小学6年生3学期、第12段階で追加）: 最終的な答えが縮尺の値オブジェクトの
-  // 場合、分子が1・分母が正の整数であることを確認する（js/scale-utils.js の isValidScale()）。
-  if (finalAnswer !== undefined && isScaleValue(finalAnswer) && !isValidScale(finalAnswer)) {
-    errors.push(`縮尺の値が不正です: ${JSON.stringify(finalAnswer)}（分子は1、分母は正の整数である必要があります）`);
   }
 
   if (!Array.isArray(problem.choices)) {

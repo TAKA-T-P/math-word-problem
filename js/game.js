@@ -10,7 +10,7 @@ import {
   shouldDisplayFractionsUnsimplified
 } from "./question-generator.js";
 import { checkAnswer } from "./answer-checker.js";
-import { calculateQuestionScore, calculateRank, toTimeRatioPercent, formatFinalRank } from "./score.js";
+import { calculateQuestionScore, calculateTimeBonus, calculateRank, formatFinalRank } from "./score.js";
 import {
   loadHighScore,
   saveHighScoreIfBetter,
@@ -785,8 +785,14 @@ function handleCorrect(resultValue) {
   // スコアは、ゲージを回復させる前（正解した瞬間）の残量を必ず参照する
   // （lastTimerRatio は handleJudge() の stopTimer() 時点で固定されており、
   //  この後で行うゲージ回復の影響を受けない）。
-  const timeRatioPercent = gameState.currentQuestionPenalized ? 0 : toTimeRatioPercent(lastTimerRatio);
-  let addedScore = calculateQuestionScore(questionNumber, timeRatioPercent);
+  // タイムボーナスは「その問題のタイマーが始まってから正解するまでにかかった秒数」から求める
+  // （不正解・時間切れがあった問題は currentQuestionPenalized が立っており、常に0として扱う）。
+  // 多段階問題は段階数（2段階/3段階）に応じた係数で経過秒数を割ってから計算する
+  // （calculateTimeBonus() 参照。1段階問題は段階数1として扱い、従来どおり割らない）。
+  const stepCount = problem.questionType === "multiStep" && problem.multiStep ? problem.multiStep.totalSteps : 1;
+  const elapsedSeconds = gameState.currentQuestionDurationSec * (1 - lastTimerRatio);
+  const timeBonus = gameState.currentQuestionPenalized ? 0 : calculateTimeBonus(elapsedSeconds, stepCount);
+  let addedScore = calculateQuestionScore(questionNumber, timeBonus);
   if (isFinalQuestion) {
     // 最終問題に正解したときだけ、レベル・残りハート数に応じたボーナスを加算する
     // （ボーナス＝80×レベル×レベル×残りハート数。レベルMAXは内部レベル6として計算する）。

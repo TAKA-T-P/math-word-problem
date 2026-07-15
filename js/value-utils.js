@@ -283,8 +283,8 @@ export function areValuesEqual(a, b) {
   if (isPercentValue(a) || isPercentValue(b)) {
     return arePercentValuesEqual(a, b);
   }
-  // 縮尺・比は式の計算には使わない表示専用の値だが、「縮尺を求める」（第12段階で追加）では
-  // 縮尺そのものが最終的な答えになるため、areValuesEqual() でも正しく比較できる必要がある
+  // 縮尺・比は式の計算には使わない表示専用の値（第12段階で追加）。他の値型と同じく
+  // areValuesEqual() で正しく比較できるよう、汎用的な等価判定として用意している
   // （分子は常に1のため、分母どうしの比較で十分）。
   if (isScaleValue(a) || isScaleValue(b)) {
     return areScalesEqual(a, b);

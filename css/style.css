@@ -206,12 +206,14 @@ button {
 }
 
 /* ==========================================================================
-   モード選択（通常バトル／トレーニング）・出し分け共通クラス
+   モード選択（通常バトル／トレーニング／総復習）・出し分け共通クラス
    ========================================================================== */
 
 .mode-select {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  /* 「文章題バトル」ボタンだけ、他の2つより横幅を広くする（運用開始後に追加した
+     「総復習」ボタンを含めても、バトルが一番目立つようにするため）。 */
+  grid-template-columns: 1.4fr 1fr 1fr;
   gap: 8px;
   width: 100%;
   margin-bottom: 4px;
@@ -225,6 +227,7 @@ button {
   color: var(--color-text);
   font-size: 0.95rem;
   font-weight: 700;
+  padding: 4px 2px;
 }
 
 .mode-btn.selected {
@@ -233,25 +236,37 @@ button {
   box-shadow: 0 0 0 2px rgba(255, 210, 63, 0.35);
 }
 
-/* トレーニング専用の要素は、既定では常に非表示にしておく
-   （#app に mode-training が付いたときだけ、個別のセレクタで表示に切り替える）。
-   バトル専用の要素は既定で表示し、#app.mode-training のときだけまとめて非表示にする。
-   .training-only / .battle-only は、それぞれ .result-item 等の既存クラスと
-   詳細度（0,1,0）が同じになりがちなため、勝敗をCSSの記述順に依存させないよう
-   両方向とも !important を使って明示的に上書きする。 */
-.training-only {
+/* トレーニング専用・総復習専用の要素は、既定では常に非表示にしておく
+   （#app に mode-training / mode-review が付いたときだけ、個別のセレクタで表示に切り替える）。
+   バトル専用の要素は既定で表示し、#app.mode-training / #app.mode-review のときだけ
+   まとめて非表示にする。.training-only / .review-only / .battle-only は、それぞれ
+   .result-item 等の既存クラスと詳細度（0,1,0）が同じになりがちなため、勝敗をCSSの
+   記述順に依存させないよう両方向とも !important を使って明示的に上書きする。 */
+.training-only,
+.review-only {
   display: none !important;
 }
 
-#app.mode-training .battle-only {
+#app.mode-training .battle-only,
+#app.mode-review .battle-only {
   display: none !important;
 }
 
-/* 個別に表示形式（flex等）を指定していない .training-only 要素（結果画面の
-   トレーニング専用行など）は、このブロックレベルの既定値で表示する。
-   training-status-pill・training-progress のように独自の表示形式が必要なものは、
-   後方でより詳細なセレクタを使って上書きする。 */
+/* バトル・総復習の両方に登場する要素（エネミー・ハート・結果画面のせいかい数など）は
+   .hide-in-training を使う（.battle-only とは異なり、総復習モードでは非表示にしない）。 */
+#app.mode-training .hide-in-training {
+  display: none !important;
+}
+
+/* 個別に表示形式（flex等）を指定していない .training-only / .review-only 要素（結果画面の
+   トレーニング専用行・総復習専用行など）は、このブロックレベルの既定値で表示する。
+   training-status-pill・training-progress・review-status-pill のように独自の表示形式が
+   必要なものは、後方でより詳細なセレクタを使って上書きする。 */
 #app.mode-training .result-item.training-only {
+  display: flex !important;
+}
+
+#app.mode-review .result-item.review-only {
   display: flex !important;
 }
 
@@ -263,7 +278,16 @@ button {
   display: none;
 }
 
-#app.mode-training #battle-settings {
+#app.mode-review #review-settings {
+  display: block;
+}
+
+#app:not(.mode-review) #review-settings {
+  display: none;
+}
+
+#app.mode-training #battle-settings,
+#app.mode-review #battle-settings {
   display: none;
 }
 
@@ -505,6 +529,18 @@ button {
 }
 
 #app.mode-training .training-status-pill.training-only {
+  display: flex !important;
+}
+
+/* 総復習画面のヘッダー（例: "4年のまとめ　1問目／13問"）。バトルのスコア表示と
+   同じ場所・見た目を再利用しつつ、#app.mode-review のときだけ表示される。
+   2つの .status-value（モード名・問題数）を並べるため、間に区切りの余白を入れる。 */
+.review-status-pill {
+  display: none;
+  gap: 8px;
+}
+
+#app.mode-review .review-status-pill.review-only {
   display: flex !important;
 }
 
@@ -778,6 +814,21 @@ button {
 
 .timer-fill.timer-warning {
   background: linear-gradient(90deg, var(--color-bad), #ff8a3d);
+}
+
+/* 総復習モード専用の経過時間表示。時間制限（.timer-bar）の代わりに、同じ行の
+   同じ場所へ「ゲームスタート（1問目開始）からの経過時間」を表示する。 */
+.elapsed-time-display {
+  flex: 1;
+  text-align: right;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-text-dim);
+  white-space: nowrap;
+}
+
+#app.mode-review .elapsed-time-display.review-only {
+  display: block !important;
 }
 
 .answer-area {
@@ -1350,22 +1401,23 @@ button {
   font-size: 1.05rem;
 }
 
-.new-record {
-  text-align: center;
-  color: var(--color-accent);
-  font-weight: 800;
-  margin: 4px 0 0;
-  opacity: 0;
-  height: 0;
-  overflow: hidden;
-  grid-column: 1 / -1;
-  font-size: 0.85rem;
+/* 「今回のスコア」の数字と、ハイスコア更新時にその右へ添える「✨新記録！✨」バッジを
+   横並びにするための行ラッパー。 */
+.result-score-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
 }
 
-.new-record.show {
+.new-record-badge {
+  color: var(--color-accent);
+  font-weight: 800;
+  font-size: 0.75rem;
+  opacity: 0;
+}
+
+.new-record-badge.show {
   opacity: 1;
-  height: auto;
-  margin-top: 4px;
 }
 
 .result-buttons {

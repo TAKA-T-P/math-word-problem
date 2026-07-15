@@ -139,10 +139,10 @@ export function saveSelectedGradeTerm(gradeTerm) {
 }
 
 /**
- * 前回選択したモード（"battle" | "training"）を読み込みます。
+ * 前回選択したモード（"battle" | "training" | "review"）を読み込みます。
  * 保存が無い/壊れている/localStorageが使えない場合は null を返します
  * （呼び出し側＝ui.jsが、"battle" 以外の不正値は "battle" 扱いにフォールバックしてください）。
- * トレーニングのスコア・進捗・ハイスコアはここでは一切扱いません（保存対象外）。
+ * トレーニング・総復習のスコア・進捗・ハイスコアはここでは一切扱いません（保存対象外）。
  */
 export function loadLastMode() {
   if (!checkLocalStorageAvailable()) {
@@ -150,14 +150,14 @@ export function loadLastMode() {
   }
   try {
     const raw = window.localStorage.getItem(LAST_MODE_KEY);
-    return raw === "battle" || raw === "training" ? raw : null;
+    return raw === "battle" || raw === "training" || raw === "review" ? raw : null;
   } catch (error) {
     return null;
   }
 }
 
 /**
- * 選択したモード（"battle" | "training"）を保存します。
+ * 選択したモード（"battle" | "training" | "review"）を保存します。
  */
 export function saveLastMode(mode) {
   if (!checkLocalStorageAvailable()) {

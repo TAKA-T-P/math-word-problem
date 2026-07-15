@@ -22,7 +22,12 @@ import {
   loadLastTrainingGradeTerm,
   saveLastTrainingGradeTerm
 } from "./storage.js";
-import { getGradeTermGroups, getCategoriesForGradeTerm } from "../data/category-registry.js";
+import {
+  getGradeTermGroups,
+  getCategoriesForGradeTerm,
+  getCategoriesForGrade,
+  getEnabledTrainingCategories
+} from "../data/category-registry.js";
 import { ENEMY_LIST } from "./enemy-list.js";
 
 const DRAG_THRESHOLD = 6;
@@ -56,6 +61,28 @@ let nextQuestionTapLock = false;
 // ダイアログを閉じる（スタート／もどるのどちらでも）たびに null に戻す。
 let pendingTrainingSettings = null;
 
+// 総復習の「○年のまとめ」ボタンをタップしてから、確認ダイアログの
+// 「スタート」が押されるまでの間だけ保持する、開始予定の設定（scope・label）。
+// pendingTrainingSettings と同じ考え方。
+let pendingReviewSettings = null;
+
+// 総復習のスコープキー（"4"|"5"|"6"|"all"）から、確認ダイアログの表示名を求める。
+// js/ui.js は js/review-mode.js を import しない設計（js/game.js・js/training-mode.js が
+// 互いを深く参照しないのと同じ方針）のため、確認ダイアログの文言を組み立てるために
+// 必要な最小限のラベルだけを、ここに独立して持たせている（js/review-mode.js 側にも
+// 同じマッピングがあるが、それぞれの用途に閉じた複製であり、まとめる必要はない）。
+const REVIEW_SCOPE_LABELS = { "4": "4年のまとめ", "5": "5年のまとめ", "6": "6年のまとめ", all: "小学校のまとめ" };
+
+/**
+ * 総復習モードの「○年のまとめ」スコープから、出題される問題数（＝そのスコープに属する
+ * カテゴリ数。1カテゴリにつき1問）を求める。data/category-registry.js から動的に導出する
+ * ため、カテゴリが増減しても自動的に追随する（13/17/20/50をハードコードしない）。
+ */
+function getReviewQuestionCountForScope(scope) {
+  const categories = scope === "all" ? getEnabledTrainingCategories() : getCategoriesForGrade(scope);
+  return categories.length;
+}
+
 function qs(id) {
   return document.getElementById(id);
 }
@@ -65,18 +92,28 @@ function cacheElements() {
     appEl: qs("app"),
     soundToggleBtn: qs("sound-toggle-btn"),
     modeSelect: qs("mode-select"),
+    appSubtitle: qs("app-subtitle"),
     enemyPreviewTrack: qs("enemy-preview-track"),
     battleSettings: qs("battle-settings"),
     trainingSettings: qs("training-settings"),
-    trainingGradeTermSelect: qs("training-gradeterm-select"),
+    reviewSettings: qs("review-settings"),
+    trainingGradeSelect: qs("training-grade-select"),
+    trainingTermSelect: qs("training-term-select"),
     trainingCategorySelect: qs("training-category-select"),
-    rangeSelect: qs("range-select"),
+    reviewScopeSelect: qs("review-scope-select"),
+    rangeGradeSelect: qs("range-grade-select"),
+    rangeTermSelect: qs("range-term-select"),
+    rangeDevSelect: qs("range-dev-select"),
     levelSelect: qs("level-select"),
     startBtn: qs("start-btn"),
     trainingStartDialog: qs("training-start-confirm-dialog"),
     trainingStartConfirmText: qs("training-start-confirm-text"),
     trainingStartYesBtn: qs("training-start-confirm-yes"),
     trainingStartNoBtn: qs("training-start-confirm-no"),
+    reviewStartDialog: qs("review-start-confirm-dialog"),
+    reviewStartConfirmText: qs("review-start-confirm-text"),
+    reviewStartYesBtn: qs("review-start-confirm-yes"),
+    reviewStartNoBtn: qs("review-start-confirm-no"),
 
     countdownText: qs("countdown-text"),
 
@@ -86,6 +123,9 @@ function cacheElements() {
     scoreDelta: qs("score-delta"),
     trainingCategoryDisplay: qs("training-category-display"),
     trainingProgress: qs("training-progress"),
+    reviewModeDisplay: qs("review-mode-display"),
+    reviewProgressDisplay: qs("review-progress-display"),
+    elapsedTimeDisplay: qs("elapsed-time-display"),
     enemyEmoji: qs("enemy-emoji"),
     enemyName: qs("enemy-name"),
     enemyHpFill: qs("enemy-hp-fill"),
@@ -128,6 +168,8 @@ function cacheElements() {
     resultTrainingCompleted: qs("result-training-completed"),
     resultTrainingFirstTry: qs("result-training-firsttry"),
     resultTrainingWrongCount: qs("result-training-wrongcount"),
+    resultReviewMode: qs("result-review-mode"),
+    resultReviewElapsed: qs("result-review-elapsed"),
     retryBtn: qs("retry-btn"),
     toTitleBtn: qs("to-title-btn"),
     historyList: qs("history-list")
@@ -165,11 +207,28 @@ function setupTitleScreen() {
     callbacks.onSoundToggle && callbacks.onSoundToggle();
   });
 
-  els.rangeSelect.addEventListener("click", (e) => {
-    const btn = e.target.closest(".range-btn");
+  els.rangeGradeSelect.addEventListener("click", (e) => {
+    const btn = e.target.closest(".grade-btn");
     if (!btn || btn.disabled) return;
-    selectRangeButton(btn);
-    saveSelectedGradeTerm(btn.dataset.range);
+    selectRangeGradeButton(btn);
+    saveSelectedGradeTerm(getSelectedBattleGradeTerm());
+  });
+
+  els.rangeTermSelect.addEventListener("click", (e) => {
+    const btn = e.target.closest(".term-btn");
+    if (!btn || btn.disabled) return;
+    selectRangeTermButton(btn);
+    saveSelectedGradeTerm(getSelectedBattleGradeTerm());
+  });
+
+  // 開発版の特殊な出題範囲（?debug=true限定）。学年・学期ボタンとは独立した選択枠のため、
+  // 選ばれると学年・学期側の選択状態を解除し、getSelectedBattleGradeTerm() が
+  // このボタンの値を優先して返す（selectDevRangeButton参照）。
+  els.rangeDevSelect.addEventListener("click", (e) => {
+    const btn = e.target.closest(".dev-range-btn");
+    if (!btn) return;
+    selectDevRangeButton(btn);
+    saveSelectedGradeTerm(getSelectedBattleGradeTerm());
   });
 
   els.levelSelect.addEventListener("click", (e) => {
@@ -186,39 +245,63 @@ function setupTitleScreen() {
     saveLastMode(btn.dataset.mode);
   });
 
-  els.trainingGradeTermSelect.addEventListener("click", (e) => {
-    const btn = e.target.closest(".gradeterm-btn");
+  els.trainingGradeSelect.addEventListener("click", (e) => {
+    const btn = e.target.closest(".grade-btn");
     if (!btn) return;
-    selectTrainingGradeTermButton(btn);
-    saveLastTrainingGradeTerm(btn.dataset.gradeterm);
-    populateTrainingCategorySelect(btn.dataset.gradeterm);
+    selectTrainingGradeButton(btn);
+    const gradeTerm = getSelectedTrainingGradeTerm();
+    if (gradeTerm) {
+      saveLastTrainingGradeTerm(gradeTerm);
+      populateTrainingCategorySelect(gradeTerm);
+    }
+  });
+
+  els.trainingTermSelect.addEventListener("click", (e) => {
+    const btn = e.target.closest(".term-btn");
+    if (!btn) return;
+    selectTrainingTermButton(btn);
+    const gradeTerm = getSelectedTrainingGradeTerm();
+    if (gradeTerm) {
+      saveLastTrainingGradeTerm(gradeTerm);
+      populateTrainingCategorySelect(gradeTerm);
+    }
   });
 
   // カテゴリボタンをタップすると、そのカテゴリで本当にトレーニングを始めてよいかの
   // 確認ダイアログ（training-start-confirm-dialog）を開く。カテゴリボタン自体には
   // 「選択状態」の見た目を持たせない（どのボタンをタップしても、常に同じ確認フローになるため）。
-  // 学年・学期は populateTrainingGradeTermSelect() が起動時に必ず1つ選択済みにするため、
+  // 学年・学期は populateTrainingGradeTermSelect() が起動時に必ず1つずつ選択済みにするため、
   // ここで未選択を気にする必要はない。
   els.trainingCategorySelect.addEventListener("click", (e) => {
     const btn = e.target.closest(".category-btn");
     if (!btn) return;
-    const gradeTermBtn = els.trainingGradeTermSelect.querySelector(".gradeterm-btn.selected");
     pendingTrainingSettings = {
       mode: "training",
-      gradeTerm: gradeTermBtn ? gradeTermBtn.dataset.gradeterm : null,
+      gradeTerm: getSelectedTrainingGradeTerm(),
       categoryId: btn.dataset.categoryId,
       categoryLabel: btn.textContent
     };
     showTrainingStartDialog(btn.textContent);
   });
 
-  // このボタンはバトルモード専用（.battle-only。トレーニングモードでは非表示）。
+  // 総復習の「○年のまとめ」ボタンをタップすると、確認ダイアログ
+  // （review-start-confirm-dialog）を開く。トレーニングのカテゴリボタンと同じく、
+  // ボタン自体には「選択状態」の見た目を持たせない。
+  els.reviewScopeSelect.addEventListener("click", (e) => {
+    const btn = e.target.closest(".range-btn");
+    if (!btn) return;
+    const scope = btn.dataset.scope;
+    const label = REVIEW_SCOPE_LABELS[scope] || scope;
+    pendingReviewSettings = { mode: "review", scope, label };
+    showReviewStartDialog(label, getReviewQuestionCountForScope(scope));
+  });
+
+  // このボタンはバトルモード専用（.battle-only。トレーニング・総復習モードでは非表示）。
   els.startBtn.addEventListener("click", () => {
-    const rangeBtn = els.rangeSelect.querySelector(".range-btn.selected");
     const levelBtn = els.levelSelect.querySelector(".level-btn.selected");
     const settings = {
       mode: "battle",
-      gradeTerm: rangeBtn ? rangeBtn.dataset.range : "4-1",
+      gradeTerm: getSelectedBattleGradeTerm(),
       level: levelBtn ? Number.parseInt(levelBtn.dataset.level, 10) : 1
     };
     callbacks.onStart && callbacks.onStart(settings);
@@ -233,9 +316,47 @@ function setupTitleScreen() {
   restoreSelectedMode();
 }
 
-function selectRangeButton(btn) {
-  els.rangeSelect.querySelectorAll(".range-btn").forEach((b) => b.classList.remove("selected"));
+// バトルモードで「開発版」の出題範囲（?debug=true限定）が選ばれているかどうか。
+// 学年・学期ボタンとは独立した選択枠のため、専用のフラグで管理する。
+let devRangeSelected = false;
+
+function selectRangeGradeButton(btn) {
+  devRangeSelected = false;
+  els.rangeDevSelect.querySelectorAll(".dev-range-btn").forEach((b) => b.classList.remove("selected"));
+  els.rangeGradeSelect.querySelectorAll(".grade-btn").forEach((b) => b.classList.remove("selected"));
   btn.classList.add("selected");
+}
+
+function selectRangeTermButton(btn) {
+  devRangeSelected = false;
+  els.rangeDevSelect.querySelectorAll(".dev-range-btn").forEach((b) => b.classList.remove("selected"));
+  els.rangeTermSelect.querySelectorAll(".term-btn").forEach((b) => b.classList.remove("selected"));
+  btn.classList.add("selected");
+}
+
+function selectDevRangeButton(btn) {
+  devRangeSelected = true;
+  els.rangeGradeSelect.querySelectorAll(".grade-btn").forEach((b) => b.classList.remove("selected"));
+  els.rangeTermSelect.querySelectorAll(".term-btn").forEach((b) => b.classList.remove("selected"));
+  els.rangeDevSelect.querySelectorAll(".dev-range-btn").forEach((b) => b.classList.remove("selected"));
+  btn.classList.add("selected");
+}
+
+/**
+ * バトルモードで現在選択されている出題範囲（gradeTerm）を、学年ボタン・学期ボタンの
+ * 選択状態から組み立てる。開発版ボタン（?debug=true限定）が選ばれている場合は、
+ * 学年・学期の組み合わせではなくそのボタンの値（"4-multi-step"）を返す。
+ */
+function getSelectedBattleGradeTerm() {
+  if (devRangeSelected) {
+    const devBtn = els.rangeDevSelect.querySelector(".dev-range-btn.selected");
+    if (devBtn) return devBtn.dataset.range;
+  }
+  const gradeBtn = els.rangeGradeSelect.querySelector(".grade-btn.selected");
+  const termBtn = els.rangeTermSelect.querySelector(".term-btn.selected");
+  const grade = gradeBtn ? gradeBtn.dataset.grade : "4";
+  const term = termBtn ? termBtn.dataset.term : "1";
+  return `${grade}-${term}`;
 }
 
 /**
@@ -247,24 +368,44 @@ function selectRangeButton(btn) {
 function restoreSelectedGradeTerm() {
   const saved = loadSelectedGradeTerm();
   if (!saved) return;
-  const matchingBtn = Array.from(els.rangeSelect.querySelectorAll(".range-btn")).find(
-    (b) => b.dataset.range === saved && !b.disabled
-  );
-  if (matchingBtn) {
-    selectRangeButton(matchingBtn);
+  if (saved === "4-multi-step") {
+    const devBtn = els.rangeDevSelect.querySelector('.dev-range-btn[data-range="4-multi-step"]');
+    if (devBtn) selectDevRangeButton(devBtn);
+    return;
   }
+  const match = /^(\d+)-(\d+)$/.exec(saved);
+  if (!match) return;
+  const gradeBtn = els.rangeGradeSelect.querySelector(`.grade-btn[data-grade="${match[1]}"]`);
+  const termBtn = els.rangeTermSelect.querySelector(`.term-btn[data-term="${match[2]}"]`);
+  if (gradeBtn) selectRangeGradeButton(gradeBtn);
+  if (termBtn) selectRangeTermButton(termBtn);
 }
 
-// ============== モード選択（通常バトル／トレーニング） ==============
+// ============== モード選択（通常バトル／トレーニング／総復習） ==============
 
 /**
- * モードを切り替える。#app 要素に mode-training クラスを付け外しすることで、
+ * モードを切り替える。#app 要素に mode-training / mode-review クラスを付け外しすることで、
  * タイトル画面の設定ブロックの出し分けと、バトル画面・結果画面の
- * バトル専用要素／トレーニング専用要素（.battle-only / .training-only）の
- * 出し分けの両方を、CSS側でまとめて行う（js/ui.js に個別のif分岐を増やさないため）。
+ * バトル専用要素／トレーニング専用要素／総復習専用要素（.battle-only / .training-only /
+ * .review-only / .hide-in-training）の出し分けの両方を、CSS側でまとめて行う
+ * （js/ui.js に個別のif分岐を増やさないため）。
  */
 export function setMode(mode) {
   els.appEl.classList.toggle("mode-training", mode === "training");
+  els.appEl.classList.toggle("mode-review", mode === "review");
+}
+
+// タイトル画面のサブタイトル（アプリタイトルの下の説明文）。運用開始後、モード切り替え
+// ボタンの下へ移動し、選んでいるモードに応じて文言が変わるようにした。
+const MODE_SUBTITLES = {
+  battle: "式をつくって エネミーを たおそう！",
+  training: "せいげん時間なし、問題パターンをえらんで練習！",
+  review: "じっくり考えて、全パターンの問題に正解しよう！"
+};
+
+function updateModeSubtitle(mode) {
+  if (!els.appSubtitle) return;
+  els.appSubtitle.textContent = MODE_SUBTITLES[mode] || MODE_SUBTITLES.battle;
 }
 
 function selectMode(mode) {
@@ -272,53 +413,81 @@ function selectMode(mode) {
   const target = els.modeSelect.querySelector(`.mode-btn[data-mode="${mode}"]`) || els.modeSelect.querySelector(".mode-btn");
   target.classList.add("selected");
   setMode(target.dataset.mode);
+  updateModeSubtitle(target.dataset.mode);
 }
 
 function restoreSelectedMode() {
   const saved = loadLastMode();
-  selectMode(saved === "training" ? "training" : "battle");
+  selectMode(saved === "training" || saved === "review" ? saved : "battle");
 }
 
 // ============== トレーニング：学年学期・カテゴリ選択（category-registry.js から動的生成） ==============
 
-function selectTrainingGradeTermButton(btn) {
-  els.trainingGradeTermSelect.querySelectorAll(".gradeterm-btn").forEach((b) => b.classList.remove("selected"));
+function selectTrainingGradeButton(btn) {
+  els.trainingGradeSelect.querySelectorAll(".grade-btn").forEach((b) => b.classList.remove("selected"));
+  btn.classList.add("selected");
+}
+
+function selectTrainingTermButton(btn) {
+  els.trainingTermSelect.querySelectorAll(".term-btn").forEach((b) => b.classList.remove("selected"));
   btn.classList.add("selected");
 }
 
 /**
- * data/category-registry.js の getGradeTermGroups() から、トレーニングで選べる
- * 学年・学期ボタンを動的に生成する。個別の学期をここにハードコードしない。
+ * トレーニングモードで現在選択されている学年・学期（gradeTerm）を、学年ボタン・学期ボタンの
+ * 選択状態から組み立てる。どちらも未選択（populateTrainingGradeTermSelect() 実行前など）の
+ * 場合は null を返す。
  */
-function populateTrainingGradeTermSelect() {
-  const groups = getGradeTermGroups();
-  els.trainingGradeTermSelect.innerHTML = "";
-  for (const group of groups) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "range-btn gradeterm-btn";
-    btn.dataset.gradeterm = group.gradeTerm;
-    btn.textContent = formatShortGradeTermLabel(group.gradeTerm);
-    els.trainingGradeTermSelect.appendChild(btn);
-  }
-
-  const savedGradeTerm = loadLastTrainingGradeTerm();
-  const matching = groups.find((g) => g.gradeTerm === savedGradeTerm);
-  const initialGradeTerm = matching ? matching.gradeTerm : groups.length > 0 ? groups[0].gradeTerm : null;
-  if (initialGradeTerm) {
-    const btn = els.trainingGradeTermSelect.querySelector(`.gradeterm-btn[data-gradeterm="${initialGradeTerm}"]`);
-    if (btn) selectTrainingGradeTermButton(btn);
-    populateTrainingCategorySelect(initialGradeTerm);
-  }
+function getSelectedTrainingGradeTerm() {
+  const gradeBtn = els.trainingGradeSelect.querySelector(".grade-btn.selected");
+  const termBtn = els.trainingTermSelect.querySelector(".term-btn.selected");
+  if (!gradeBtn || !termBtn) return null;
+  return `${gradeBtn.dataset.grade}-${termBtn.dataset.term}`;
 }
 
 /**
- * gradeTerm キー（例: "4-1"）から、タイトル画面ボタン向けの短い表示名を作る
- * （例: "4-1" → "4年1学期"）。既存の #range-select ボタン表記に合わせている。
+ * data/category-registry.js の getGradeTermGroups() から、トレーニングで選べる
+ * 学年ボタン・学期ボタンを動的に生成する。個別の学年・学期をここにハードコードしない
+ * （実際に存在する gradeTerm の組み合わせから、学年・学期それぞれの一覧を導出する）。
  */
-function formatShortGradeTermLabel(gradeTerm) {
-  const match = /^(\d+)-(\d+)$/.exec(gradeTerm);
-  return match ? `${match[1]}年${match[2]}学期` : gradeTerm;
+function populateTrainingGradeTermSelect() {
+  const groups = getGradeTermGroups();
+  const grades = [...new Set(groups.map((g) => g.gradeTerm.split("-")[0]))].sort();
+  const terms = [...new Set(groups.map((g) => g.gradeTerm.split("-")[1]))].sort();
+
+  els.trainingGradeSelect.innerHTML = "";
+  for (const grade of grades) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "range-btn gradeterm-btn grade-btn";
+    btn.dataset.grade = grade;
+    btn.textContent = `${grade}年`;
+    els.trainingGradeSelect.appendChild(btn);
+  }
+
+  els.trainingTermSelect.innerHTML = "";
+  for (const term of terms) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "range-btn gradeterm-btn term-btn";
+    btn.dataset.term = term;
+    btn.textContent = `${term}学期`;
+    els.trainingTermSelect.appendChild(btn);
+  }
+
+  const savedGradeTerm = loadLastTrainingGradeTerm();
+  const isSavedValid = groups.some((g) => g.gradeTerm === savedGradeTerm);
+  const [initialGrade, initialTerm] = (isSavedValid ? savedGradeTerm : `${grades[0]}-${terms[0]}`).split("-");
+
+  const gradeBtn = els.trainingGradeSelect.querySelector(`.grade-btn[data-grade="${initialGrade}"]`);
+  const termBtn = els.trainingTermSelect.querySelector(`.term-btn[data-term="${initialTerm}"]`);
+  if (gradeBtn) selectTrainingGradeButton(gradeBtn);
+  if (termBtn) selectTrainingTermButton(termBtn);
+
+  const initialGradeTerm = getSelectedTrainingGradeTerm();
+  if (initialGradeTerm) {
+    populateTrainingCategorySelect(initialGradeTerm);
+  }
 }
 
 /**
@@ -351,7 +520,7 @@ function addDevMultiStepRangeOption() {
   btn.className = "range-btn dev-range-btn";
   btn.dataset.range = "4-multi-step";
   btn.innerHTML = "2段階問題・整数<br />（開発版）";
-  els.rangeSelect.appendChild(btn);
+  els.rangeDevSelect.appendChild(btn);
 }
 
 export function setSoundIcon(enabled) {
@@ -438,6 +607,25 @@ export function updateTimer(percent) {
   const clamped = Math.max(0, Math.min(100, percent));
   els.timerFill.style.width = `${clamped}%`;
   els.timerFill.classList.toggle("timer-warning", clamped <= 25);
+}
+
+/**
+ * 秒数を「M分S秒」の表示用文字列に変換する（総復習モードの経過時間表示用）。
+ */
+function formatElapsedTime(totalSeconds) {
+  const clamped = Math.max(0, Math.floor(totalSeconds));
+  const minutes = Math.floor(clamped / 60);
+  const seconds = clamped % 60;
+  return `${minutes}分${seconds}秒`;
+}
+
+/**
+ * 総復習モード専用。ゲームスタート（1問目開始）からの経過時間を、時間制限ゲージ
+ * （.timer-bar、バトル専用）と同じ場所に表示する。js/review-mode.js が1秒おきに呼び出す。
+ */
+export function updateElapsedTime(totalSeconds) {
+  if (!els.elapsedTimeDisplay) return;
+  els.elapsedTimeDisplay.textContent = `けいか時間 ${formatElapsedTime(totalSeconds)}`;
 }
 
 // ランクの並び（H が最低、SS が最高）。score.js の RANK_TABLE + TOP_RANK と対応させている。
@@ -577,6 +765,20 @@ export function updateTrainingHeader(categoryLabel, questionNumber, totalQuestio
   if (els.trainingProgress) {
     els.trainingProgress.textContent = `問題 ${questionNumber}／${totalQuestions}`;
     els.trainingProgress.classList.add("show");
+  }
+}
+
+/**
+ * 総復習画面のヘッダー（スコア表示の位置に「4年のまとめ　1問目／13問」のように表示する）を
+ * 更新する。updateTrainingHeader() と同じ考え方だが、総復習にはハート・敵HPはあっても
+ * スコアが無いため、スコア表示（.status-pill）と同じ場所を丸ごと置き換える形にしている。
+ */
+export function updateReviewHeader(scopeLabel, questionNumber, totalQuestions) {
+  if (els.reviewModeDisplay) {
+    els.reviewModeDisplay.textContent = scopeLabel;
+  }
+  if (els.reviewProgressDisplay) {
+    els.reviewProgressDisplay.textContent = `${questionNumber}問目／${totalQuestions}問`;
   }
 }
 
@@ -1111,11 +1313,16 @@ function setupRetireDialog() {
 
 export function showRetireDialog() {
   const isTraining = els.appEl.classList.contains("mode-training");
+  const isReview = els.appEl.classList.contains("mode-review");
   if (els.retireConfirmText) {
-    els.retireConfirmText.textContent = isTraining ? "トレーニングを終了しますか？" : "バトルをリタイアしますか？";
+    els.retireConfirmText.textContent = isTraining
+      ? "トレーニングを終了しますか？"
+      : isReview
+        ? "総復習をやめますか？"
+        : "バトルをリタイアしますか？";
   }
-  els.retireYesBtn.textContent = isTraining ? "終了する" : "リタイアする";
-  els.retireNoBtn.textContent = isTraining ? "続ける" : "バトルに戻る";
+  els.retireYesBtn.textContent = isTraining ? "終了する" : isReview ? "やめる" : "リタイアする";
+  els.retireNoBtn.textContent = isTraining ? "続ける" : isReview ? "続ける" : "バトルに戻る";
   els.retireDialog.classList.add("show");
 }
 
@@ -1146,6 +1353,33 @@ function showTrainingStartDialog(categoryLabel) {
 
 function hideTrainingStartDialog() {
   els.trainingStartDialog.classList.remove("show");
+}
+
+// ============== 総復習開始確認ダイアログ ==============
+
+function setupReviewStartConfirmDialog() {
+  els.reviewStartYesBtn.addEventListener("click", () => {
+    hideReviewStartDialog();
+    if (pendingReviewSettings) {
+      callbacks.onStart && callbacks.onStart(pendingReviewSettings);
+    }
+    pendingReviewSettings = null;
+  });
+  els.reviewStartNoBtn.addEventListener("click", () => {
+    hideReviewStartDialog();
+    pendingReviewSettings = null;
+  });
+}
+
+function showReviewStartDialog(scopeLabel, questionCount) {
+  // 「○年のまとめを はじめますか？」の後で改行し、2行目に問題数を表示する
+  // （運用開始後に変更。以前は1行で「全13問」のように表示していた）。
+  els.reviewStartConfirmText.innerHTML = `${escapeHtml(scopeLabel)}を はじめますか？<br />全部で${questionCount}問です。`;
+  els.reviewStartDialog.classList.add("show");
+}
+
+function hideReviewStartDialog() {
+  els.reviewStartDialog.classList.remove("show");
 }
 
 // ============== 結果画面 ==============
@@ -1221,6 +1455,42 @@ export function showTrainingResultScreen(data) {
   }
   if (els.resultTrainingWrongCount) {
     els.resultTrainingWrongCount.textContent = `${data.totalWrongCount}回`;
+  }
+  els.resultNewRecord.classList.remove("show");
+
+  renderHistory(data.history);
+}
+
+/**
+ * 総復習の結果画面を表示する。バトル結果画面（showResultScreen）と同じ
+ * #screen-result / #history-list を再利用しつつ、スコア・ランク・ハイスコア・出題範囲・
+ * レベルといったバトル専用項目は .battle-only クラス（#app.mode-review 適用時にCSSで
+ * 非表示）にまかせ、ここでは総復習専用項目（モード名・けいか時間）と、バトルと共有する
+ * 項目（エネミーコメント・せいかい数）だけを設定する。
+ */
+export function showReviewResultScreen(data) {
+  els.resultTitle.textContent = data.title;
+  els.resultTitle.className = `result-title ${data.variant || ""}`;
+  qs("screen-result").classList.toggle("result-bright", data.variant === "clear");
+  qs("screen-result").classList.toggle("result-dark", data.variant === "gameover");
+
+  // その回に登場したエネミー（フォーミュラ仮面／フォーミュラ仮面エース）の絵文字・名前と、
+  // クリア/ゲームオーバーで異なるせりふを表示する。バトルの showResultScreen() と同じ仕組み。
+  if (data.enemy) {
+    els.resultEnemyEmoji.textContent = data.enemy.emoji;
+    els.resultEnemyName.textContent = data.enemy.name;
+    els.resultEnemyText.textContent = data.variant === "clear" ? data.enemy.clearText : data.enemy.gameOverText;
+    els.resultEnemyComment.setAttribute("aria-hidden", "false");
+  } else {
+    els.resultEnemyComment.setAttribute("aria-hidden", "true");
+  }
+
+  els.resultCorrectCount.textContent = `${data.correctCount}問`;
+  if (els.resultReviewMode) {
+    els.resultReviewMode.textContent = data.scopeLabel;
+  }
+  if (els.resultReviewElapsed) {
+    els.resultReviewElapsed.textContent = formatElapsedTime(data.elapsedSeconds);
   }
   els.resultNewRecord.classList.remove("show");
 
@@ -1364,6 +1634,7 @@ export function initUI(cb) {
   setupNextQuestionTap();
   setupRetireDialog();
   setupTrainingStartConfirmDialog();
+  setupReviewStartConfirmDialog();
   setupResultScreen();
   setupScoreDelta();
 }
