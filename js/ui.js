@@ -21,7 +21,8 @@ import {
   saveLastMode,
   loadLastTrainingGradeTerm,
   saveLastTrainingGradeTerm,
-  loadDefeatedEnemyIds
+  loadDefeatedEnemyIds,
+  resetHighScoresAndEnemyDex
 } from "./storage.js";
 import {
   getGradeTermGroups,
@@ -96,7 +97,13 @@ function cacheElements() {
     helpMenuTitle: qs("help-menu-title"),
     helpAboutBtn: qs("help-about-btn"),
     helpDexBtn: qs("help-dex-btn"),
+    helpResetBtn: qs("help-reset-btn"),
     helpMenuBackBtn: qs("help-menu-back-btn"),
+    resetRecordsDialog: qs("reset-records-confirm-dialog"),
+    resetRecordsConfirmText: qs("reset-records-confirm-text"),
+    resetRecordsDialogButtons: qs("reset-records-dialog-buttons"),
+    resetRecordsYesBtn: qs("reset-records-confirm-yes"),
+    resetRecordsNoBtn: qs("reset-records-confirm-no"),
     aboutTitle: qs("about-title"),
     aboutBackBtn: qs("about-back-btn"),
     enemyDexTitle: qs("enemy-dex-title"),
@@ -1502,6 +1509,75 @@ function renderEnemyDex() {
   }
 }
 
+// 「⚠記録を消す」確認ダイアログの現在の段階（1: 最初の確認、2: 赤文字の最終確認）。
+// ダイアログを閉じる（「もどる」を押した／消去完了メッセージが自動で閉じた、どちらの場合も）
+// たびに1へ戻す。
+let resetRecordsConfirmStep = 1;
+
+// 消去完了メッセージ「すべての記録を消去しました。」を表示しておく時間。
+const RESET_RECORDS_DONE_MESSAGE_MS = 2500;
+
+function showResetRecordsDialog(step) {
+  resetRecordsConfirmStep = step;
+  els.resetRecordsDialogButtons.classList.remove("dialog-buttons-hidden");
+  if (step === 1) {
+    els.resetRecordsConfirmText.innerHTML = "すべてのハイスコアとエネミー図鑑の情報を消去します。<br />よろしいですか？";
+    els.resetRecordsConfirmText.classList.remove("dialog-warning-text");
+  } else {
+    els.resetRecordsConfirmText.innerHTML = "本当によろしいですか？<br />後悔しませんね？";
+    els.resetRecordsConfirmText.classList.add("dialog-warning-text");
+  }
+  els.resetRecordsDialog.classList.add("show");
+}
+
+function hideResetRecordsDialog() {
+  els.resetRecordsDialog.classList.remove("show");
+  els.resetRecordsDialogButtons.classList.remove("dialog-buttons-hidden");
+  resetRecordsConfirmStep = 1;
+}
+
+/**
+ * 実際に消去を実行したあと、「⚠消去する」「もどる」ボタンを隠して完了メッセージだけを
+ * 一定時間（RESET_RECORDS_DONE_MESSAGE_MS）表示してから、自動でダイアログを閉じて
+ * 元のヘルプメニュー画面へ戻す（「⚠記録を消す」ボタンへフォーカスも戻す）。
+ */
+function showResetRecordsDoneMessage() {
+  resetRecordsConfirmStep = 1;
+  els.resetRecordsConfirmText.innerHTML = "すべての記録を消去しました。";
+  els.resetRecordsConfirmText.classList.remove("dialog-warning-text");
+  els.resetRecordsDialogButtons.classList.add("dialog-buttons-hidden");
+  els.resetRecordsDialog.classList.add("show");
+  window.setTimeout(() => {
+    hideResetRecordsDialog();
+    focusElement(els.helpResetBtn);
+  }, RESET_RECORDS_DONE_MESSAGE_MS);
+}
+
+/**
+ * 「⚠記録を消す」の確認ダイアログ。同じ「⚠消去する」ボタンを2回押させることで、
+ * 誤操作による消去を防ぐ2段階確認にしている。1回目は通常の確認文、2回目は赤文字の
+ * 最終確認文に切り替わり（showResetRecordsDialog参照）、2回目を押したときだけ
+ * 実際に resetHighScoresAndEnemyDex() を呼び出し、完了メッセージを表示する
+ * （showResetRecordsDoneMessage参照）。
+ */
+function setupResetRecordsDialog() {
+  els.helpResetBtn.addEventListener("click", () => {
+    showResetRecordsDialog(1);
+  });
+  els.resetRecordsYesBtn.addEventListener("click", () => {
+    if (resetRecordsConfirmStep === 1) {
+      showResetRecordsDialog(2);
+      return;
+    }
+    resetHighScoresAndEnemyDex();
+    showResetRecordsDoneMessage();
+  });
+  els.resetRecordsNoBtn.addEventListener("click", () => {
+    hideResetRecordsDialog();
+    focusElement(els.helpResetBtn);
+  });
+}
+
 function setupHelpScreens() {
   els.helpBtn.addEventListener("click", openHelpMenu);
   els.helpAboutBtn.addEventListener("click", openAboutScreen);
@@ -1777,6 +1853,7 @@ export function initUI(cb) {
   setupTrainingStartConfirmDialog();
   setupReviewStartConfirmDialog();
   setupHelpScreens();
+  setupResetRecordsDialog();
   setupResultScreen();
   setupScoreDelta();
 }

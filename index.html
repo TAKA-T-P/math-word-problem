@@ -130,7 +130,20 @@
     <div class="help-menu-buttons">
       <button id="help-about-btn" class="primary-btn" type="button">このゲームについて</button>
       <button id="help-dex-btn" class="primary-btn" type="button">エネミー図鑑</button>
+      <!-- ハイスコア・エネミー図鑑の記録を消去するボタン（運用開始後に追加）。
+           2段階の確認ダイアログ（reset-records-confirm-dialog）を経てから実行する。 -->
+      <button id="help-reset-btn" class="secondary-btn warning-btn" type="button">⚠記録を消す</button>
       <button id="help-menu-back-btn" class="secondary-btn" type="button">もどる</button>
+    </div>
+
+    <div id="reset-records-confirm-dialog" class="dialog-overlay" aria-hidden="true">
+      <div class="dialog-box">
+        <p id="reset-records-confirm-text">すべてのハイスコアとエネミー図鑑の情報を消去します。<br />よろしいですか？</p>
+        <div id="reset-records-dialog-buttons" class="dialog-buttons">
+          <button id="reset-records-confirm-yes" class="dialog-btn danger" type="button">⚠消去する</button>
+          <button id="reset-records-confirm-no" class="dialog-btn" type="button">もどる</button>
+        </div>
+      </div>
     </div>
   </section>
 

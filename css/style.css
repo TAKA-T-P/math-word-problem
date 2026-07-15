@@ -1533,6 +1533,24 @@ button {
   gap: 12px;
 }
 
+/* 「⚠記録を消す」ボタン（運用開始後に追加）。.secondary-btn の見た目をベースに、
+   枠線・文字だけを赤くして、通常の「もどる」ボタンとの違いをひと目でわかるようにする。 */
+.warning-btn {
+  border-color: var(--color-bad);
+  color: var(--color-bad);
+}
+
+/* 記録消去の確認ダイアログ、2段階目（最終確認）の警告文。 */
+.dialog-warning-text {
+  color: var(--color-bad);
+  font-weight: 800;
+}
+
+/* 記録消去の完了メッセージを表示している間、ダイアログのボタン（「⚠消去する」「もどる」）を隠す。 */
+.dialog-buttons-hidden {
+  display: none;
+}
+
 /* 「このゲームについて」「エネミー図鑑」に共通する、見出し＋右上「もどる」の画面。
    .help-scroll-area だけを縦スクロールさせ、ヘッダーは常に見える位置に固定する。 */
 .help-detail-screen {

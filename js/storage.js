@@ -33,8 +33,13 @@ function checkLocalStorageAvailable() {
   return localStorageAvailable;
 }
 
+// ハイスコアのキー接頭辞。出題範囲・レベルの組み合わせごとに `highScore_4-1_level1` のような
+// キーが動的に作られるため、一括消去（resetHighScoresAndEnemyDex()）ではこの接頭辞を持つ
+// キーをすべて探して削除する（個々の組み合わせを列挙する必要が無い）。
+const HIGH_SCORE_KEY_PREFIX = "highScore_";
+
 function buildHighScoreKey(gradeTerm, level) {
-  return `highScore_${gradeTerm}_level${level}`;
+  return `${HIGH_SCORE_KEY_PREFIX}${gradeTerm}_level${level}`;
 }
 
 /**
@@ -301,4 +306,30 @@ export function recordDefeatedEnemy(enemyId) {
     return;
   }
   saveDefeatedEnemyIds([...ids, enemyId]);
+}
+
+/**
+ * すべてのハイスコア（出題範囲・レベルの組み合わせごとの highScore_* キー）と、
+ * エネミー図鑑の解放状態（倒したことがあるエネミーの記録）を消去します
+ * （ヘルプメニューの「⚠記録を消す」用。運用開始後に追加）。
+ * 効果音設定・前回選んだ出題範囲/モード・トレーニングの選択学期・6年3学期の出題グループ
+ * ローテーション位置など、それ以外の保存データには一切触れません。
+ */
+export function resetHighScoresAndEnemyDex() {
+  if (!checkLocalStorageAvailable()) {
+    return;
+  }
+  try {
+    const keysToRemove = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key && key.startsWith(HIGH_SCORE_KEY_PREFIX)) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((key) => window.localStorage.removeItem(key));
+    window.localStorage.removeItem(DEFEATED_ENEMY_IDS_KEY);
+  } catch (error) {
+    // 消去に失敗しても、アプリの動作は継続する
+  }
 }
