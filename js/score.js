@@ -4,7 +4,9 @@ const RANK_TABLE = ["H", "G", "F", "E", "D", "C", "B", "A", "S"];
 const TOP_RANK = "SS";
 
 const TIME_BONUS_BASE_SECONDS = 24;
-const TIME_BONUS_MAX = 20;
+// 文章題バトルの特別ランク「MAX」（js/game.js）が、「全問このタイムボーナス上限で
+// 正解できたか」の判定に使うため、export している。
+export const TIME_BONUS_MAX = 20;
 const TIME_BONUS_MIN = 0;
 
 // 多段階問題は、式の数が多いほど正解までに時間がかかるのが自然なため、経過秒数を

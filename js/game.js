@@ -10,7 +10,7 @@ import {
   shouldDisplayFractionsUnsimplified
 } from "./question-generator.js";
 import { checkAnswer } from "./answer-checker.js";
-import { calculateQuestionScore, calculateTimeBonus, calculateRank, formatFinalRank } from "./score.js";
+import { calculateQuestionScore, calculateTimeBonus, calculateRank, formatFinalRank, TIME_BONUS_MAX } from "./score.js";
 import {
   loadHighScore,
   saveHighScoreIfBetter,
@@ -79,6 +79,10 @@ const gameState = {
   timerRemainingRatio: 1,
   isInputLocked: false,
   isNoMiss: true,
+  // 全問、タイムボーナスが上限（TIME_BONUS_MAX）で正解できているかどうか。特別ランク
+  // 「MAX」の判定に使う（運用開始後に追加）。1問でもタイムボーナスが上限未満（不正解・
+  // 時間切れによる0点も含む）になった時点でfalseになり、以後そのゲームでは戻らない。
+  isMaxBonusRun: true,
   resultType: null,
   pendingOutcome: null, // 正解演出後の遷移先: "next" | "clear"
   // 正解した瞬間に回復させた解答時間ゲージの割合（0〜1）。次の問題の開始時にこの割合から
@@ -512,6 +516,7 @@ export function startNewGame(settings) {
   gameState.lastTemplateId = null;
   gameState.history = [];
   gameState.isNoMiss = true;
+  gameState.isMaxBonusRun = true;
   gameState.resultType = null;
   gameState.pendingOutcome = null;
   gameState.nextQuestionStartRatio = 1;
@@ -794,6 +799,9 @@ function handleCorrect(resultValue) {
   const stepCount = problem.questionType === "multiStep" && problem.multiStep ? problem.multiStep.totalSteps : 1;
   const elapsedSeconds = gameState.currentQuestionDurationSec * (1 - lastTimerRatio);
   const timeBonus = gameState.currentQuestionPenalized ? 0 : calculateTimeBonus(elapsedSeconds, stepCount);
+  if (timeBonus < TIME_BONUS_MAX) {
+    gameState.isMaxBonusRun = false;
+  }
   let addedScore = calculateQuestionScore(questionNumber, timeBonus);
   if (isFinalQuestion) {
     // 最終問題に正解したときだけ、レベル・残りハート数に応じたボーナスを加算する
@@ -802,7 +810,11 @@ function handleCorrect(resultValue) {
   }
   gameState.score += addedScore;
   gameState.rank = calculateRank(gameState.score, gameState.level);
-  ui.updateScoreboard(gameState.score, gameState.rank);
+  // 特別ランク「MAX」は、最終問題に正解し、かつ全問タイムボーナスが上限だった場合だけ
+  // 表示する（運用開始後に追加）。gameState.rank自体は通常どおりのランク文字を保持し続け、
+  // 表示だけをこの瞬間に上書きする（ハイスコア判定・履歴等の内部ロジックには影響しない）。
+  const isMaxBonusClear = isFinalQuestion && gameState.isMaxBonusRun;
+  ui.updateScoreboard(gameState.score, isMaxBonusClear ? "MAX" : gameState.rank);
   ui.showScoreDelta(addedScore);
 
   // 解答時間ゲージは、以前は次の問題の開始時に毎回全回復させていたが、
@@ -894,7 +906,10 @@ function finishGame(type) {
       variant = "retire";
     }
 
-    const finalRank = formatFinalRank(gameState.rank, isNoMissClear);
+    // 特別ランク「MAX」（運用開始後に追加）。全問タイムボーナスが上限でクリアした場合だけ、
+    // 通常のランク文字（"SS+"等）ではなく "MAX" を結果画面に表示する。
+    const isMaxBonusClear = type === "clear" && gameState.isMaxBonusRun;
+    const finalRank = isMaxBonusClear ? "MAX" : formatFinalRank(gameState.rank, isNoMissClear);
 
     ui.showResultScreen({
       title,

@@ -1141,12 +1141,29 @@ function validateScaleLength(template, errors) {
     errors.push(`generatorType="${template.generatorType}" は questionType:"multiStep" である必要があります`);
     return;
   }
-  if (!Array.isArray(template.solutionRoutes) || template.solutionRoutes.length !== 1) {
+  // 通常は1つの正解ルートですが、「縮尺・地図上の長さ」の一部テンプレートのように、
+  // 先に単位変換してから縮尺の分母で割る／先に縮尺の分母で割ってから単位変換する、の
+  // どちらの順序でも正しく解けるテンプレートでは、2つ目の正解ルートを追加登録できます
+  // （運用開始後に追加。g6t3_scale_map_003が最初の例）。findActualLengthFromScale・
+  // findMapLengthFromScale の両方でこの検証関数を共有しており、使用するルートidが
+  // 異なるため、特定のidを必須とはせず、idの重複が無いことだけをチェックします。
+  const MAX_ROUTES = 2;
+  if (
+    !Array.isArray(template.solutionRoutes) ||
+    template.solutionRoutes.length < 1 ||
+    template.solutionRoutes.length > MAX_ROUTES
+  ) {
     errors.push(
-      `generatorType="${template.generatorType}" には正解ルートが1つだけ必要です（実際: ${Array.isArray(template.solutionRoutes) ? template.solutionRoutes.length : 0}）`
+      `generatorType="${template.generatorType}" には1〜${MAX_ROUTES}個の解法ルートが必要です（実際: ${Array.isArray(template.solutionRoutes) ? template.solutionRoutes.length : 0}）`
     );
   }
   if (!Array.isArray(template.solutionRoutes)) return;
+
+  const routeIds = template.solutionRoutes.map((route) => route && route.id);
+  if (new Set(routeIds).size !== routeIds.length) {
+    errors.push(`正解ルートのidが重複しています: ${routeIds.join(", ")}`);
+  }
+
   const expectedFactor = qr.actualLengthUnit === "km" ? 100000 : 100;
   for (const route of template.solutionRoutes) {
     if (!route || !Array.isArray(route.steps)) continue;

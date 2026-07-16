@@ -75,6 +75,10 @@ let pendingReviewSettings = null;
 // 同じマッピングがあるが、それぞれの用途に閉じた複製であり、まとめる必要はない）。
 const REVIEW_SCOPE_LABELS = { "4": "4年のまとめ", "5": "5年のまとめ", "6": "6年のまとめ", all: "小学校のまとめ" };
 
+// 総復習のスコープキーから、開始確認ダイアログに表示する初期ハート数を求める
+// （js/review-mode.js の REVIEW_SCOPE_HEARTS と同じ値を持つ、上と同じ理由の独立した複製）。
+const REVIEW_SCOPE_HEARTS_FOR_DIALOG = { "4": 3, "5": 3, "6": 3, all: 1 };
+
 /**
  * 総復習モードの「○年のまとめ」スコープから、出題される問題数（＝そのスコープに属する
  * カテゴリ数。1カテゴリにつき1問）を求める。data/category-registry.js から動的に導出する
@@ -312,7 +316,8 @@ function setupTitleScreen() {
     const scope = btn.dataset.scope;
     const label = REVIEW_SCOPE_LABELS[scope] || scope;
     pendingReviewSettings = { mode: "review", scope, label };
-    showReviewStartDialog(label, getReviewQuestionCountForScope(scope));
+    const heartCount = REVIEW_SCOPE_HEARTS_FOR_DIALOG[scope] || 3;
+    showReviewStartDialog(label, getReviewQuestionCountForScope(scope), heartCount);
   });
 
   // このボタンはバトルモード専用（.battle-only。トレーニング・総復習モードでは非表示）。
@@ -671,9 +676,19 @@ function getRankBadgeColor(baseRank) {
 
 /**
  * ランクカードの色・光る演出を、現在のランクに応じて更新する。
+ * 特別ランク「MAX"（全問タイムボーナス上限でクリア。運用開始後に追加）のときだけ、
+ * 通常のランク色（インラインstyle.background）ではなく、CSS側の虹色グラデーション
+ * （.rank-max）で光らせる。そのため、通常ランクのインライン背景色を必ず解除しておく。
  */
 function applyRankBadgeStyle(rank) {
   if (!els.rankDisplay) return;
+  if (rank === "MAX") {
+    els.rankDisplay.style.background = "";
+    els.rankDisplay.classList.remove("rank-badge-glow");
+    els.rankDisplay.classList.add("rank-max");
+    return;
+  }
+  els.rankDisplay.classList.remove("rank-max");
   const baseRank = String(rank).replace("+", "");
   const color = getRankBadgeColor(baseRank);
   if (color) {
@@ -1390,10 +1405,10 @@ function setupReviewStartConfirmDialog() {
   });
 }
 
-function showReviewStartDialog(scopeLabel, questionCount) {
-  // 「○年のまとめを はじめますか？」の後で改行し、2行目に問題数を表示する
-  // （運用開始後に変更。以前は1行で「全13問」のように表示していた）。
-  els.reviewStartConfirmText.innerHTML = `${escapeHtml(scopeLabel)}を はじめますか？<br />全部で${questionCount}問です。`;
+function showReviewStartDialog(scopeLabel, questionCount, heartCount) {
+  // 「○年のまとめを はじめますか？」の後で改行し、2行目にハート数・クリア条件（必要正解数）を
+  // 表示する（運用開始後に変更。以前は2行目が「全13問です。」だけだった）。
+  els.reviewStartConfirmText.innerHTML = `${escapeHtml(scopeLabel)}を はじめますか？<br />ハートは${heartCount}個で ${questionCount}問正解したらクリア！`;
   els.reviewStartDialog.classList.add("show");
 }
 
@@ -1642,6 +1657,9 @@ export function showResultScreen(data) {
   els.resultCorrectCount.textContent = `${data.correctCount}問`;
   els.resultScore.textContent = String(data.score);
   els.resultRank.textContent = data.rank;
+  // 特別ランク「MAX」（運用開始後に追加）のときだけ、結果画面のランク表示にも
+  // バトル中のランクカードと同じ虹色グラデーションの光る演出（.rank-max）を付ける。
+  els.resultRank.classList.toggle("rank-max", data.rank === "MAX");
   els.resultHighscore.textContent = String(data.highScore);
   els.resultNewRecord.classList.toggle("show", Boolean(data.isNewRecord));
 

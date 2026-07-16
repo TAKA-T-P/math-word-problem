@@ -1015,6 +1015,15 @@ export const grade6Term3Templates = [
           { left: { source: "variable", key: "actualLength" }, operator: "×", right: { source: "literal", value: 100 }, resultKey: "actualLengthInCm" },
           { left: { source: "result", key: "actualLengthInCm" }, operator: "÷", right: { source: "variable", key: "scaleDenominator" }, resultKey: "answer" }
         ]
+      },
+      {
+        // 先に「実際の長さ÷縮尺の分母」で地図上の長さをm単位のまま求めてから、最後に
+        // ×100でcmへ変換するルート（運用開始後に追加）。例: 55÷500=0.11(m) → 0.11×100=11(cm)。
+        id: "divide-then-convert-route",
+        steps: [
+          { left: { source: "variable", key: "actualLength" }, operator: "÷", right: { source: "variable", key: "scaleDenominator" }, resultKey: "mapLengthInActualUnit" },
+          { left: { source: "result", key: "mapLengthInActualUnit" }, operator: "×", right: { source: "literal", value: 100 }, resultKey: "answer" }
+        ]
       }
     ],
     answerUnit: "cm"

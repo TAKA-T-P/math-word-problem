@@ -608,6 +608,12 @@ function generateInverseProportionValues(variables, quantityRelation) {
  * （比を使った数量が firstAmount/secondAmount のどちらが既知でも同じ生成関数を使うのと同じ設計）。
  * scaleValue（問題文に表示する縮尺そのもの、{type:"scale",...}）もここで一緒に作ります
  * （ratioValue と同じ、固定名の表示専用メタデータ）。
+ * 縮尺の分母が、単位変換の倍率（actualLengthUnitが"m"なら100、"km"なら100000）と
+ * ちょうど一致すると、実際の長さ＝地図上の長さ×縮尺の分母÷変換の倍率の計算上、
+ * 変換の倍率が縮尺の分母と打ち消し合い、地図上の長さと実際の長さの「数字」だけが
+ * 単位を無視すると偶然一致してしまいます（例: 縮尺1：100,000で実際の長さ6kmなら、
+ * 地図上の長さも6cmになる）。これは常に起こる（mapLengthValueの値によらない）ため、
+ * 該当する縮尺の分母は候補から除外します（運用開始後に追加）。
  */
 function generateScaleLengthValues(variables, quantityRelation) {
   if (!quantityRelation) {
@@ -616,8 +622,11 @@ function generateScaleLengthValues(variables, quantityRelation) {
   const { scaleKey, mapLengthKey, actualLengthKey, actualLengthUnit } = quantityRelation;
   // 縮尺の分母は、地図として自然な「きりのよい」値の一覧（variables[scaleKey].values）から選ぶ
   // （分数の時間の answerMinutes と同じ、値の一覧から選ぶ設計。min/max/step の連続範囲ではない）。
+  const conversionFactor = actualLengthUnit === "km" ? 100000 : 100;
   const scaleDenominatorCandidates = variables[scaleKey].values;
-  const scaleDenominatorValue = scaleDenominatorCandidates[pickInt(0, scaleDenominatorCandidates.length - 1)];
+  const safeScaleDenominatorCandidates = scaleDenominatorCandidates.filter((value) => value !== conversionFactor);
+  const candidatesToUse = safeScaleDenominatorCandidates.length > 0 ? safeScaleDenominatorCandidates : scaleDenominatorCandidates;
+  const scaleDenominatorValue = candidatesToUse[pickInt(0, candidatesToUse.length - 1)];
   const mapLengthValue = pickValueForRange(variables[mapLengthKey]);
   const actualLengthInCm = normalizeNumber(multiplyDecimal(mapLengthValue, scaleDenominatorValue));
   const actualLengthValue = convertLength(actualLengthInCm, "cm", actualLengthUnit);
