@@ -38,10 +38,11 @@ export function calculateQuestionScore(questionNumber, timeBonus) {
 
 /**
  * 現在のスコアとレベルから、ランク（+ なし）を求めます。
- * ランク値 = floor(スコア ÷ (1600 × レベル))
+ * ランク値 = floor(スコア ÷ レベル ÷ (レベル×60+1640))
  */
 export function calculateRank(score, level) {
-  const divisor = 1600 * Math.max(1, level);
+  const safeLevel = Math.max(1, level);
+  const divisor = safeLevel * (safeLevel * 60 + 1640);
   const rankValue = Math.floor(Math.max(0, score) / divisor);
   if (rankValue >= RANK_TABLE.length) {
     return TOP_RANK;

@@ -201,12 +201,14 @@ function resumeTimer() {
 }
 
 /**
- * 解答時間ゲージを、指定した割合（0〜1）分だけ上乗せして回復させてから再開します
+ * 解答時間ゲージへ、指定した割合（0〜1）分だけ上乗せして回復させます（タイマーの再開は行いません）。
  * （現在の残量に加算するため、すでに残量が多い場合はその分さらに多く回復し、100%を超える分は切り捨てます）。
  * 2段階問題の途中式（第1段階）に正解したときに、レベルに応じた割合だけゲージを回復させる
- * ために使います（recoveryAmountForLevel()参照）。
+ * ために使います（recoveryAmountForLevel()参照）。「途中式正解」の表示が出たタイミングで
+ * ゲージだけ先に回復させ、タイマーの再開（resumeTimer）は演出が終わったあとに別途行うため、
+ * ゲージ回復とタイマー再開をあえて分離しています。
  */
-function resumeTimerWithPartialRecovery(recoveryRatio) {
+function applyPartialGaugeRecovery(recoveryRatio) {
   if (timerDurationMs > 0) {
     const currentRatio = Math.min(1, timerRemainingMs / timerDurationMs);
     const recoveredRatio = Math.min(1, currentRatio + recoveryRatio);
@@ -216,7 +218,6 @@ function resumeTimerWithPartialRecovery(recoveryRatio) {
     ui.updateTimer(recoveredRatio * 100);
     ui.updateEnemyDangerGlow(recoveredRatio);
   }
-  resumeTimer();
 }
 
 function stopTimer() {
@@ -437,7 +438,7 @@ function logDebugInfo() {
     `表示レベル: ${formatDisplayLevelForDebug(gameState.level)} / 内部レベル: ${gameState.level}`,
     `必要正解数: ${gameState.totalQuestions} / ハート数: ${gameState.maxHearts} / 初期制限時間: ${Math.round(120 / gameState.level)}秒`,
     `現在のタイマー加速倍率: ${speedMultiplier(gameState.solvedQuestions + 1, gameState.totalQuestions).toFixed(3)}倍 / 最大タイマー加速倍率: 2.0倍`,
-    `スコア倍率: 4 / ランク係数: 1600${gameState.level === 6 ? "（MAXのランク分母: 9600）" : ""}`,
+    `スコア倍率: 4 / ランク係数: スコア÷レベル÷(レベル×60+1640)（現在の分母: ${gameState.level * (gameState.level * 60 + 1640)}）`,
     `ゲーム状態: ${JSON.stringify({
       screen: gameState.screen,
       gradeTerm: gameState.gradeTerm,
@@ -723,24 +724,24 @@ const INTERMEDIATE_STEP_RECOVERY_RATIO_OF_FULL = 0.75;
 /**
  * 2段階問題で、1つ目の式に正解したときの処理。
  * 敵HP・スコア・正解数・履歴は変更しない（最終式に正解したときだけ変更する）。
- * 短い演出の間はタイマーを止めたままにし、演出後に解答時間ゲージへ、正解時の回復量の
- * 75%（recoveryAmountForLevel(level)×0.75。レベルMAXなら22.5%）を上乗せして回復してから
- * 再開する（現在の残量に加算するため、多く残っていればさらに多く回復する。100%は超えない）。
+ * 「途中式正解」の表示が出たこのタイミングで、解答時間ゲージへ正解時の回復量の75%
+ * （recoveryAmountForLevel(level)×0.75。レベルMAXなら22.5%）を即座に上乗せして回復する
+ * （現在の残量に加算するため、多く残っていればさらに多く回復する。100%は超えない）。
+ * タイマー自体（カウントダウンの再開）は、短い演出の間は止めたままにし、演出後に再開する。
  * 演出中は「＝」連打で2問目まで自動的に進んでしまわないよう、入力ロックを維持したままにする。
  */
 function handleIntermediateStepCorrect(problem, stepResult) {
   audio.playCorrect();
-  // 途中式に正解した時点で、危険演出（エネミーの赤いグロー・画面の点滅）を即座に止める。
-  // タイマー自体は演出後に再開する（resumeTimerWithPartialRecovery）が、演出中に危険演出だけ
-  // 残り続けないようにするため、ここで先に止めておく。
-  ui.updateEnemyDangerGlow(1);
   ui.showIntermediateStepEffect(stepResult);
+  // 「途中式正解」の表示と同時にゲージを回復させる（危険演出の解除もこのタイミングで
+  // 反映される。ui.updateEnemyDangerGlowはapplyPartialGaugeRecovery内で呼ばれる）。
+  applyPartialGaugeRecovery(recoveryAmountForLevel(gameState.level) * INTERMEDIATE_STEP_RECOVERY_RATIO_OF_FULL);
   logDebugInfo();
 
   window.setTimeout(() => {
     ui.hideIntermediateStepEffect();
     ui.renderStepChoices(problem);
-    resumeTimerWithPartialRecovery(recoveryAmountForLevel(gameState.level) * INTERMEDIATE_STEP_RECOVERY_RATIO_OF_FULL);
+    resumeTimer();
     ui.unlockInput();
     isBusy = false;
   }, INTERMEDIATE_STEP_DELAY_MS);
