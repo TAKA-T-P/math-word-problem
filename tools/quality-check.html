@@ -186,6 +186,7 @@
       <label><input type="checkbox" id="check-numericDifficulty" checked /> 数値難易度分析</label>
       <label><input type="checkbox" id="check-battleSet" checked /> 通常バトル問題セット検証</label>
       <label><input type="checkbox" id="check-trainingSet" checked /> トレーニング問題セット検証</label>
+      <label><input type="checkbox" id="check-customTrainingSet" checked /> カスタムトレーニング問題セット検証</label>
       <label><input type="checkbox" id="check-reviewSet" checked /> 総復習問題セット検証</label>
       <label><input type="checkbox" id="check-multiStepRegression" checked /> 1〜3段階の回帰テスト（ミス・時間切れ）</label>
     </div>
@@ -351,6 +352,7 @@ function buildConfig() {
       routeSimulation: el("check-routeSimulation").checked,
       battleSet: el("check-battleSet").checked,
       trainingSet: el("check-trainingSet").checked,
+      customTrainingSet: el("check-customTrainingSet").checked,
       reviewSet: el("check-reviewSet").checked,
       questionSetQuality: el("check-questionSetQuality").checked,
       numericDifficulty: el("check-numericDifficulty").checked,
@@ -483,6 +485,7 @@ function renderSummary(result) {
     ["検証済みカテゴリ数", result.categoryCount, ""],
     ["通常バトルセット数", result.battleSetsChecked, ""],
     ["トレーニングセット数", result.trainingSetsChecked, ""],
+    ["カスタムトレーニングセット数", result.customTrainingSetsChecked, ""],
     ["総復習セット数", result.reviewSetsChecked, ""],
     ["経過時間", formatElapsed(result.elapsedMs), ""]
   ];

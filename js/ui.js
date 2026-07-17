@@ -31,6 +31,15 @@ import {
   getEnabledTrainingCategories
 } from "../data/category-registry.js";
 import { ENEMY_LIST, getAllEnemiesForDex, getEnemyUnlockHint } from "./enemy-list.js";
+import {
+  MIN_CUSTOM_TRAINING_QUESTIONS,
+  MAX_CUSTOM_TRAINING_QUESTIONS,
+  DEFAULT_CUSTOM_TRAINING_QUESTIONS,
+  clampCustomTrainingQuestionCount,
+  loadSanitizedCustomTrainingCategoryIds,
+  saveCustomTrainingCategoryIds,
+  clearCustomTrainingCategoryIds
+} from "./custom-training.js";
 
 const DRAG_THRESHOLD = 6;
 
@@ -67,6 +76,17 @@ let pendingTrainingSettings = null;
 // 「スタート」が押されるまでの間だけ保持する、開始予定の設定（scope・label）。
 // pendingTrainingSettings と同じ考え方。
 let pendingReviewSettings = null;
+
+// カスタムトレーニング（運用開始後に追加）の設定画面で、現在チェックされているカテゴリID一覧。
+// 通常トレーニングの選択状態（学年・学期ボタン等）とは完全に別の変数で管理し、互いを上書きしない。
+// 画面を開くたびに loadSanitizedCustomTrainingCategoryIds()（保存データ＋現在のレジストリと
+// 照合済み）から復元する。チェックボックスの状態が変わるたびに、この変数と
+// localStorage（saveCustomTrainingCategoryIds）の両方を更新する。
+let customTrainingSelectedIds = [];
+
+// カスタムトレーニングの出題問題数（メモリ上のみで保持。ページを再読み込みすると5問に戻る仕様
+// のため、storage.js には保存しない）。設定画面とタイトル画面を行き来する間は維持する。
+let customTrainingQuestionCount = DEFAULT_CUSTOM_TRAINING_QUESTIONS;
 
 // 総復習のスコープキー（"4"|"5"|"6"|"all"）から、確認ダイアログの表示名を求める。
 // js/ui.js は js/review-mode.js を import しない設計（js/game.js・js/training-mode.js が
@@ -133,6 +153,18 @@ function cacheElements() {
     trainingStartConfirmText: qs("training-start-confirm-text"),
     trainingStartYesBtn: qs("training-start-confirm-yes"),
     trainingStartNoBtn: qs("training-start-confirm-no"),
+
+    // カスタムトレーニング設定画面（運用開始後に追加）
+    customTrainingGearBtn: qs("custom-training-gear-btn"),
+    customTrainingTitle: qs("custom-training-title"),
+    customTrainingBackBtn: qs("custom-training-back-btn"),
+    customTrainingCountSlider: qs("custom-training-count-slider"),
+    customTrainingCountValue: qs("custom-training-count-value"),
+    customTrainingSelectedCount: qs("custom-training-selected-count"),
+    customTrainingCategoryList: qs("custom-training-category-list"),
+    customTrainingErrorMessage: qs("custom-training-error-message"),
+    customTrainingResetBtn: qs("custom-training-reset-btn"),
+    customTrainingStartBtn: qs("custom-training-start-btn"),
     reviewStartDialog: qs("review-start-confirm-dialog"),
     reviewStartConfirmText: qs("review-start-confirm-text"),
     reviewStartYesBtn: qs("review-start-confirm-yes"),
@@ -532,6 +564,164 @@ function populateTrainingCategorySelect(gradeTerm) {
     btn.textContent = category.label;
     els.trainingCategorySelect.appendChild(btn);
   }
+}
+
+// ============== カスタムトレーニング設定画面（運用開始後に追加） ==============
+//
+// 複数カテゴリ・5〜50問を自由に設定できるトレーニングのバリエーション。ゲーム進行は
+// 既存のトレーニング画面（training-only要素）をそのまま使うため、ここで扱うのは
+// 「設定」だけ（選択カテゴリ・問題数の管理と、開始時に js/training-mode.js の
+// startTraining() へ渡す設定オブジェクトの組み立て）。
+
+/**
+ * 出題問題数の表示（スライダー付近の「20問」等）を更新する。
+ */
+function updateCustomTrainingCountDisplay() {
+  if (els.customTrainingCountValue) {
+    els.customTrainingCountValue.textContent = `${customTrainingQuestionCount}問`;
+  }
+  if (els.customTrainingCountSlider) {
+    els.customTrainingCountSlider.value = String(customTrainingQuestionCount);
+    els.customTrainingCountSlider.setAttribute("aria-valuetext", `${customTrainingQuestionCount}問`);
+  }
+}
+
+/**
+ * 選択中のカテゴリ数表示（「選択中：8カテゴリ」）と、スタートボタンの有効/無効を更新する。
+ * aria-live="polite" な要素（index.html側で指定済み）のため、変更するたびに自動で読み上げられる。
+ */
+function updateCustomTrainingSelectedCount() {
+  if (els.customTrainingSelectedCount) {
+    els.customTrainingSelectedCount.textContent = `選択中：${customTrainingSelectedIds.length}カテゴリ`;
+  }
+  if (els.customTrainingStartBtn) {
+    els.customTrainingStartBtn.disabled = customTrainingSelectedIds.length === 0;
+  }
+  hideCustomTrainingErrorMessage();
+}
+
+function showCustomTrainingErrorMessage(text) {
+  if (!els.customTrainingErrorMessage) return;
+  els.customTrainingErrorMessage.textContent = text;
+  els.customTrainingErrorMessage.hidden = false;
+}
+
+function hideCustomTrainingErrorMessage() {
+  if (!els.customTrainingErrorMessage) return;
+  els.customTrainingErrorMessage.hidden = true;
+  els.customTrainingErrorMessage.textContent = "";
+}
+
+/**
+ * data/category-registry.js の getEnabledTrainingCategories() から、学年・学期ごとに
+ * 見出しを付けたチェックボックス一覧を動的に生成する。カテゴリの追加・削除は
+ * レジストリ側だけで完結し、このファイルを書き換える必要は無い。
+ * 各チェックボックスの value / data-category-id には、安定した categoryId を使う
+ * （表示名 label はレジストリ変更で変わりうるため、抽出・保存には使わない）。
+ */
+function renderCustomTrainingCategoryList() {
+  if (!els.customTrainingCategoryList) return;
+  const categories = getEnabledTrainingCategories();
+  const selectedSet = new Set(customTrainingSelectedIds);
+
+  const fragment = document.createDocumentFragment();
+  let lastGradeLabel = null;
+  for (const category of categories) {
+    if (category.gradeLabel !== lastGradeLabel) {
+      const heading = document.createElement("h4");
+      heading.className = "custom-training-group-heading";
+      heading.textContent = category.gradeLabel;
+      fragment.appendChild(heading);
+      lastGradeLabel = category.gradeLabel;
+    }
+
+    const label = document.createElement("label");
+    label.className = "custom-training-category-item";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = category.id;
+    checkbox.dataset.categoryId = category.id;
+    checkbox.checked = selectedSet.has(category.id);
+
+    const textSpan = document.createElement("span");
+    textSpan.textContent = category.label;
+
+    label.appendChild(checkbox);
+    label.appendChild(textSpan);
+    fragment.appendChild(label);
+  }
+
+  els.customTrainingCategoryList.innerHTML = "";
+  els.customTrainingCategoryList.appendChild(fragment);
+}
+
+function setupCustomTrainingSettings() {
+  els.customTrainingGearBtn.addEventListener("click", openCustomTrainingSettings);
+  els.customTrainingBackBtn.addEventListener("click", closeCustomTrainingSettingsToTitle);
+
+  els.customTrainingCountSlider.addEventListener("input", (e) => {
+    customTrainingQuestionCount = clampCustomTrainingQuestionCount(e.target.value);
+    updateCustomTrainingCountDisplay();
+  });
+
+  els.customTrainingCategoryList.addEventListener("change", (e) => {
+    const checkbox = e.target.closest('input[type="checkbox"]');
+    if (!checkbox) return;
+    const categoryId = checkbox.dataset.categoryId;
+    if (checkbox.checked) {
+      if (!customTrainingSelectedIds.includes(categoryId)) {
+        customTrainingSelectedIds = [...customTrainingSelectedIds, categoryId];
+      }
+    } else {
+      customTrainingSelectedIds = customTrainingSelectedIds.filter((id) => id !== categoryId);
+    }
+    saveCustomTrainingCategoryIds(customTrainingSelectedIds);
+    updateCustomTrainingSelectedCount();
+  });
+
+  els.customTrainingResetBtn.addEventListener("click", () => {
+    customTrainingSelectedIds = [];
+    clearCustomTrainingCategoryIds();
+    // 問題数スライダーは変更しない（第12章の仕様）。カテゴリのチェックだけを外す。
+    els.customTrainingCategoryList.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+      cb.checked = false;
+    });
+    updateCustomTrainingSelectedCount();
+    focusElement(els.customTrainingResetBtn);
+  });
+
+  els.customTrainingStartBtn.addEventListener("click", () => {
+    // ボタン自体はcustomTrainingSelectedIdsが空のときdisabledになるが、DOM操作等で
+    // 無効化が解除された場合に備え、開始処理側でも改めて0件かどうかを確認する。
+    if (customTrainingSelectedIds.length === 0) {
+      showCustomTrainingErrorMessage("出題するカテゴリを1つ以上選んでください。");
+      return;
+    }
+    hideCustomTrainingErrorMessage();
+    callbacks.onStart &&
+      callbacks.onStart({
+        mode: "training",
+        trainingVariant: "custom",
+        selectedCategoryIds: [...customTrainingSelectedIds],
+        totalQuestions: customTrainingQuestionCount
+      });
+  });
+}
+
+function openCustomTrainingSettings() {
+  customTrainingSelectedIds = loadSanitizedCustomTrainingCategoryIds();
+  renderCustomTrainingCategoryList();
+  updateCustomTrainingSelectedCount();
+  updateCustomTrainingCountDisplay();
+  hideCustomTrainingErrorMessage();
+  showScreen("custom-training-settings");
+  focusElement(els.customTrainingTitle);
+}
+
+function closeCustomTrainingSettingsToTitle() {
+  showScreen("title");
+  focusElement(els.customTrainingGearBtn);
 }
 
 /**
@@ -1625,8 +1815,9 @@ function setupHelpScreens() {
   els.aboutBackBtn.addEventListener("click", backToHelpMenuFromDetail);
   els.enemyDexBackBtn.addEventListener("click", backToHelpMenuFromDetail);
 
-  // ヘルプ関連画面が表示されているときだけ、Escキーで1つ前の画面へ戻れるようにする。
-  // ゲーム中（バトル/カウントダウン/結果画面）のキー操作には一切影響しない。
+  // ヘルプ関連画面・カスタムトレーニング設定画面が表示されているときだけ、Escキーで
+  // 1つ前の画面へ戻れるようにする。ゲーム中（バトル/カウントダウン/結果画面）の
+  // キー操作には一切影響しない。
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     const activeId = getActiveScreenId();
@@ -1634,6 +1825,8 @@ function setupHelpScreens() {
       backToHelpMenuFromDetail();
     } else if (activeId === "screen-help-menu") {
       closeHelpMenuToTitle();
+    } else if (activeId === "screen-custom-training-settings") {
+      closeCustomTrainingSettingsToTitle();
     }
   });
 }
@@ -1898,6 +2091,7 @@ export function initUI(cb) {
   setupNextQuestionTap();
   setupRetireDialog();
   setupTrainingStartConfirmDialog();
+  setupCustomTrainingSettings();
   setupReviewStartConfirmDialog();
   setupHelpScreens();
   setupResetRecordsDialog();

@@ -15,6 +15,12 @@ const DEFEATED_ENEMY_IDS_KEY = "mathWordBattle_defeatedEnemyIds";
 // たびに js/game.js が進め、複数回プレイしたときに毎回同じグループばかりに
 // 端数が偏らないようにする（question-generator.js の planQuestionSequenceThreeGroup() 参照）。
 const GRADE6_TERM3_ROTATION_KEY = "mathWordBattle_grade6Term3RotationIndex";
+// カスタムトレーニング（運用開始後に追加）で選択したカテゴリID一覧。
+// 通常トレーニングの選択状態（LAST_TRAINING_GRADETERM_KEY等）とは完全に別のキーで、
+// 互いに上書きしない。有効なcategoryIdかどうかの検証（存在しないID・enabledInTraining=falseの
+// カテゴリの除去等）は、このファイルではなく呼び出し側（js/custom-training.js）が行う
+// （storage.jsはdata/category-registry.jsに依存しない設計を保つため）。
+const CUSTOM_TRAINING_CATEGORY_IDS_KEY = "mathWordBattle_customTrainingSelectedCategoryIds";
 
 let localStorageAvailable = null;
 
@@ -306,6 +312,57 @@ export function recordDefeatedEnemy(enemyId) {
     return;
   }
   saveDefeatedEnemyIds([...ids, enemyId]);
+}
+
+/**
+ * カスタムトレーニングで選択したカテゴリID一覧を読み込みます（運用開始後に追加）。
+ * 保存が無い/壊れている（不正なJSON・配列でない・要素が文字列でない）/localStorageが
+ * 使えない場合も、安全に空配列へフォールバックします（未選択状態から始まるだけで、
+ * ゲーム本体は止まりません）。現在のカテゴリレジストリと照合した妥当性検証
+ * （存在しないID・enabledInTraining=falseのカテゴリの除去、重複除去）は行いません。
+ * 呼び出し側（js/custom-training.js）が sanitizeCustomTrainingCategoryIds() で行ってください。
+ */
+export function loadCustomTrainingCategoryIds() {
+  if (!checkLocalStorageAvailable()) {
+    return [];
+  }
+  try {
+    const raw = window.localStorage.getItem(CUSTOM_TRAINING_CATEGORY_IDS_KEY);
+    if (raw === null) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.filter((id) => typeof id === "string" && id.length > 0);
+  } catch (error) {
+    return [];
+  }
+}
+
+/**
+ * カスタムトレーニングで選択したカテゴリID一覧を保存します（運用開始後に追加）。
+ * チェックボックスの状態が変わるたびに呼び出す想定です。
+ */
+export function saveCustomTrainingCategoryIds(categoryIds) {
+  if (!checkLocalStorageAvailable()) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(CUSTOM_TRAINING_CATEGORY_IDS_KEY, JSON.stringify(categoryIds));
+  } catch (error) {
+    // 保存に失敗しても、アプリの動作は継続する
+  }
+}
+
+/**
+ * カスタムトレーニングで選択したカテゴリID一覧の保存データを消去します（「設定リセット」用。
+ * 運用開始後に追加）。saveCustomTrainingCategoryIds([]) と同じ効果ですが、
+ * 「リセットした」という意図を呼び出し側で明確にするために専用の関数として用意しています。
+ */
+export function clearCustomTrainingCategoryIds() {
+  saveCustomTrainingCategoryIds([]);
 }
 
 /**

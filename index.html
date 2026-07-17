@@ -18,6 +18,15 @@
     <!-- タイトル画面左上のヘルプボタン（運用開始後に追加）。タイトル画面にしか存在しないため、
          トレーニング/総復習の選択状態を含め、他画面の状態には一切影響しない。 -->
     <button id="help-btn" class="icon-btn icon-btn-left" type="button" aria-label="ヘルプを開く">？</button>
+    <!-- カスタムトレーニング設定を開く歯車ボタン（運用開始後に追加）。#screen-title の子要素の
+         ため、タイトル画面が表示されているときにしか存在しない（ゲーム画面・結果画面・
+         ヘルプ画面・カスタム設定画面自体では自動的に非表示になる）。.training-only により、
+         「トレーニング」モードが選ばれているときだけ表示する。タイトル画面の選択状態
+         （学年・学期・レベル等）は初期化しない。 -->
+    <button id="custom-training-gear-btn" class="icon-btn icon-btn-bottom-right training-only" type="button" aria-label="カスタムトレーニングを設定する">
+      <span aria-hidden="true">⚙️</span>
+      <span class="gear-btn-label" aria-hidden="true">カスタム</span>
+    </button>
 
     <div class="title-block">
       <h1 class="app-title">文章題クエスト！</h1>
@@ -124,6 +133,55 @@
     </div>
   </section>
 
+  <!-- ============== カスタムトレーニング設定画面（運用開始後に追加） ==============
+       複数カテゴリ・5〜50問を自由に設定できるトレーニングのバリエーション。
+       タイトル画面の歯車ボタンから開く。ゲーム進行そのものはトレーニング画面
+       （#screen-battle。training-only要素）をそのまま再利用するため、この画面は
+       「設定」だけを扱う（.help-detail-screen と同じ、ヘッダー固定＋中央スクロール＋
+       フッター固定の3段構成）。 -->
+  <section id="screen-custom-training-settings" class="screen custom-training-screen">
+    <header class="help-screen-header">
+      <h2 id="custom-training-title" class="help-screen-title" tabindex="-1">カスタムトレーニング</h2>
+      <button id="custom-training-back-btn" class="help-back-btn" type="button">もどる</button>
+    </header>
+
+    <p class="custom-training-intro">トレーニング内容を設定してください。</p>
+
+    <div class="custom-training-fixed-top">
+      <div class="custom-training-count-block">
+        <label id="custom-training-count-label" for="custom-training-count-slider" class="setting-heading">出題問題数</label>
+        <input
+          id="custom-training-count-slider"
+          class="custom-training-count-slider"
+          type="range"
+          min="5"
+          max="50"
+          step="1"
+          value="5"
+          aria-labelledby="custom-training-count-label"
+          aria-describedby="custom-training-count-value"
+        />
+        <p id="custom-training-count-value" class="custom-training-count-value" aria-live="polite">5問</p>
+      </div>
+
+      <div class="custom-training-category-heading-row">
+        <h3 class="setting-heading">出題カテゴリ</h3>
+        <p id="custom-training-selected-count" class="custom-training-selected-count" aria-live="polite">選択中：0カテゴリ</p>
+      </div>
+    </div>
+
+    <div id="custom-training-category-scroll" class="custom-training-category-scroll">
+      <div id="custom-training-category-list" class="custom-training-category-list"></div>
+    </div>
+
+    <p id="custom-training-error-message" class="custom-training-error-message" aria-live="assertive" role="alert" hidden></p>
+
+    <div class="custom-training-footer">
+      <button id="custom-training-reset-btn" class="secondary-btn" type="button">設定リセット</button>
+      <button id="custom-training-start-btn" class="primary-btn" type="button" disabled>スタート</button>
+    </div>
+  </section>
+
   <!-- ============== ヘルプメニュー画面（運用開始後に追加） ============== -->
   <section id="screen-help-menu" class="screen help-menu-screen">
     <h2 id="help-menu-title" class="help-menu-title" tabindex="-1">ヘルプ</h2>
@@ -201,6 +259,8 @@
           <h3>トレーニング</h3>
           <p>練習したい単元を1つえらび、その単元の問題に5問挑戦するモードです。時間制限やハート、
             エネミーはいません。まちがえても、正解するまで同じ問題に何度でも挑戦できます。</p>
+          <p>トレーニングをえらんだときに表示される右下の歯車ボタンを押すと、複数の単元と
+            5～50問の問題数をえらべる「カスタムトレーニング」に挑戦できます。</p>
         </section>
 
         <section class="help-section">

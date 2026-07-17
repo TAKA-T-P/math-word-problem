@@ -106,7 +106,8 @@ math-word-battle/
 │  ├─ app.js                    … アプリの初期化・画面操作の橋渡し・モード（バトル/トレーニング/総復習）の振り分け（MODESディスパッチテーブル。運用開始後に総復習を追加）
 │  ├─ game.js                    … 通常バトルの状態管理・問題進行（4-2/4-3は出題プランに従って出題）・ハート/敵HP/タイマー管理・デバッグ出力。クリアが確定した瞬間だけ、登場したエネミーをエネミー図鑑へ記録する（recordDefeatedEnemy()、運用開始後に追加）
 │  ├─ enemy-list.js              … 出現するエネミー24種類（通常バトルのランダム抽選プール）の絵文字・名前・出現レベル・クリア/ゲームオーバー時のせりふ・キャラ紹介文の単一の情報源。game.js（抽選）・ui.js（タイトル画面のプレビュー・結果画面のエネミーコメント・エネミー図鑑）から参照する。総復習専用の固定エネミー（FORMULA_KAMEN/FORMULA_KAMEN_ACE）もここにあるが、ランダム抽選プールには含めない（運用開始後に追加）。各エネミーが持つ一意なid・図鑑対象一覧を返す`getAllEnemiesForDex()`・未解放時の出現条件ヒントを組み立てる`getEnemyUnlockHint()`も、エネミー図鑑機能の実装にあわせて追加した（運用開始後に追加）
-│  ├─ training-mode.js           … トレーニングモードの状態管理・カテゴリ指定の問題生成・進行・リタイア・結果画面遷移（新規）。エネミーが登場しないため、エネミー図鑑への記録は一切行わない
+│  ├─ training-mode.js           … トレーニングモードの状態管理・カテゴリ指定の問題生成・進行・リタイア・結果画面遷移（新規）。エネミーが登場しないため、エネミー図鑑への記録は一切行わない。`trainingState.trainingVariant`（`"single-category"`/`"custom"`）でカスタムトレーニングとの状態を分離するが、進行処理自体は完全に共通（運用開始後に追加）
+│  ├─ custom-training.js         … カスタムトレーニング（複数カテゴリ・5〜50問。運用開始後に追加）専用の、選択カテゴリの保存/検証・カテゴリ巡回順生成（`buildCustomTrainingCategorySequence()`）・問題セット生成（`generateCustomTrainingQuestions()`）・出題セット検証（`validateCustomTrainingSetGeneration()`）。ゲーム進行は複製せず、`js/training-mode.js`のbeginTrainingQuestion()以降をそのまま再利用する
 │  ├─ review-mode.js             … 総復習モードの状態管理・スコープ（学年/小学校）内の全カテゴリから1問ずつの問題生成・進行・ハート/敵HP管理・経過時間計測・リタイア・結果画面遷移（運用開始後に追加。game.js/training-mode.jsのどちらとも深く参照し合わない独立モジュール）。クリアが確定した瞬間だけ、登場した固定エネミーをエネミー図鑑へ記録する（recordDefeatedEnemy()、運用開始後に追加）
 │  ├─ ui.js                      … 画面表示・DOM操作・カードのタップ/ドラッグ操作・モード選択/カテゴリ選択UI・デバッグパネル表示。ヘルプボタン・ヘルプメニュー・「このゲームについて」・エネミー図鑑の画面遷移と描画、フォーカス管理、Escキーでの1つ前の画面への遷移も担当する（運用開始後に追加。ゲーム進行を持たないため`js/app.js`のMODESディスパッチテーブルには追加していない）
 │  ├─ question-generator.js       … テンプレートから問題・選択肢カードを生成し、生成直後に検証する。4-2/4-3の出題プラン生成（新内容/復習内容の比率・カテゴリ配分）もここが担当
@@ -123,7 +124,7 @@ math-word-battle/
 │  ├─ value-renderer.js          … 分数の縦型表示（教科書と同じ、横線の上に分子・下に分母）・比の表示（`5：3`）・縮尺の表示（`1：25,000`）・比例反比例の関係表（`renderRelationTableHtml`）のHTML生成、textParts形式の問題文の描画（新規、第11段階で比の表示・第12段階で縮尺の表示と関係表の描画を追加）
 │  ├─ score.js                   … スコア・ランク計算
 │  ├─ audio.js                   … Web Audio API による効果音生成
-│  └─ storage.js                 … ハイスコア・効果音設定・選択中の出題範囲の保存/読み込み・6年3学期の出題グループローテーション位置（第12段階で追加）。倒したことがあるエネミーのID一覧（エネミー図鑑の解放状態）の保存/読み込みも担当する（運用開始後に追加）。ヘルプメニューの「⚠記録を消す」向けに、ハイスコア・エネミー図鑑の解放状態だけを一括消去する `resetHighScoresAndEnemyDex()` も持つ（運用開始後に追加）
+│  └─ storage.js                 … ハイスコア・効果音設定・選択中の出題範囲の保存/読み込み・6年3学期の出題グループローテーション位置（第12段階で追加）。倒したことがあるエネミーのID一覧（エネミー図鑑の解放状態）の保存/読み込みも担当する（運用開始後に追加）。ヘルプメニューの「⚠記録を消す」向けに、ハイスコア・エネミー図鑑の解放状態だけを一括消去する `resetHighScoresAndEnemyDex()` も持つ（運用開始後に追加）。カスタムトレーニングの選択カテゴリID一覧の保存/読み込み/消去も担当する（運用開始後に追加）
 ├─ data/
 │  ├─ index.js                  … 問題データ読み込みの一元窓口。ゲーム本体はここ経由でのみ取得する
 │  ├─ category-registry.js      … トレーニング・総復習で選べる50カテゴリの単一の情報源（id/表示名/学期/表示可否/表示順。第12段階で5カテゴリ追加、うち「縮尺を求める」は運用開始後に削除し現在は4カテゴリ）。`getCategoriesForGrade()`（学年単位の一覧、運用開始後に追加）は総復習モード専用
@@ -1074,16 +1075,21 @@ http://localhost:8000/tools/quality-check.html
 各エラー・警告カードの「この条件で再実行」ボタンを押すと、同じテンプレートID・同じシードで
 問題を再生成し、スマートフォン表示プレビューにそのまま表示します。
 
-**通常バトル・トレーニング・総復習の出題セット検証**: 既存の出題ルールを再実装せず、
-`js/question-generator.js` の `planQuestionSequence()`/`planQuestionSequenceThreeGroup()`/
+**通常バトル・トレーニング・カスタムトレーニング・総復習の出題セット検証**: 既存の出題ルールを
+再実装せず、`js/question-generator.js` の `planQuestionSequence()`/`planQuestionSequenceThreeGroup()`/
 `getCandidateTemplatesForSlot()`、`js/game.js` の `isPlannedGradeTerm()`/`getTotalQuestionsForLevel()`
 （品質確認ツールからの再利用のためexport）、`js/training-mode.js` の `generateTrainingQuestions()`/
-`validateTrainingSetGeneration()`、`js/review-mode.js` の `generateReviewQuestions()`/
-`getReviewScopeKeys()`（同じくexport）をそのまま呼び出します。通常バトルは全学期×レベル1〜6、
-トレーニングは全カテゴリ、総復習は全スコープの組み合わせで、設定した回数ぶんセットを生成し、
-上記の重複・連続検出を適用します。`js/storage.js` のハイスコア等の保存関数は一切呼び出さないため、
-プレイヤーの保存データは変更されません（6年3学期のグループローテーション位置も、
-`localStorage`に永続化される実際の値ではなく、検証中だけのインメモリのカウンタを使います）。
+`validateTrainingSetGeneration()`、`js/custom-training.js` の `generateCustomTrainingQuestions()`/
+`validateCustomTrainingSetGeneration()`（運用開始後に追加）、`js/review-mode.js` の
+`generateReviewQuestions()`/`getReviewScopeKeys()`（同じくexport）をそのまま呼び出します。
+通常バトルは全学期×レベル1〜6、トレーニングは全カテゴリ、カスタムトレーニングは代表的な
+カテゴリ・問題数の組み合わせ（1カテゴリ・5問／3カテゴリ・10問／10カテゴリ・25問／全カテゴリ・
+50問／分数カテゴリを含む複数選択／1〜3段階問題を含む複数選択。レジストリから動的に選ぶため
+特定のcategoryIdはハードコードしていません）、総復習は全スコープの組み合わせで、設定した回数ぶん
+セットを生成し、上記の重複・連続検出を適用します。`js/storage.js` のハイスコア等の保存関数、
+カスタムトレーニングの選択カテゴリ保存関数は一切呼び出さないため、プレイヤーの保存データは
+変更されません（6年3学期のグループローテーション位置も、`localStorage`に永続化される実際の値
+ではなく、検証中だけのインメモリのカウンタを使います）。
 
 **1〜3段階問題の回帰テスト**: 多段階問題のテンプレートについて、`js/multi-step-engine.js` の
 `submitStepAnswer()`にわざと間違った値を渡す・`recordTimeout()`を呼ぶことで、各段階でのミス・
@@ -1199,9 +1205,10 @@ http://localhost:8000/index.html?debug=true
 |---|---|
 | `js/app.js` | エントリーポイント。`data/index.js` から問題データを取得し、各モジュールを読み込み、タイトル画面の操作（スタート・音声切り替え）、判定、次へ、リタイア、リトライ、タイトルへ戻る操作を `game.js`（通常バトル）・`training-mode.js`（トレーニング）・`review-mode.js`（総復習）の関数に橋渡しします。**「今どのモードで遊んでいるか」の判定・振り分けは、このファイルの `MODES` ディスパッチテーブルと `currentMode` 変数だけに集約**しており、`game.js`・`training-mode.js`・`review-mode.js`・`ui.js` の内部には `if (mode === "training")` のような分岐を増やしていません（第6段階の設計方針。運用開始後、モードが3つに増えた際、if/三項演算子の連鎖ではなく `MODES.battle`/`MODES.training`/`MODES.review` それぞれが `start`/`judge`/`nextTap`/... の同じ関数名を持つディスパッチテーブルに整理しました）。 |
 | `js/game.js` | 通常バトルの `gameState` オブジェクトでゲーム状態を一元管理。起動時に問題テンプレートを `question-validator.js` の `filterValidTemplateSets()`（トレーニング・総復習と共通）で検証・フィルタします。問題の進行、ハート管理、敵HP管理、タイマー管理、正解/不正解後の処理、クリア/ゲームオーバー判定、`?debug=true` 時のデバッグ出力を行います。2段階問題の判定・進行自体は `multi-step-engine.js` に委譲し、その結果（正解/不正解、最終正解かどうか）を受け取って既存の共通フロー（ハート減少・タイマー・スコア加算など）に橋渡しするだけに留めています。4-2・4-3モードでは、ゲーム開始時に `question-generator.js` の `planQuestionSequence()` で出題計画を作り（[6章](#6-小学4年生2学期3学期の出題プラン新内容復習内容の比率とカテゴリ配分)）、各問題はその計画に沿って生成します。同一ゲーム内での問題文・式の重複を避ける仕組み（`generateNonDuplicateQuestion()`）、分数を含む問題文（`textParts`）の履歴への保存、分数の分子・分母・約分後の値などを含む詳細なデバッグ出力もここにあります。カウントダウン演出（`runCountdown()`）は `training-mode.js`・`review-mode.js` からも再利用されるため export しています。トレーニングモード・総復習モードの状態（`trainingState`／`reviewState`）や、それぞれのファイルを参照することは一切ありません。**運用開始後に追加**: クリアが確定した瞬間（`finishGame()` の `type === "clear"` 分岐）にだけ、登場したエネミーを `js/storage.js` の `recordDefeatedEnemy()` でエネミー図鑑へ記録します（ゲームオーバー・リタイアからは呼びません）。**運用開始後に追加**: `isPlannedGradeTerm(gradeTerm)`/`getTotalQuestionsForLevel(level)`（`tools/quality-check.js` からの再利用のためexportした、既存のプラン決定ロジックの薄いラッパー。挙動自体は変更していません）。 |
-| `js/training-mode.js` | トレーニングモード専用の状態（`trainingState`）・進行管理（新規、第6段階）。`gameState` とは完全に独立しており、タイマー・ハート・敵HP・スコア・ランク・ハイスコアを一切参照しません。`generateTrainingQuestions(categoryId, templates, count)` が、指定カテゴリのテンプレートだけから（新内容/復習内容の比率処理は使わず）ちょうど5問を、問題文・式の重複を避けながら生成します。1問ごとの正解/不正解処理は、ハート減少・ゲームオーバーの代わりに「同じ問題（2段階なら同じ式）を解答欄をクリアしたまま再挑戦させる」処理になっており、`answer-checker.js`・`multi-step-engine.js`・`ui.js` のカード生成/正誤判定/分数表示はすべて通常バトルと同じ関数をそのまま再利用します。開発者用検証ページ向けの `validateTrainingSetGeneration()`（指定カテゴリで20回生成し、5問ちょうどか・他カテゴリが混ざらないか・重複が無いかを検証）もここにあります。 |
+| `js/training-mode.js` | トレーニングモード専用の状態（`trainingState`）・進行管理（新規、第6段階）。`gameState` とは完全に独立しており、タイマー・ハート・敵HP・スコア・ランク・ハイスコアを一切参照しません。`generateTrainingQuestions(categoryId, templates, count)` が、指定カテゴリのテンプレートだけから（新内容/復習内容の比率処理は使わず）ちょうど5問を、問題文・式の重複を避けながら生成します。1問ごとの正解/不正解処理は、ハート減少・ゲームオーバーの代わりに「同じ問題（2段階なら同じ式）を解答欄をクリアしたまま再挑戦させる」処理になっており、`answer-checker.js`・`multi-step-engine.js`・`ui.js` のカード生成/正誤判定/分数表示はすべて通常バトルと同じ関数をそのまま再利用します。開発者用検証ページ向けの `validateTrainingSetGeneration()`（指定カテゴリで20回生成し、5問ちょうどか・他カテゴリが混ざらないか・重複が無いかを検証）もここにあります。**運用開始後に追加**: `trainingState.trainingVariant`（`"single-category"`/`"custom"`）でカスタムトレーニングとの状態を分離。`startTraining()`が`settings.trainingVariant`で分岐し、カスタムのときは`js/custom-training.js`の`generateCustomTrainingQuestions()`を呼ぶ。`beginTrainingQuestion()`の`shouldDisplayFractionsUnsimplified()`判定は、`trainingState.gradeTerm`ではなく常に`problem.template.gradeTerm`を使うよう一般化（通常トレーニングは1カテゴリ＝1学期のため挙動は変わらない）。詳しくは[18章の「カスタムトレーニング」](#カスタムトレーニング運用開始後に追加)。 |
+| `js/custom-training.js` | カスタムトレーニング（複数カテゴリ・5〜50問。運用開始後に追加）専用の、選択カテゴリの保存/検証（`sanitizeCustomTrainingCategoryIds()`）・カテゴリ巡回順生成（`buildCustomTrainingCategorySequence()`。1周に1カテゴリ1回、端数は異なるカテゴリ、周の境目での同一カテゴリ連続防止）・問題セット生成（`generateCustomTrainingQuestions()`。既存の`generateQuestion()`を各カテゴリスロットに対して呼び出す）・出題セット検証（`validateCustomTrainingSetGeneration()`）を持つ純粋なモジュールです。ゲーム進行（問題表示・正誤判定・履歴・結果画面）は複製せず、`js/training-mode.js`の`beginTrainingQuestion()`以降をそのまま再利用します。 |
 | `js/review-mode.js` | 総復習モード専用の状態（`reviewState`）・進行管理（運用開始後に追加）。`gameState`（通常バトル）・`trainingState`（トレーニング）のどちらとも完全に独立しています。「文章題バトルをベースとするが、スコア・ランク・時間制限が無い」という設計のため、ハート・敵HP・クリア/ゲームオーバー/リタイアの判定・演出は `game.js` と同じ考え方、問題を事前にすべて生成しておく進行方式・タイマー概念が無い点は `training-mode.js` と同じ考え方を組み合わせていますが、どちらのファイルも深く参照しません（唯一の例外は `runCountdown()` の再利用）。`getQuestionCountForScope(scope)` がスコープ（`"4"`／`"5"`／`"6"`／`"all"`）に属するカテゴリ数（＝出題数）を `data/category-registry.js` から動的に導出し、開始時にそのスコープの全カテゴリから1問ずつ生成してシャッフルします（`generateReviewQuestions()`）。ゲームスタート（1問目開始）からの経過時間を1秒おきに `ui.updateElapsedTime()` へ渡す処理、固定エネミー（`js/enemy-list.js` の `FORMULA_KAMEN`／`FORMULA_KAMEN_ACE`）の割り当て、スコープに応じたハート数（「小学校のまとめ」だけ1個）の決定もここが担当します。**運用開始後に追加**: `js/game.js` と同じく、クリアが確定した瞬間（`finishReview()` の `type === "clear"` 分岐）にだけ、登場した固定エネミーを `recordDefeatedEnemy()` でエネミー図鑑へ記録します。**運用開始後に追加**: `generateReviewQuestions(scope)` をexport、`getReviewScopeKeys()`/`getReviewScopeLabel(scope)`（`tools/quality-check.js` からの再利用のため追加）。 |
-| `js/ui.js` | 画面の表示切り替え、問題文・選択肢カード・解答欄の表示、HP/ハート/時間ゲージの更新、正解/不正解演出、カードのタップ操作・ドラッグ操作（Pointer Events）、結果画面の表示、デバッグパネルの表示を行います。2〜3段階問題用に、進行表示（「式を2つ答えよう！」／「（それまでの式）の続きを答えよう」。第12段階で「式 ○／○：」の進行番号表示を廃止）・中間結果カードの見た目・途中式正解の演出・`?debug=true` 時の開発版モードボタンの動的追加も担当します。数値・分数の表示は必ず `js/value-renderer.js` の `renderValueHtml()` / `renderTextPartsHtml()` を経由し（問題文・カード・解答欄・結果ボックス・履歴）、分数を含むカード・解答欄には専用のクラス（`choice-value-fraction`）で高さを確保します。タイトル画面で最後に選んだ出題範囲・モード・トレーニングの学期/カテゴリの保存・復元も担当します。**第6段階で追加**: モード選択ボタン（`setMode()`）、`data/category-registry.js` から動的に生成する学年学期/カテゴリ選択ボタン、トレーニング画面のヘッダー更新（`updateTrainingHeader()`）、トレーニング専用の軽い誤答演出（`triggerTrainingIncorrectEffect()`）、トレーニング結果画面（`showTrainingResultScreen()`）。バトル画面・結果画面のバトル専用/トレーニング専用/総復習専用要素の出し分けは、`#app` 要素への `mode-training`／`mode-review` クラスの付け外し（CSS側の `.battle-only` / `.training-only` / `.review-only` / `.hide-in-training`）にまとめており、`ui.js` 自体には要素ごとの表示切り替えロジックをほとんど書いていません。**運用開始後に追加**: 総復習モードの「学年」ボタン（`#review-scope-select`。4つの固定ボタン）・開始確認ダイアログ（`showReviewStartDialog()`。`getReviewQuestionCountForScope()` で問題数を`data/category-registry.js`から動的に算出）、バトル画面ヘッダーの総復習表示（`updateReviewHeader()`）、経過時間表示（`updateElapsedTime()`）、総復習結果画面（`showReviewResultScreen()`）、タイトル画面のサブタイトル（アプリタイトル直下の説明文）をモードに応じて切り替える `updateModeSubtitle()`（以前は常に固定文言で、モード切り替えボタンより上にあったが、ボタンの下へ移動しモードごとに文言を変えるよう変更）。**運用開始後に追加**: ヘルプボタン・ヘルプメニュー・「このゲームについて」・エネミー図鑑の画面遷移（`openHelpMenu()` `openAboutScreen()` `openEnemyDexScreen()` `backToHelpMenuFromDetail()` `closeHelpMenuToTitle()`）、エネミー図鑑の描画（`renderEnemyDex()`。`js/enemy-list.js` の `getAllEnemiesForDex()`/`getEnemyUnlockHint()` と `js/storage.js` の `loadDefeatedEnemyIds()` だけから組み立てる）、画面遷移時のフォーカス移動（`focusElement()`）、ヘルプ関連画面が表示されているときだけ働くEscキーでの1つ前の画面への遷移。ヘルプはゲーム進行を持たない補助画面のため `js/app.js` の `MODES` ディスパッチテーブルには追加していません。 |
+| `js/ui.js` | 画面の表示切り替え、問題文・選択肢カード・解答欄の表示、HP/ハート/時間ゲージの更新、正解/不正解演出、カードのタップ操作・ドラッグ操作（Pointer Events）、結果画面の表示、デバッグパネルの表示を行います。2〜3段階問題用に、進行表示（「式を2つ答えよう！」／「（それまでの式）の続きを答えよう」。第12段階で「式 ○／○：」の進行番号表示を廃止）・中間結果カードの見た目・途中式正解の演出・`?debug=true` 時の開発版モードボタンの動的追加も担当します。数値・分数の表示は必ず `js/value-renderer.js` の `renderValueHtml()` / `renderTextPartsHtml()` を経由し（問題文・カード・解答欄・結果ボックス・履歴）、分数を含むカード・解答欄には専用のクラス（`choice-value-fraction`）で高さを確保します。タイトル画面で最後に選んだ出題範囲・モード・トレーニングの学期/カテゴリの保存・復元も担当します。**第6段階で追加**: モード選択ボタン（`setMode()`）、`data/category-registry.js` から動的に生成する学年学期/カテゴリ選択ボタン、トレーニング画面のヘッダー更新（`updateTrainingHeader()`）、トレーニング専用の軽い誤答演出（`triggerTrainingIncorrectEffect()`）、トレーニング結果画面（`showTrainingResultScreen()`）。バトル画面・結果画面のバトル専用/トレーニング専用/総復習専用要素の出し分けは、`#app` 要素への `mode-training`／`mode-review` クラスの付け外し（CSS側の `.battle-only` / `.training-only` / `.review-only` / `.hide-in-training`）にまとめており、`ui.js` 自体には要素ごとの表示切り替えロジックをほとんど書いていません。**運用開始後に追加**: 総復習モードの「学年」ボタン（`#review-scope-select`。4つの固定ボタン）・開始確認ダイアログ（`showReviewStartDialog()`。`getReviewQuestionCountForScope()` で問題数を`data/category-registry.js`から動的に算出）、バトル画面ヘッダーの総復習表示（`updateReviewHeader()`）、経過時間表示（`updateElapsedTime()`）、総復習結果画面（`showReviewResultScreen()`）、タイトル画面のサブタイトル（アプリタイトル直下の説明文）をモードに応じて切り替える `updateModeSubtitle()`（以前は常に固定文言で、モード切り替えボタンより上にあったが、ボタンの下へ移動しモードごとに文言を変えるよう変更）。**運用開始後に追加**: ヘルプボタン・ヘルプメニュー・「このゲームについて」・エネミー図鑑の画面遷移（`openHelpMenu()` `openAboutScreen()` `openEnemyDexScreen()` `backToHelpMenuFromDetail()` `closeHelpMenuToTitle()`）、エネミー図鑑の描画（`renderEnemyDex()`。`js/enemy-list.js` の `getAllEnemiesForDex()`/`getEnemyUnlockHint()` と `js/storage.js` の `loadDefeatedEnemyIds()` だけから組み立てる）、画面遷移時のフォーカス移動（`focusElement()`）、ヘルプ関連画面が表示されているときだけ働くEscキーでの1つ前の画面への遷移。ヘルプはゲーム進行を持たない補助画面のため `js/app.js` の `MODES` ディスパッチテーブルには追加していません。**運用開始後に追加**: カスタムトレーニング設定画面（`openCustomTrainingSettings()`/`closeCustomTrainingSettingsToTitle()`）、`data/category-registry.js`から動的に生成する学年・学期見出し付きのチェックボックス一覧（`renderCustomTrainingCategoryList()`）、出題問題数スライダーの表示更新、選択カテゴリ数の`aria-live`更新、設定リセット・スタート時の検証（`js/custom-training.js`の各関数を利用）。カスタムトレーニングもゲーム進行自体は`js/app.js`の`MODES.training`（既存の`mode:"training"`）のまま扱うため、ディスパッチテーブルへの追加は不要でした。 |
 | `js/question-generator.js` | テンプレートから値を生成し、問題文（`text` またはHTML描画用の `textParts`）・選択肢カード（最大8枚）・`solutionRoutes`（解決済みの正解ルート）を作成します。生成直後に `question-validator.js` で検証し、不正な場合はコンソールにエラーを出力した上で再生成します。`questionType: "multiStep"` の場合は、値の生成とルートの数値解決までを行い、進行状態の初期化・最初のカード生成は `multi-step-engine.js` に委譲します。小数変数（`decimalPlaces`）・分数変数（`type:"fraction"`）・百分率変数（`type:"percent"`）の生成、4-2/4-3/5-1/5-2/5-3の出題計画生成（`planQuestionSequence()` `getCandidateTemplatesForSlot()` `getContentGroup()`、`GRADE_TERM_PLAN_CONFIG` にモードを1件追加するだけで新しい学期にも適用できる）もここが担当します。ダミーカード生成・重複排除は、数値・分数・百分率のどの値にも対応した `value-utils.js` の `valueKey()` を使って値の型を意識せず行います。**第7段階で追加**: `quantityRelation` を持つテンプレート（小数倍・もとの量）専用の値生成（`generateDecimalMultiplicativeComparisonValues()`）と、そのテンプレートの「見えている数値」を `solutionRoutes[0]` から動的に判定する `getVisibleNumbers()` の分岐。**第8段階で追加**: 「2つの既知の値から積にあたる3つ目の値を求める」共通ロジック `generateProportionalValues()` を切り出し、`generateDecimalMultiplicativeComparisonValues()`（小数倍・もとの量）に加えて `generateAverageValues()`（平均）・`generateUnitRateValues()`（単位量あたり・混み具合）がこれを共有します。異分母分数のたし算・ひき算は `generateStandardValues()` のエイリアスのため、この点は無改造です。**第9段階で追加**: `pickPercentValue()`（百分率変数の生成）、`generateSpeedValues()`（速さ、`generateProportionalValues()` を再利用）、`generatePercentageValues()`（割合）、`resolveOperand()` の `{source:"literal"}` 対応（割引・増量の固定値「100%」）、`applyResultType()`（`resultType:"percent"` の変換）、`generateDummyPercent()`、`renderTemplateText()` の百分率対応（`String(value)` が `"[object Object]"` になっていたバグの修正）。**第10段階で追加**: `fractionTimesInteger`/`fractionTimesFraction`/`fractionDividedByInteger`/`integerDividedByFraction`/`fractionDividedByFraction`（すべて `generateStandardValues()` のエイリアス）、`generateFractionMultiplicativeComparisonValues()`（分数倍。もとにする量×分数倍を `calculateValues()` に委譲）、`QUANTITY_RELATION_GENERATOR_TYPES`/`GRADE_TERM_PLAN_CONFIG` に `"6-1"` 関連を追加。分数倍の内部ロジックは `generateFractionProportionalValues(variables, aKey, bKey, productKey)` として汎用化しており（小数版の `generateProportionalValues()` と同じ考え方）、`generateFractionUnitRateValues()`（単位量あたり・分数版）がこれを共有します。**運用開始後に追加**: `pickInt()`/`shuffleArray()` の乱数を差し替えられる `setRandomSource()`/`resetRandomSource()`（`tools/quality-check.js` 専用。既定は`Math.random`のままのため通常のプレイには一切影響しない）。 |
 | `js/multi-step-engine.js` | 2段階問題専用の進行管理。現在の途中式番号、正解候補となる解法ルートの絞り込み、途中式・最終式の判定、中間結果の保存、中間結果カードの生成、次の途中式への移行、複数解法の管理、結果画面用の履歴データの作成を担当します。開発者用検証ページから使う「全ルート完答シミュレーション」もここにあります。式の文字列表示は `js/value-renderer.js` の `renderValueHtml()` を使っており、すでに解決済みの値（数値・分数・百分率のいずれか）を型を意識せず扱う設計のため、第9段階の百分率2段階問題（割引・増量）にも無改造で対応できました。 |
 | `js/question-validator.js` | 問題テンプレート（構造）と生成済み問題（数値確定後）を検証します。1段階問題・2段階問題の両方に対応し、2段階問題については「式が2つ登録されているか」「ルートID・resultKeyの重複」「存在しない変数/中間結果の参照や循環参照が無いか」「各ルートの最終結果が一致するか」なども検証します。加えて、`gradeTerm`／`contentGroup` の値の妥当性、`template`/`textParts` のどちらかが存在するか、`textParts` の構造・参照先の妥当性、小数の桁数が多すぎないか、分数の分母・分子の範囲や同分母性、百分率の値の妥当性、`exactDivision`系のわる数が想定範囲内か、`formatNumber()`/`parseFormattedNumber()` の往復変換が元の値と一致するか、分数・百分率の表示用HTML・`aria-label`が正しく生成できるか、なども検証します。ゲーム本体（`game.js`・`training-mode.js`）と `tools/question-validator.html` の両方から使われます。**第6段階で追加**: `filterValidTemplateSets()`（不正なテンプレートを出題プールから除外する処理を`game.js`から移設し、通常バトル・トレーニング共通で使う）、`validateCategoryRegistry()`（カテゴリレジストリ自体のID重複・必須項目チェック）、`validateCategoryRegistryAgainstTemplates()`（レジストリとテンプレートの対応関係。孤立した`categoryId`・テンプレート0件のカテゴリが無いかを検証）。**第7段階で追加**: `validateQuantityRelation()`（小数倍・もとの量テンプレートの `quantityRelation` の構造検証）と、`comparedKey` のような動的な変数名も「既知の変数」として扱う `getKnownVariableKeys()` ヘルパー。**第8段階で追加**: `validateQuantityRelation()` を `QUANTITY_RELATION_TYPE_CONFIG` で汎用化し、平均（`type:"average"`）・単位量あたり（`type:"unit-rate"`）にも対応。異分母分数専用の `validateUnlikeDenominators()`（分母が異なることを要求）・`validateNonNegativeUnlikeDenominatorSubtraction()`（クロス乗算で答えが負にならないか検証）を追加。既存の「生成された分数の分母が同じか」というチェックは、同分母専用の `generatorType`（`SAME_DENOMINATOR_GENERATOR_TYPES`）に限定するよう修正（異分母分数を誤って弾かないようにするため）。**第9段階で追加**: `QUANTITY_RELATION_TYPE_CONFIG` に速さ（`type:"speed"`）・割合（`type:"percentage"`）を追加、`validatePercentVariable()`（百分率変数の検証）、`validateValueRepresentation()` の百分率対応、`validateMultiStepSolutionRoutes()` の `{source:"literal"}` オペランド対応、`applyResultTypeForValidation()`（生成側と独立に `resultType:"percent"` を再現し、正解式の再計算と一致させる）。**第10段階で追加**: `VALID_GRADE_TERMS` に `"6-1"` を追加、新しい `generatorType` 7種のルール、`QUANTITY_RELATION_TYPE_CONFIG` に分数倍（`type:"fraction-multiplicative-comparison"`）を追加、0でわるチェックを型を意識せず行う `isZeroValue()`（`value-utils.js`）に統一。`fractionUnitRate` の `generatorType` ルール、`QUANTITY_RELATION_TYPE_CONFIG` の単位量あたり・分数版（`type:"fraction-unit-rate"`）も第10段階で追加しています。 |
@@ -1213,7 +1220,7 @@ http://localhost:8000/index.html?debug=true
 | `js/value-renderer.js` | 分数の縦型表示（教科書と同じ、横線の上に分子・下に分母）のHTMLと、`aria-label`（読み上げ用のテキスト）を生成します（新規、第9段階で百分率対応を追加）。百分率は比率（小数）に変換してから通常の数値と同じ形式で表示します（`renderPercentConversionHtml()` は「割合・百分率」の答え表示専用で、「0.5→50%」の形式を作ります）。`textParts` 形式の問題文をHTMLに変換する `renderTextPartsHtml()` もここにあります。分数は、約分の結果分母が1になる場合は縦型ではなく整数として表示します（第10段階で追加）。問題文・選択肢カード・解答欄・■欄・正解演出・問題履歴・問題検証ページ・デバッグ表示は、すべてこのファイルの関数を経由して分数・百分率を表示します。 |
 | `js/score.js` | 問題ごとの加算スコア、現在のランクを計算します（1段階・2段階共通）。 |
 | `js/audio.js` | Web Audio API でカウントダウン音・正解音・不正解音・敵撃破音・ゲームオーバー音を生成します。 |
-| `js/storage.js` | ハイスコア・効果音設定・タイトル画面で最後に選んだ出題範囲（`gradeTerm`）を `localStorage` に保存/読み込みします。`localStorage` が使えない環境でもエラーにならないようにしています。**第6段階で追加**: `lastMode`（前回選んだモード）・`lastTrainingGradeTerm`・`lastTrainingCategoryId` の保存/読み込み。トレーニング・総復習のスコア・進捗・ハイスコアは保存しません。既存のハイスコア用キーとは別のキーを使っており、既存データには一切触れません。**運用開始後に変更**: `loadLastMode()`/`saveLastMode()` が扱う値に `"review"` を追加（総復習モードの選択も記憶・復元できるようにした）。総復習の「どのスコープを選んだか」自体は保存しません（トレーニングのカテゴリボタンと同じく、タップした瞬間に確認ダイアログを開くだけの操作のため）。**運用開始後に追加**: `loadDefeatedEnemyIds()`/`saveDefeatedEnemyIds()`/`isEnemyDefeated()`/`recordDefeatedEnemy()`（エネミー図鑑の解放状態。キー: `mathWordBattle_defeatedEnemyIds`）。保存データが不正なJSON・配列でない・要素が文字列でない場合は安全に空配列へフォールバックし、既に記録済みのIDを渡しても重複追加しません。 |
+| `js/storage.js` | ハイスコア・効果音設定・タイトル画面で最後に選んだ出題範囲（`gradeTerm`）を `localStorage` に保存/読み込みします。`localStorage` が使えない環境でもエラーにならないようにしています。**第6段階で追加**: `lastMode`（前回選んだモード）・`lastTrainingGradeTerm`・`lastTrainingCategoryId` の保存/読み込み。トレーニング・総復習のスコア・進捗・ハイスコアは保存しません。既存のハイスコア用キーとは別のキーを使っており、既存データには一切触れません。**運用開始後に変更**: `loadLastMode()`/`saveLastMode()` が扱う値に `"review"` を追加（総復習モードの選択も記憶・復元できるようにした）。総復習の「どのスコープを選んだか」自体は保存しません（トレーニングのカテゴリボタンと同じく、タップした瞬間に確認ダイアログを開くだけの操作のため）。**運用開始後に追加**: `loadDefeatedEnemyIds()`/`saveDefeatedEnemyIds()`/`isEnemyDefeated()`/`recordDefeatedEnemy()`（エネミー図鑑の解放状態。キー: `mathWordBattle_defeatedEnemyIds`）。保存データが不正なJSON・配列でない・要素が文字列でない場合は安全に空配列へフォールバックし、既に記録済みのIDを渡しても重複追加しません。**運用開始後に追加**: `loadCustomTrainingCategoryIds()`/`saveCustomTrainingCategoryIds()`/`clearCustomTrainingCategoryIds()`（カスタムトレーニングの選択カテゴリID一覧。キー: `mathWordBattle_customTrainingSelectedCategoryIds`）。現在のカテゴリレジストリとの照合（存在しないID・`enabledInTraining:false`の除去）は`js/custom-training.js`側で行い、このファイル自体は「文字列の配列であること」までの安全なフォールバックだけを担当します。 |
 | `data/index.js` | 出題範囲（学年・学期）ごとの問題テンプレートを一元管理するレジストリ。ゲーム本体はここ経由でのみデータを取得します。`"4-3"` は `data/grade4-term3.js`、`"5-1"` は `data/grade5-term1.js`、`"5-2"` は `data/grade5-term2.js`（第8段階）、`"5-3"` は `data/grade5-term3.js`（第9段階）、`"6-1"` は `data/grade6-term1.js`（第10段階）に登録し、`"4-multi-step"` の `data/multi-step-integer.js` を4-2の「2段階文章題」カテゴリ・4-3/5-1/5-2/5-3/6-1の復習内容としても共有します。 |
 | `data/category-registry.js` | トレーニングモードで選べる38カテゴリの単一の情報源（第6段階で新規導入、第7段階で4カテゴリ、第8段階で5カテゴリ、第9段階で8カテゴリ、第10段階で8カテゴリ（分数×整数〜単位量あたり（分数）を含む）追加）。各カテゴリは `{ id, label, gradeTerm, gradeLabel, enabledInTraining, order }` を持ち、`getCategoriesForGradeTerm()` `getGradeTermGroups()` `getCategoryById()` のヘルパーを提供します。`js/ui.js` はこのレジストリからタイトル画面のカテゴリ選択ボタンを動的に生成するだけで、カテゴリ名を個別にハードコードしていません。詳しくは[18章](#18-トレーニングモード第6段階)。 |
 | `data/grade4-term1.js` | 小学4年生・1学期の1段階問題テンプレートのデータのみを定義（ゲーム処理は含みません）。 |
@@ -1224,7 +1231,7 @@ http://localhost:8000/index.html?debug=true
 | `data/grade5-term3.js` | 小学5年生・3学期の問題テンプレートのデータのみを定義（速さ・道のり・時間・割合（比べる量/百分率/もとにする量）・割引・増量、各5種類・計40種類。第9段階で新規）。速さ・割合のテンプレートは `quantityRelation` メタデータを持ち、割引・増量は `questionType:"multiStep"` の2段階問題（それぞれ2つの解法ルート）です。詳しくは[21章](#21-小学5年生3学期第9段階)。 |
 | `data/grade6-term1.js` | 小学6年生・1学期の問題テンプレートのデータのみを定義（分数×整数/分数×分数/分数÷整数/整数÷分数/分数÷分数/分数倍・比べる量/分数倍・もとの量/単位量あたり（分数）、各5種類・計40種類。第10段階で新規（単位量あたり（分数）を含む））。すべて `textParts` を使用（分数の値が問題文に直接登場するため）。分数倍・単位量あたり（分数）のテンプレートは `quantityRelation` メタデータを持ちます。詳しくは[22章](#22-小学6年生1学期第10段階)。 |
 | `data/multi-step-integer.js` | 整数のみの2段階問題テンプレートのデータのみを定義。開発版モード（`4-multi-step`）専用のデータであると同時に、4-2モードの「2段階文章題」カテゴリ、4-3/5-1/5-2/5-3モードの復習内容からも同じデータをそのまま参照します（複製はしていません）。 |
-| `tools/quality-check.js` | 全範囲品質確認ページ（`tools/quality-check.html`）のオーケストレーション層（運用開始後に追加）。`data/index.js`・`category-registry.js` からの対象テンプレートの動的な探索・重複排除、テンプレートごとの100回耐久テストのループ（進行状況コールバック・`requestIdleCallback`/`setTimeout`での譲歩・一時停止/再開/中止）、通常バトル・トレーニング・総復習の出題セット検証、1〜3段階の回帰テスト、集計・絞り込み・JSON/CSVレポート生成、乱数シードでの再現、スマートフォンプレビュー用の整形（`js/value-renderer.js`を再利用）を行います。既存の検証ロジック（`js/question-validator.js`・`js/multi-step-engine.js`・`js/training-mode.js`・`js/review-mode.js`・`js/question-generator.js`）はそのまま呼び出すだけで複製していません。DOMに依存しない設計のため、Node.jsからも動作確認できます。 |
+| `tools/quality-check.js` | 全範囲品質確認ページ（`tools/quality-check.html`）のオーケストレーション層（運用開始後に追加）。`data/index.js`・`category-registry.js` からの対象テンプレートの動的な探索・重複排除、テンプレートごとの100回耐久テストのループ（進行状況コールバック・`requestIdleCallback`/`setTimeout`での譲歩・一時停止/再開/中止）、通常バトル・トレーニング・総復習の出題セット検証、1〜3段階の回帰テスト、集計・絞り込み・JSON/CSVレポート生成、乱数シードでの再現、スマートフォンプレビュー用の整形（`js/value-renderer.js`を再利用）を行います。既存の検証ロジック（`js/question-validator.js`・`js/multi-step-engine.js`・`js/training-mode.js`・`js/review-mode.js`・`js/question-generator.js`）はそのまま呼び出すだけで複製していません。DOMに依存しない設計のため、Node.jsからも動作確認できます。**運用開始後に追加**: カスタムトレーニングの出題セット検証（`runCustomTrainingSetValidation()`。`js/custom-training.js`の`validateCustomTrainingSetGeneration()`/`generateCustomTrainingQuestions()`を再利用し、依頼文が推奨する代表的なカテゴリ・問題数の組み合わせをレジストリから動的に選んで検証）。 |
 | `tools/quality-rules.js` | `tools/quality-check.js` が使う、既存の検証ロジックがカバーしていないチェックをまとめた純粋関数群（運用開始後に追加）。カードの漏えい確認（全カード・全値型、`areValuesEqual()`使用）、問題文の異常・数値の偶然の一致の確認、`quantityRelation`との照合、重複・連続出題のシグネチャ（`questionSignature`/`formulaSignature`/`valueSignature`）、数値難易度の統計とカテゴリ別しきい値（`QUALITY_RULES_BY_CATEGORY`）、乱数シード生成（mulberry32、外部ライブラリ不使用）、ルールID定数（`RULE`）、意図的な不正データのfixtureと自己診断（`runSelfTest()`）を持ちます。DOM・他のjs/ファイルへの依存を持たない設計です。 |
 
 ## 12. ローカルでの起動方法
@@ -1420,6 +1427,15 @@ npx serve .
     する）に戻し、問題番号は進めずにもう一度同じ問題を解ける（`js/training-mode.js`の
     `handleRetrySameQuestion()`）
   - 詳しくは[18章](#18-トレーニングモード第6段階)
+  - **カスタムトレーニング**（運用開始後に追加）: トレーニング選択時に画面右下へ表示される
+    歯車ボタンから開く、複数カテゴリ・5〜50問を自由に設定できるトレーニングのバリエーション
+    （新しいトップレベルモードではなく、`trainingState.trainingVariant: "custom"` として
+    内部的に区別。ゲーム進行は通常トレーニングと完全に共通）。全50カテゴリから複数選択でき、
+    選択カテゴリを1周につき1問ずつランダムな順序で均等に巡回する出題順（カテゴリ別の出題数の差は
+    最大1問。周の境目での同一カテゴリ連続も回避）。選択カテゴリIDは`localStorage`に保存し、
+    問題数はページ内でのみ保持（再読み込みで5問に戻る）。異なる学年・学期のカテゴリを同時に
+    選べるため、分数の約分あり／なし表示は問題ごとのテンプレートが本来属する学期を基準に判定
+    （通常トレーニングの表示は変更なし）。詳しくは[18章の「カスタムトレーニング」](#カスタムトレーニング運用開始後に追加)
 - **小学5年生・1学期（第7段階、正式モード、`gradeTerm: "5-1"`）**
   - 小数×小数（かけ算なので順序を問わず正解）
   - 小数÷小数（必ず有限小数で割り切れる。循環小数・あまりのあるわり算は出題しない）
@@ -2867,6 +2883,175 @@ onJudge: (answer) => (currentMode === "training" ? training.handleJudge(answer) 
 - [ ] コンソールにJavaScriptエラーが出ていない（バトル・トレーニングどちらのフローでも）
 - [ ] スマートフォン縦画面で、トレーニングのモード選択・カテゴリ選択・バトル画面・結果画面が
       崩れずに操作できる
+
+### カスタムトレーニング（運用開始後に追加）
+
+複数カテゴリ・5〜50問を自由に設定できる、トレーニングの**バリエーション**です。新しいトップレベルの
+ゲームモードとしては追加せず、タイトル画面上は引き続き「トレーニング」が選ばれた状態のまま、
+`js/training-mode.js` の `trainingState.trainingVariant`（`"single-category"` または `"custom"`）で
+内部的に区別しています。ゲーム進行（問題表示・正誤判定・1〜3段階問題の進行・履歴・結果画面・
+リタイア）は、通常トレーニングと**完全に共通**です（`beginTrainingQuestion()` 以降のコードは
+一切分岐していません）。
+
+**開き方**: タイトル画面で「トレーニング」を選ぶと、画面右下に歯車ボタン（⚙️ カスタム）が
+表示されます。押すとカスタムトレーニング設定画面が開きます（`js/ui.js` の
+`openCustomTrainingSettings()`）。「もどる」でタイトル画面へ戻っても、通常トレーニング側の
+選択状態（学年・学期・カテゴリ）は一切変更しません。
+
+#### 状態分離
+
+| | 通常トレーニング | カスタムトレーニング |
+|---|---|---|
+| カテゴリ数 | 1（学年・学期から選択） | 1以上（レジストリ全体から複数選択） |
+| 問題数 | 5問固定 | 5〜50問（1問単位） |
+| カテゴリ選択方法 | 学年→学期→カテゴリの3段階 | 全カテゴリ一覧からチェックボックスで複数選択 |
+| 保存されるもの | 前回の学年・学期・カテゴリ（`lastTrainingGradeTerm`等） | 選択カテゴリID一覧（問題数は保存しない） |
+| `trainingState.trainingVariant` | `"single-category"` | `"custom"` |
+
+`trainingState.selectedCategoryIds`（選択カテゴリID配列）・`trainingState.categorySequence`
+（実際に生成されたカテゴリ出題順）は、カスタムトレーニングのときだけ使用します
+（通常トレーニングでは常に空配列のまま）。
+
+#### カテゴリ一覧の生成
+
+`data/category-registry.js` の `getEnabledTrainingCategories()`（`enabledInTraining: true` の
+全カテゴリを `order` 順に）から動的に生成します。特定のカテゴリ数・カテゴリIDをハードコードして
+いないため、将来カテゴリが増減しても自動的に反映されます。学年・学期（`gradeLabel`）ごとに
+見出しを付け、表示名は `label` を使用します（`categoryId` は `<input>` の `value`/`data-category-id`
+にのみ使用し、画面には表示しません）。
+
+#### カテゴリ巡回方式（`buildCustomTrainingCategorySequence()`、`js/custom-training.js`）
+
+選択したカテゴリを、1周につき1問ずつ・各周のカテゴリ順はランダムに巡回します。
+
+```text
+例: 10カテゴリを選び、25問に設定した場合
+　→ 10カテゴリを1問ずつ2周した後（20問）、
+　　残り5問は、新しくシャッフルした1周分の先頭5カテゴリから1問ずつ出題する。
+　→ カテゴリ別の出題数は、3問のカテゴリが5つ・2問のカテゴリが5つ（最大差1問）になる。
+```
+
+- 各周（1回のシャッフル）の中では、同じカテゴリを2回出題しない
+- 問題数がカテゴリ数で割り切れない場合の端数は、新しくシャッフルした1周分の先頭から必要数だけ
+  取るため、重複の無い異なるカテゴリの組み合わせになる（`Array.prototype.slice()`）
+- 選択カテゴリが2つ以上のとき、周の境目（前の周の最後と次の周の最初）で同じカテゴリが連続
+  しないよう、次の周の最初が前の周の最後と同じ場合は先頭を入れ替える
+- 選択カテゴリが1つだけの場合は、常にそのカテゴリのまま返す（既存の通常トレーニングと同じ結果）
+- 乱数は既存の `js/question-generator.js` の `shuffleArray()` をそのまま再利用（新しい乱数処理は
+  追加していません）
+
+問題自体は `generateCustomTrainingQuestions(selectedCategoryIds, templates, questionCount)` が、
+この出題順の各スロットのcategoryIdから1問ずつ、既存の `generateQuestion()`（テンプレート抽出・
+生成直後の検証を内包）を呼び出して生成します。問題文・式の重複回避は、通常トレーニングの
+`generateTrainingQuestions()` と同じ考え方（`valueKey()` による型を意識しない重複判定、最大20回
+再抽選）をカスタムトレーニング全体を通して行い、さらに同じカテゴリが2周目以降に登場するときは、
+そのカテゴリでまだ使っていないテンプレートを優先します（使い切った場合は同じテンプレートの
+再利用を許可します＝数値は変わります）。
+
+#### 複数学期をまたぐ表示ルール
+
+カスタムトレーニングでは、異なる学年・学期のカテゴリを同時に選択できるため、単一の
+`trainingState.gradeTerm`（通常トレーニングでは常にそのカテゴリ本来の学期と一致する値）を
+表示ルールの判定に使うことができません。`beginTrainingQuestion()` は、`shouldDisplayFractionsUnsimplified()`
+の判定に `trainingState.gradeTerm` の代わりに、常に **その問題自身のテンプレートが本来属する学期
+（`problem.template.gradeTerm`）** を使うよう一般化しました。通常トレーニングは1カテゴリ＝1学期
+だけを出題するため、この2つの値は従来から常に一致しており、この変更によって通常トレーニングの
+表示（分数の約分あり／なしの切り替えを含む）は一切変わりません。これにより、カスタムトレーニングで
+同分母分数のたし算・ひき算（4年3学期）を選んだ場合も、約分をまだ学習していない範囲の未約分表示
+（[5章](#5-値の共通データ形式と分数の扱いvalue-utilsjs-fraction-utilsjs-value-rendererjs)参照）が
+正しく適用されます。
+
+問題画面のヘッダー（カテゴリ名表示）も、カスタムトレーニングでは固定の
+`trainingState.categoryLabel`（結果画面用に「カスタムトレーニング（8カテゴリ）」のような
+サマリー文言を持つ）ではなく、**今の問題自身のカテゴリ表示名**
+（`getCurrentQuestionCategoryLabel()`。`data/category-registry.js` の `getCategoryById()` から
+求める）を表示します。問題ごとにカテゴリが変わるカスタムトレーニングの特性に合わせています。
+
+#### 保存（localStorage）
+
+`js/storage.js` に次を追加しました（既存のハイスコア用キー・通常トレーニングの選択状態キーとは
+別のキーで、互いに一切上書きしません）。
+
+| キー | 内容 |
+|---|---|
+| `mathWordBattle_customTrainingSelectedCategoryIds` | 選択中のカテゴリID配列（JSON文字列） |
+
+- チェックボックスの状態が変わるたびに保存します（`saveCustomTrainingCategoryIds()`）
+- 「設定リセット」を押すと、画面上のチェック・メモリ上の選択・保存データのすべてを空にします
+  （`clearCustomTrainingCategoryIds()`）
+- 保存データは、設定画面を開くたびに `loadSanitizedCustomTrainingCategoryIds()`
+  （`js/custom-training.js`）で読み込み、`sanitizeCustomTrainingCategoryIds()` によって
+  文字列以外・空文字列・重複・現在のレジストリに存在しないID・`enabledInTraining` が
+  falseのカテゴリを除去してから復元します。不正なJSON・配列でない値でも例外を投げず、
+  空配列にフォールバックします（`js/storage.js` 側の `loadCustomTrainingCategoryIds()` も
+  同様に安全側にフォールバックします）。
+- 出題問題数はメモリ上（`js/ui.js` の module変数）でのみ保持し、`localStorage` には
+  **保存しません**。ページを再読み込みすると既定値の5問に戻ります（設定画面とタイトル画面を
+  行き来するだけであれば、変更した問題数はページを開いている間は維持されます）。
+- 初期状態（保存データが無い場合）は0カテゴリ（すべて未選択）で、この状態ではスタートできません
+  （最初からすべてにチェックを付けることはしません）。
+
+#### 品質確認（tools/quality-check.js）
+
+`tools/quality-check.js` に、既存の「トレーニング問題セット検証」と同じ考え方の
+「カスタムトレーニング問題セット検証」を追加しました（`runCustomTrainingSetValidation()`。
+チェックボックス「カスタムトレーニング問題セット検証」）。プレイヤーが選べるカテゴリの組み合わせは
+無数にあるため全組み合わせは検証せず、依頼文が推奨する代表的な組み合わせ
+（1カテゴリ・5問／3カテゴリ・10問／10カテゴリ・25問／全カテゴリ・50問／分数カテゴリを含む複数選択／
+1〜3段階問題を含む複数選択）を、実行時のカテゴリレジストリから動的に選んで検証します
+（特定のcategoryIdはハードコードしていません）。指定問題数どおり生成されるか・選択カテゴリ以外が
+混ざらないか・カテゴリ別の出題数の差が最大1問に収まっているか・例外が発生しないかを、
+既存の `validateCustomTrainingSetGeneration()`（`js/custom-training.js`）で確認し、さらに
+既存の `checkSetForDuplicatesAndStreaks()`（`tools/quality-rules.js`）で問題文・式の重複や
+同一カテゴリの連続出題も確認します。プレイヤーの保存設定（選択カテゴリ・問題数）は一切変更しません。
+
+### 動作確認用チェックリスト（カスタムトレーニング）
+
+- [ ] タイトル画面で「トレーニング」を選んだときだけ、画面右下に歯車ボタンが表示される
+      （「文章題バトル」「総復習」では非表示）
+- [ ] 歯車ボタンを押すとカスタムトレーニング設定画面が開き、「トレーニング内容を設定してください。」
+      と表示される
+- [ ] 出題問題数スライダーが5〜50問・1問単位で操作でき、現在値が「○問」の形式で即座に表示される
+- [ ] 全トレーニングカテゴリ（`data/category-registry.js` から動的に生成）が学年・学期の見出し
+      付きで表示され、チェックボックスで複数選択できる
+- [ ] カテゴリ一覧部分だけが縦スクロールでき、見出し（タイトル・もどる）とフッター
+      （設定リセット・スタート）は常に見える
+- [ ] 選択カテゴリ数（「選択中：○カテゴリ」）が、チェックを変更するたびに即座に更新される
+- [ ] 初期状態は0カテゴリで、この状態ではスタートボタンが無効になっている
+- [ ] 1カテゴリ以上選ぶとスタートボタンが有効になる
+- [ ] 「設定リセット」を押すと、すべてのカテゴリのチェックが外れ、選択中：0カテゴリに戻り、
+      保存データも空になる（問題数スライダーは変更されない）
+- [ ] 選択カテゴリをチェックしてページを再読み込みすると、選択状態が復元される
+      （問題数は5問に戻る）
+- [ ] 「もどる」で通常トレーニングの選択状態（学年・学期・カテゴリ）を変更せずにタイトル画面へ戻る
+- [ ] 指定した問題数どおりに出題される。選択したカテゴリ以外は出題されない
+- [ ] 1周につき各カテゴリが1回ずつ出題され、周ごとの順序がランダムである
+- [ ] 問題数がカテゴリ数で割り切れない場合、端数部分で同じカテゴリが重複しない
+- [ ] カテゴリごとの出題数の差が最大1問に収まる
+- [ ] 周の境目で同じカテゴリが連続しない（選択カテゴリが2つ以上の場合）
+- [ ] 問題画面のヘッダーに、今の問題自身のカテゴリ名が表示される（カテゴリが変わるたびに更新される）
+- [ ] 4年3学期の同分母分数のたし算・ひき算を含むカスタムトレーニングで、約分なし表示（未約分・帯分数）
+      が正しく適用される
+- [ ] 1〜3段階問題を含むカテゴリを選んでも、途中式の進行・正誤判定が正常に動作する
+- [ ] 時間制限・ハート・エネミー・スコア・ランク・ハイスコアが表示されない（通常トレーニングと同じ）
+- [ ] 不正解でも同じ問題に再挑戦できる
+- [ ] 指定問題数まで解き終えると結果画面が表示され、「カスタムトレーニング（○カテゴリ）」・
+      指定問題数どおりの完了数が表示される（スコア・ランク・ハイスコアは表示されない）
+- [ ] 「もう一度」で同じ選択カテゴリ・同じ問題数のまま再開し、問題と出題順は生成し直される
+- [ ] リタイアが通常トレーニングと同じ挙動で動作する
+- [ ] `?debug=true` で `trainingVariant: custom`・選択カテゴリ数・選択カテゴリID一覧・
+      カテゴリ出題順・カテゴリ別出題数・現在の問題のcategoryId・displayGradeTermがデバッグパネルに
+      表示される
+- [ ] `tools/quality-check.html` の「カスタムトレーニング問題セット検証」が正常に動作し、
+      エラー0件になる
+- [ ] スマートフォン縦画面（320/375/390px）で、歯車ボタン・設定画面のすべての要素が操作でき、
+      横スクロールが発生しない
+- [ ] キーボードだけで歯車ボタン・スライダー・チェックボックス・ボタンをすべて操作できる
+- [ ] スクリーンリーダーで、選択カテゴリ数の変化・0カテゴリ時のエラーメッセージが読み上げられる
+- [ ] 通常トレーニング（5問・1カテゴリ）がカスタムトレーニング追加後もこれまでと全く同じ動作をする
+      （回帰確認）
+- [ ] 通常バトル・総復習・エネミー図鑑・ヘルプがカスタムトレーニング追加後も壊れていない
+- [ ] コンソールにJavaScriptエラーが出ていない
 
 ## 19. 小学5年生・1学期（第7段階）
 

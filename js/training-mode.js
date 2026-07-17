@@ -22,6 +22,7 @@ import * as audio from "./audio.js";
 import * as ui from "./ui.js";
 import { runCountdown } from "./game.js";
 import { getCategoryById } from "../data/category-registry.js";
+import { generateCustomTrainingQuestions, clampCustomTrainingQuestionCount } from "./custom-training.js";
 
 // URL に ?debug=true を付けた場合だけ、トレーニングの進行状態もコンソールと
 // 画面隅のデバッグパネルに表示する。通常アクセスでは一切表示しない。
@@ -34,10 +35,22 @@ const INTERMEDIATE_STEP_DELAY_MS = 900;
 
 // トレーニング専用の状態。gameState（js/game.js）とは別のオブジェクトで、
 // 互いのフィールドを参照し合うことはない。
+//
+// trainingVariant（運用開始後に追加。カスタムトレーニング機能）は "single-category"（従来の
+// 通常トレーニング：学年・学期から1カテゴリだけを選び5問）か "custom"（複数カテゴリ・
+// 5〜50問を自由に設定できるバリエーション）のどちらかを持つ。ゲーム進行そのもの
+// （beginTrainingQuestion/handleJudge/handleTrainingCorrect等）は完全に共通で、
+// trainingVariant による分岐は「値の生成方法」「表示ラベル」「リトライ時に何を維持するか」の
+// 3箇所（startTraining/beginTrainingQuestion/retryTraining）だけに閉じている。
+// selectedCategoryIds・categorySequence は custom のときだけ使う（single-categoryでは
+// 空配列のまま）。
 const trainingState = {
+  trainingVariant: "single-category",
   gradeTerm: null,
   categoryId: null,
   categoryLabel: "",
+  selectedCategoryIds: [],
+  categorySequence: [],
   totalQuestions: TOTAL_TRAINING_QUESTIONS,
   currentQuestionNumber: 1,
   currentIndex: 0,
@@ -195,17 +208,20 @@ function getAllValidatedTemplates() {
 // 開始
 // ============================================================
 
+/**
+ * トレーニングを開始します。settings.trainingVariant === "custom" の場合はカスタム
+ * トレーニング（複数カテゴリ・5〜50問。運用開始後に追加）、それ以外は従来どおりの
+ * 通常トレーニング（学年・学期から選んだ1カテゴリだけを5問）として開始します。
+ * どちらも進行処理（beginTrainingQuestion以降）は完全に共通です。
+ */
 export function startTraining(settings) {
   if (isBusy) return;
 
   audio.initAudio();
 
-  const category = getCategoryById(settings.categoryId);
+  const isCustom = settings.trainingVariant === "custom";
 
-  trainingState.gradeTerm = settings.gradeTerm;
-  trainingState.categoryId = settings.categoryId;
-  trainingState.categoryLabel = category ? category.label : settings.categoryLabel || "";
-  trainingState.totalQuestions = TOTAL_TRAINING_QUESTIONS;
+  trainingState.trainingVariant = isCustom ? "custom" : "single-category";
   trainingState.currentQuestionNumber = 1;
   trainingState.currentIndex = 0;
   trainingState.completedQuestions = 0;
@@ -220,11 +236,35 @@ export function startTraining(settings) {
   trainingState.resultType = null;
   trainingState.pendingOutcome = null;
 
-  trainingState.questions = generateTrainingQuestions(
-    trainingState.categoryId,
-    getAllValidatedTemplates(),
-    TOTAL_TRAINING_QUESTIONS
-  );
+  if (isCustom) {
+    // 通常トレーニング側の選択状態（gradeTerm・categoryId）には一切触れない
+    // （タイトル画面へ戻ったときに、通常トレーニングの選択がそのまま残っているようにするため）。
+    trainingState.selectedCategoryIds = Array.isArray(settings.selectedCategoryIds) ? settings.selectedCategoryIds : [];
+    trainingState.totalQuestions = clampCustomTrainingQuestionCount(settings.totalQuestions);
+    trainingState.categoryLabel = `カスタムトレーニング（${trainingState.selectedCategoryIds.length}カテゴリ）`;
+
+    trainingState.questions = generateCustomTrainingQuestions(
+      trainingState.selectedCategoryIds,
+      getAllValidatedTemplates(),
+      trainingState.totalQuestions
+    );
+    trainingState.categorySequence = trainingState.questions.map((q) => (q.template ? q.template.categoryId : null));
+  } else {
+    const category = getCategoryById(settings.categoryId);
+
+    trainingState.gradeTerm = settings.gradeTerm;
+    trainingState.categoryId = settings.categoryId;
+    trainingState.categoryLabel = category ? category.label : settings.categoryLabel || "";
+    trainingState.selectedCategoryIds = [];
+    trainingState.categorySequence = [];
+    trainingState.totalQuestions = TOTAL_TRAINING_QUESTIONS;
+
+    trainingState.questions = generateTrainingQuestions(
+      trainingState.categoryId,
+      getAllValidatedTemplates(),
+      TOTAL_TRAINING_QUESTIONS
+    );
+  }
 
   isBusy = false;
 
@@ -239,13 +279,30 @@ export function startTraining(settings) {
 // 問題進行
 // ============================================================
 
+/**
+ * カスタムトレーニング専用。今の問題自身のカテゴリ表示名を、カテゴリレジストリから求める
+ * （問題ごとにカテゴリが変わるため、trainingState.categoryLabel のような固定値は使えない）。
+ * レジストリに見つからない場合は、テンプレートの表示名（category）にフォールバックする。
+ */
+function getCurrentQuestionCategoryLabel(problem) {
+  const categoryId = problem.template && problem.template.categoryId;
+  const category = categoryId ? getCategoryById(categoryId) : null;
+  return category ? category.label : problem.category || "";
+}
+
 function beginTrainingQuestion() {
   const problem = trainingState.questions[trainingState.currentIndex];
   // 同分母分数のたし算・ひき算を、約分をまだ学習していない学期（4-3・5-1）で練習している場合は、
   // 問題文・カード・答えを約分しない状態で表示する（詳しくは question-generator.js の
-  // shouldDisplayFractionsUnsimplified() を参照。トレーニングはカテゴリ単体でしか出題しないため、
-  // trainingState.gradeTerm は常にそのカテゴリ本来の学期＝"4-3" になる）。
-  problem.simplifyFractions = !shouldDisplayFractionsUnsimplified(problem.template, trainingState.gradeTerm);
+  // shouldDisplayFractionsUnsimplified() を参照）。表示学期コンテキストには
+  // trainingState.gradeTerm（通常トレーニングでのみ設定される、セッション全体で単一の値）
+  // ではなく、常に problem.template.gradeTerm（その問題自身のテンプレートが本来属する学期）を
+  // 使う。通常トレーニングは1カテゴリ＝1学期だけを出題するため、この2つの値は従来から常に
+  // 一致しており、この変更で通常トレーニングの表示は変わらない。カスタムトレーニング
+  // （運用開始後に追加。複数の学年・学期のカテゴリを同時に選べる）では、問題ごとに学期が
+  // 異なりうるため、この一般化によって単一の trainingState.gradeTerm では正しく判定できない
+  // ケースに対応している。
+  problem.simplifyFractions = !shouldDisplayFractionsUnsimplified(problem.template, problem.template.gradeTerm);
   trainingState.currentProblem = problem;
   trainingState.currentQuestionWrongCount = 0;
   trainingState.currentQuestionHadMistake = false;
@@ -273,7 +330,14 @@ function beginTrainingQuestion() {
     };
   }
 
-  ui.updateTrainingHeader(trainingState.categoryLabel, trainingState.currentQuestionNumber, trainingState.totalQuestions);
+  // カスタムトレーニングでは問題ごとにカテゴリが変わるため、ヘッダーには固定の
+  // trainingState.categoryLabel ではなく、今の問題自身のカテゴリ表示名を出す
+  // （通常トレーニングは1カテゴリしか出題しないため、従来どおり trainingState.categoryLabel のまま）。
+  const headerCategoryLabel =
+    trainingState.trainingVariant === "custom"
+      ? getCurrentQuestionCategoryLabel(problem)
+      : trainingState.categoryLabel;
+  ui.updateTrainingHeader(headerCategoryLabel, trainingState.currentQuestionNumber, trainingState.totalQuestions);
   ui.renderProblem(problem);
   ui.unlockInput();
   isBusy = false;
@@ -504,7 +568,21 @@ function finishTraining(type) {
 // リトライ／タイトルへ戻る
 // ============================================================
 
+/**
+ * 「もういちど」。カスタムトレーニングのときは、選択カテゴリ・問題数・カスタムトレーニングで
+ * あることを維持したまま再開する（問題と出題順は generateCustomTrainingQuestions() /
+ * buildCustomTrainingCategorySequence() により毎回新しく作られるため、同じ問題セットを
+ * そのまま繰り返すことはない）。通常トレーニングは従来どおり。
+ */
 export function retryTraining() {
+  if (trainingState.trainingVariant === "custom") {
+    startTraining({
+      trainingVariant: "custom",
+      selectedCategoryIds: trainingState.selectedCategoryIds,
+      totalQuestions: trainingState.totalQuestions
+    });
+    return;
+  }
   startTraining({
     gradeTerm: trainingState.gradeTerm,
     categoryId: trainingState.categoryId,
@@ -550,12 +628,14 @@ function logTrainingDebugInfo() {
   if (!DEBUG_MODE) return;
 
   const problem = trainingState.currentProblem;
-  const categoryTemplateCount = getAllValidatedTemplates().filter(
-    (t) => t.categoryId === trainingState.categoryId
-  ).length;
+  const isCustom = trainingState.trainingVariant === "custom";
+  const categoryTemplateCount = isCustom
+    ? null
+    : getAllValidatedTemplates().filter((t) => t.categoryId === trainingState.categoryId).length;
 
   const lines = [
     "mode: training",
+    `trainingVariant: ${trainingState.trainingVariant}`,
     `trainingCategoryId: ${trainingState.categoryId}`,
     `trainingCategoryLabel: ${trainingState.categoryLabel}`,
     `trainingQuestionNumber: ${trainingState.currentQuestionNumber}／${trainingState.totalQuestions}`,
@@ -564,14 +644,31 @@ function logTrainingDebugInfo() {
     `totalWrongCount: ${trainingState.totalWrongCount}`,
     `currentQuestionWrongCount: ${trainingState.currentQuestionWrongCount}`,
     `currentQuestionHadMistake: ${trainingState.currentQuestionHadMistake}`,
-    `カテゴリ内のテンプレート総数: ${categoryTemplateCount}`,
+    isCustom ? null : `カテゴリ内のテンプレート総数: ${categoryTemplateCount}`,
+    // カスタムトレーニング専用のデバッグ情報（運用開始後に追加）。選択カテゴリ数・IDの一覧、
+    // 実際に作られたカテゴリ出題順（categorySequence）、カテゴリ別の実際の出題数、
+    // 今の問題自身のカテゴリ・表示学期コンテキスト（displayGradeTerm）を表示する。
+    isCustom ? `選択カテゴリ数: ${trainingState.selectedCategoryIds.length}` : null,
+    isCustom ? `選択カテゴリID一覧: ${trainingState.selectedCategoryIds.join(", ")}` : null,
+    isCustom ? `カテゴリ出題順(categorySequence): ${trainingState.categorySequence.join(", ")}` : null,
+    isCustom
+      ? `カテゴリ別出題数: ${JSON.stringify(
+          trainingState.categorySequence.reduce((acc, id) => {
+            acc[id] = (acc[id] || 0) + 1;
+            return acc;
+          }, {})
+        )}`
+      : null,
+    isCustom && problem ? `現在の問題のcategoryId: ${problem.template ? problem.template.categoryId : "(なし)"}` : null,
+    isCustom ? `現在の問題のカテゴリ表示名: ${problem ? getCurrentQuestionCategoryLabel(problem) : "(なし)"}` : null,
+    isCustom && problem ? `現在の問題のdisplayGradeTerm: ${problem.template ? problem.template.gradeTerm : "(なし)"}` : null,
     `生成された${trainingState.totalQuestions}問のテンプレートID: ${trainingState.questions.map((q) => q.templateId).join(", ")}`,
     `各問題のcategoryId: ${trainingState.questions.map((q) => (q.template ? q.template.categoryId : "(なし)")).join(", ")}`,
     `現在の問題ID: ${problem ? problem.id : "(なし)"}`,
     `現在のテンプレートID: ${problem ? problem.templateId : "(なし)"}`,
     `questionType: ${problem ? problem.questionType : "(なし)"}`,
     `正解式: ${formatSolutionRoutesForDebug(problem)}`
-  ];
+  ].filter((line) => line !== null);
 
   console.groupCollapsed("%c[DEBUG] トレーニング情報", "color:#9dafff;font-weight:bold;");
   for (const line of lines) {

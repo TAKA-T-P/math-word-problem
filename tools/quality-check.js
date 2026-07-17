@@ -32,6 +32,7 @@ import {
 } from "../js/question-generator.js";
 import * as multiStepEngine from "../js/multi-step-engine.js";
 import { generateTrainingQuestions, validateTrainingSetGeneration } from "../js/training-mode.js";
+import { generateCustomTrainingQuestions, validateCustomTrainingSetGeneration } from "../js/custom-training.js";
 import { initReview, generateReviewQuestions, getReviewScopeKeys, getReviewScopeLabel, getQuestionCountForScope } from "../js/review-mode.js";
 import { isPlannedGradeTerm, getTotalQuestionsForLevel } from "../js/game.js";
 import {
@@ -559,6 +560,114 @@ async function runTrainingSetValidation(config, allTemplates, onProgress) {
 }
 
 // ============================================================
+// カスタムトレーニングの出題セット検証（運用開始後に追加。カスタムトレーニング機能）。
+// 既存の generateCustomTrainingQuestions() / validateCustomTrainingSetGeneration()
+// （js/custom-training.js）をそのまま再利用します。プレイヤーが選択できるカテゴリの
+// 組み合わせは無数にあるため、全組み合わせを検証することはせず、依頼文が推奨する
+// 代表的な組み合わせ（1カテゴリ・5問／3カテゴリ・10問／10カテゴリ・25問／
+// 全カテゴリ・50問／分数カテゴリを含む複数選択／1〜3段階問題を含む複数選択）を、
+// 実際のレジストリから動的に選んで検証します（個別のcategoryIdをハードコードしない）。
+// ============================================================
+
+/**
+ * カスタムトレーニングの品質確認用に、代表的な「選択カテゴリ・問題数」の組み合わせを、
+ * 実際のカテゴリレジストリから動的に組み立てる。特定のcategoryIdをハードコードしないため、
+ * カテゴリが増減しても、この関数は常に「その時点のレジストリ」に基づいたシナリオを返す。
+ */
+function buildCustomTrainingTestScenarios(allCategories) {
+  const ids = allCategories.map((c) => c.id);
+  const fractionCategoryIds = allCategories.filter((c) => c.id.includes("fraction")).map((c) => c.id).slice(0, 4);
+  const multiStepCategoryIds = allCategories.filter((c) => c.id === "multi-step-integer" || c.gradeTerm === "6-2" || c.gradeTerm === "6-3").map((c) => c.id).slice(0, 4);
+
+  const scenarios = [
+    { label: "1カテゴリ・5問", categoryIds: ids.slice(0, 1), questionCount: 5 },
+    { label: "3カテゴリ・10問", categoryIds: ids.slice(0, 3), questionCount: 10 },
+    { label: "10カテゴリ・25問", categoryIds: ids.slice(0, Math.min(10, ids.length)), questionCount: 25 },
+    { label: `全${ids.length}カテゴリ・50問`, categoryIds: ids, questionCount: 50 }
+  ];
+  if (fractionCategoryIds.length >= 2) {
+    scenarios.push({ label: "分数カテゴリを含む複数選択", categoryIds: fractionCategoryIds, questionCount: 15 });
+  }
+  if (multiStepCategoryIds.length >= 2) {
+    scenarios.push({ label: "1〜3段階問題を含む複数選択", categoryIds: multiStepCategoryIds, questionCount: 15 });
+  }
+  return scenarios;
+}
+
+async function runCustomTrainingSetValidation(config, allTemplates, onProgress) {
+  const validatedTemplates = Object.values(filterValidTemplateSets(TEMPLATE_SETS_BY_GRADE_TERM)).flat();
+  const allCategories = getEnabledTrainingCategories();
+  const scenarios = buildCustomTrainingTestScenarios(allCategories);
+  const findings = [];
+  let setsChecked = 0;
+
+  for (const scenario of scenarios) {
+    await checkPauseAndAbort();
+    await yieldToBrowser();
+    onProgress?.(scenario.label);
+
+    const result = validateCustomTrainingSetGeneration(scenario.categoryIds, validatedTemplates, config.setCount, scenario.questionCount);
+    for (const e of result.errors) {
+      findings.push({
+        severity: "error",
+        ruleId: RULE.SET_GENERATION_FAILED,
+        gradeTerm: "-",
+        categoryId: null,
+        category: `カスタムトレーニング（${scenario.label}）`,
+        templateId: "-",
+        generationIndex: null,
+        seed: null,
+        message: e,
+        questionText: null,
+        sample: null
+      });
+    }
+
+    // 式・数値レベルの重複連続チェックを何セットか実施する（重いため件数を抑える）。
+    const streakSampleCount = Math.min(config.setCount, 10);
+    for (let s = 0; s < streakSampleCount; s++) {
+      try {
+        const questions = generateCustomTrainingQuestions(scenario.categoryIds, validatedTemplates, scenario.questionCount);
+        const dupFindings = checkSetForDuplicatesAndStreaks(questions, { templatePoolSize: validatedTemplates.length });
+        for (const f of dupFindings) {
+          findings.push({
+            severity: f.severity,
+            ruleId: f.ruleId,
+            gradeTerm: "-",
+            categoryId: null,
+            category: `カスタムトレーニング（${scenario.label}）`,
+            templateId: "-",
+            generationIndex: s,
+            seed: null,
+            message: f.message,
+            questionText: null,
+            sample: null
+          });
+        }
+      } catch (error) {
+        if (error instanceof QualityCheckAborted) throw error;
+        findings.push({
+          severity: "error",
+          ruleId: RULE.SET_GENERATION_FAILED,
+          gradeTerm: "-",
+          categoryId: null,
+          category: `カスタムトレーニング（${scenario.label}）`,
+          templateId: "-",
+          generationIndex: s,
+          seed: null,
+          message: `生成中に例外が発生しました: ${error.message}`,
+          questionText: null,
+          sample: null
+        });
+      }
+    }
+    setsChecked += config.setCount;
+  }
+
+  return { findings, setsChecked };
+}
+
+// ============================================================
 // 総復習の出題セット検証（section 20）。既存の generateReviewQuestions() /
 // getReviewScopeKeys() をそのまま再利用します。initReview() はテンプレート一覧の
 // キャッシュを設定するだけの純粋な処理で、プレイヤーの総復習の進行状態・保存データには
@@ -835,6 +944,13 @@ export async function runQualityCheck(config, callbacks = {}) {
       });
     }
 
+    let customTrainingSetResult = { findings: [], setsChecked: 0 };
+    if (config.checks.customTrainingSet) {
+      customTrainingSetResult = await runCustomTrainingSetValidation(config, allTemplates, (scenarioLabel) => {
+        callbacks.onProgress?.({ phase: "customTrainingSet", currentCategory: scenarioLabel, elapsedMs: Date.now() - startedAt });
+      });
+    }
+
     let reviewSetResult = { findings: [], setsChecked: 0 };
     if (config.checks.reviewSet) {
       reviewSetResult = await runReviewSetValidation(config, (scopeLabel, s) => {
@@ -848,6 +964,7 @@ export async function runQualityCheck(config, callbacks = {}) {
       templateResults,
       battleSetResult,
       trainingSetResult,
+      customTrainingSetResult,
       reviewSetResult,
       totalGenerations,
       aborted: false
@@ -860,6 +977,7 @@ export async function runQualityCheck(config, callbacks = {}) {
         templateResults,
         battleSetResult: { findings: [], setsChecked: 0 },
         trainingSetResult: { findings: [], setsChecked: 0 },
+        customTrainingSetResult: { findings: [], setsChecked: 0 },
         reviewSetResult: { findings: [], setsChecked: 0 },
         totalGenerations,
         aborted: true
@@ -884,12 +1002,13 @@ export function abortQualityCheck() {
   resumeQualityCheck();
 }
 
-function finalizeResults({ startedAt, structural, templateResults, battleSetResult, trainingSetResult, reviewSetResult, totalGenerations, aborted }) {
+function finalizeResults({ startedAt, structural, templateResults, battleSetResult, trainingSetResult, customTrainingSetResult, reviewSetResult, totalGenerations, aborted }) {
   const allFindings = [
     ...structural.findings,
     ...templateResults.flatMap((r) => r.findings),
     ...battleSetResult.findings,
     ...trainingSetResult.findings,
+    ...customTrainingSetResult.findings,
     ...reviewSetResult.findings
   ];
 
@@ -933,6 +1052,7 @@ function finalizeResults({ startedAt, structural, templateResults, battleSetResu
     categoryCount: new Set(templateResults.map((r) => r.categoryId).filter(Boolean)).size,
     battleSetsChecked: battleSetResult.setsChecked,
     trainingSetsChecked: trainingSetResult.setsChecked,
+    customTrainingSetsChecked: customTrainingSetResult.setsChecked,
     reviewSetsChecked: reviewSetResult.setsChecked,
     findings: allFindings,
     templateResults,
