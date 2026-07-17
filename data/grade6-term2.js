@@ -2171,11 +2171,13 @@ export const grade6Term2Templates = [
     difficulty: 4,
     questionType: "multiStep",
     totalSteps: 3,
+    // 「1つのジュースを2種類のジュースに分ける」という不自然な文章だったため、
+    // 「1つのジュースを2つのコップに分ける」という文章に変更している（運用開始後に修正）。
     textParts: [
       { type: "value", ref: "totalAmount" },
-      { type: "text", value: "mLのジュースを、オレンジジュースとりんごジュースの量の比が" },
+      { type: "text", value: "mLのジュースを、AのコップとBのコップに、量の比が" },
       { type: "value", ref: "ratioValue" },
-      { type: "text", value: "になるように分けます。りんごジュースの量は何mLですか。" }
+      { type: "text", value: "になるように分けます。Bのコップに入れるジュースの量は何mLですか。" }
     ],
     variables: {
       firstRatio: { min: 2, max: 6, step: 1 },

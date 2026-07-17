@@ -12,7 +12,8 @@ import {
   isValidPercent,
   isRatioValue,
   isZeroValue,
-  divideValuesAsFraction
+  divideValuesAsFraction,
+  divideNumberByIntegerWithPrecision
 } from "./value-utils.js";
 import { areNumbersEqual, getDecimalPlaces, formatNumber, parseFormattedNumber } from "./number-utils.js";
 import { renderValueHtml, buildFractionAriaLabel, buildRatioAriaLabel } from "./value-renderer.js";
@@ -281,6 +282,14 @@ const GENERATOR_TYPE_RULES = {
     requiredVariableKeys: [],
     computedVariables: []
   },
+  // 分数÷分数だが、商（quotient）が必ず整数になるよう、既存の整数のexactDivisionと同じ
+  // 「わる数(divisor)と商(quotient)を先に決め、わられる数(dividend)を逆算する」方式にした
+  // 生成ルール（運用開始後に追加。「1ふくろ○kgずつ分ける」のように、分けた結果の個数を
+  // 尋ねる問題では、答えが整数でないと不自然なため）。
+  exactFractionDivision: {
+    requiredVariableKeys: ["divisor", "quotient"],
+    computedVariables: ["dividend"]
+  },
   // 分数倍・比べる量／分数倍・もとの量（小学6年生1学期、第10段階で追加）は、
   // 速さ・割合と同じ理由（キー名がquantityRelationで動的に決まる）で requiresQuantityRelation を使う。
   fractionMultiplierFindCompared: {
@@ -432,6 +441,10 @@ function isValidLiteralOperandValue(value) {
 function computeStepResultForValidation(left, operator, right, resultType) {
   if (resultType === "fraction" && operator === "÷") {
     const forced = divideValuesAsFraction(left, right);
+    if (forced !== null) return forced;
+  }
+  if (resultType === "decimalHighPrecision" && operator === "÷") {
+    const forced = divideNumberByIntegerWithPrecision(left, right);
     if (forced !== null) return forced;
   }
   const result = safeCalculate(left, operator, right);
@@ -1174,11 +1187,14 @@ function validateScaleLength(template, errors) {
   }
   // 通常は1つの正解ルートですが、「縮尺・地図上の長さ」の一部テンプレートのように、
   // 先に単位変換してから縮尺の分母で割る／先に縮尺の分母で割ってから単位変換する、の
-  // どちらの順序でも正しく解けるテンプレートでは、2つ目の正解ルートを追加登録できます
-  // （運用開始後に追加。g6t3_scale_map_003が最初の例）。findActualLengthFromScale・
+  // どちらの順序でも正しく解けるテンプレートでは、追加の正解ルートを登録できます
+  // （運用開始後に追加。g6t3_scale_map_003が最初の例）。km単位のテンプレートでは、
+  // 「実際の長さ÷縮尺の分母」を先に行うと小数点以下5桁程度になるため
+  // resultType:"decimalHighPrecision" を使う3つ目のルート（divide-then-convert-route）も
+  // 追加登録できるようにしている（運用開始後に追加）。findActualLengthFromScale・
   // findMapLengthFromScale の両方でこの検証関数を共有しており、使用するルートidが
   // 異なるため、特定のidを必須とはせず、idの重複が無いことだけをチェックします。
-  const MAX_ROUTES = 2;
+  const MAX_ROUTES = 3;
   if (
     !Array.isArray(template.solutionRoutes) ||
     template.solutionRoutes.length < 1 ||

@@ -163,7 +163,7 @@ function cacheElements() {
     customTrainingSelectedCount: qs("custom-training-selected-count"),
     customTrainingCategoryList: qs("custom-training-category-list"),
     customTrainingErrorMessage: qs("custom-training-error-message"),
-    customTrainingResetBtn: qs("custom-training-reset-btn"),
+    customTrainingToggleAllBtn: qs("custom-training-toggle-all-btn"),
     customTrainingStartBtn: qs("custom-training-start-btn"),
     reviewStartDialog: qs("review-start-confirm-dialog"),
     reviewStartConfirmText: qs("review-start-confirm-text"),
@@ -176,6 +176,7 @@ function cacheElements() {
     scoreDisplay: qs("score-display"),
     rankDisplay: qs("rank-display"),
     scoreDelta: qs("score-delta"),
+    trainingStatusLabel: qs("training-status-label"),
     trainingCategoryDisplay: qs("training-category-display"),
     trainingProgress: qs("training-progress"),
     reviewModeDisplay: qs("review-mode-display"),
@@ -597,7 +598,19 @@ function updateCustomTrainingSelectedCount() {
   if (els.customTrainingStartBtn) {
     els.customTrainingStartBtn.disabled = customTrainingSelectedIds.length === 0;
   }
+  updateCustomTrainingToggleAllBtnLabel();
   hideCustomTrainingErrorMessage();
+}
+
+/**
+ * 画面下部のボタンの文言を選択状況に応じて切り替える（運用開始後に変更。以前は常に
+ * 「設定リセット」という固定文言の全解除ボタンだった）。選択中のカテゴリが0のときは
+ * 「すべてON」（押すと全カテゴリを選択）、1つ以上選ばれているときは「すべてOFF」
+ * （押すと全カテゴリの選択を解除）にする。
+ */
+function updateCustomTrainingToggleAllBtnLabel() {
+  if (!els.customTrainingToggleAllBtn) return;
+  els.customTrainingToggleAllBtn.textContent = customTrainingSelectedIds.length === 0 ? "すべてON" : "すべてOFF";
 }
 
 function showCustomTrainingErrorMessage(text) {
@@ -618,6 +631,14 @@ function hideCustomTrainingErrorMessage() {
  * レジストリ側だけで完結し、このファイルを書き換える必要は無い。
  * 各チェックボックスの value / data-category-id には、安定した categoryId を使う
  * （表示名 label はレジストリ変更で変わりうるため、抽出・保存には使わない）。
+ *
+ * 学年・学期グループの見出し（.custom-training-group-heading）にもチェックボックスを持たせ、
+ * 配下のカテゴリチェックボックス（.custom-training-category-item input）と同じ
+ * .custom-training-group 内に入れ子で配置する（運用開始後に追加）。これにより、
+ * 大カテゴリのチェックボックスから querySelectorAll() で配下のカテゴリだけを
+ * まとめて取得できる（handleCustomTrainingGroupCheckboxChange() /
+ * handleCustomTrainingCategoryCheckboxChange() 参照）。
+ * 大カテゴリのチェックボックスの初期状態は、配下の全カテゴリが選択済みかどうかで決める。
  */
 function renderCustomTrainingCategoryList() {
   if (!els.customTrainingCategoryList) return;
@@ -625,14 +646,31 @@ function renderCustomTrainingCategoryList() {
   const selectedSet = new Set(customTrainingSelectedIds);
 
   const fragment = document.createDocumentFragment();
-  let lastGradeLabel = null;
+  let currentGroupEl = null;
+  let currentGradeTerm = null;
   for (const category of categories) {
-    if (category.gradeLabel !== lastGradeLabel) {
-      const heading = document.createElement("h4");
+    if (category.gradeTerm !== currentGradeTerm) {
+      currentGradeTerm = category.gradeTerm;
+      currentGroupEl = document.createElement("div");
+      currentGroupEl.className = "custom-training-group";
+
+      const heading = document.createElement("label");
       heading.className = "custom-training-group-heading";
-      heading.textContent = category.gradeLabel;
-      fragment.appendChild(heading);
-      lastGradeLabel = category.gradeLabel;
+
+      const groupCheckbox = document.createElement("input");
+      groupCheckbox.type = "checkbox";
+      groupCheckbox.dataset.groupGradeTerm = category.gradeTerm;
+      const totalInGroup = categories.filter((c) => c.gradeTerm === category.gradeTerm).length;
+      const selectedInGroup = categories.filter((c) => c.gradeTerm === category.gradeTerm && selectedSet.has(c.id)).length;
+      groupCheckbox.checked = totalInGroup > 0 && selectedInGroup === totalInGroup;
+
+      const headingText = document.createElement("span");
+      headingText.textContent = category.gradeLabel;
+
+      heading.appendChild(groupCheckbox);
+      heading.appendChild(headingText);
+      currentGroupEl.appendChild(heading);
+      fragment.appendChild(currentGroupEl);
     }
 
     const label = document.createElement("label");
@@ -649,11 +687,63 @@ function renderCustomTrainingCategoryList() {
 
     label.appendChild(checkbox);
     label.appendChild(textSpan);
-    fragment.appendChild(label);
+    currentGroupEl.appendChild(label);
   }
 
   els.customTrainingCategoryList.innerHTML = "";
   els.customTrainingCategoryList.appendChild(fragment);
+}
+
+/**
+ * 大カテゴリ（学年・学期）のチェックボックスが操作されたときの処理（運用開始後に追加）。
+ * ONにすると、同じ .custom-training-group 内の個別カテゴリをすべてONにする。
+ * OFFにすると、同じグループ内の個別カテゴリをすべてOFFにする。
+ */
+function handleCustomTrainingGroupCheckboxChange(groupCheckbox) {
+  const groupEl = groupCheckbox.closest(".custom-training-group");
+  if (!groupEl) return;
+  const shouldCheck = groupCheckbox.checked;
+  const selectedSet = new Set(customTrainingSelectedIds);
+
+  groupEl.querySelectorAll('input[type="checkbox"][data-category-id]').forEach((cb) => {
+    cb.checked = shouldCheck;
+    if (shouldCheck) {
+      selectedSet.add(cb.dataset.categoryId);
+    } else {
+      selectedSet.delete(cb.dataset.categoryId);
+    }
+  });
+
+  customTrainingSelectedIds = [...selectedSet];
+  saveCustomTrainingCategoryIds(customTrainingSelectedIds);
+  updateCustomTrainingSelectedCount();
+}
+
+/**
+ * 個別カテゴリのチェックボックスが操作されたときの処理。従来の選択状態の更新に加えて、
+ * 同じグループ内の個別カテゴリが全てONになったかどうかで、大カテゴリのチェックボックスの
+ * 状態も同期させる（運用開始後に追加。1つでもOFFにすれば大カテゴリはOFFになり、
+ * 逆にすべてONになれば大カテゴリも自動でONになる）。
+ */
+function handleCustomTrainingCategoryCheckboxChange(checkbox) {
+  const categoryId = checkbox.dataset.categoryId;
+  if (checkbox.checked) {
+    if (!customTrainingSelectedIds.includes(categoryId)) {
+      customTrainingSelectedIds = [...customTrainingSelectedIds, categoryId];
+    }
+  } else {
+    customTrainingSelectedIds = customTrainingSelectedIds.filter((id) => id !== categoryId);
+  }
+  saveCustomTrainingCategoryIds(customTrainingSelectedIds);
+
+  const groupEl = checkbox.closest(".custom-training-group");
+  const groupCheckbox = groupEl ? groupEl.querySelector('input[type="checkbox"][data-group-grade-term]') : null;
+  if (groupCheckbox) {
+    const itemCheckboxes = [...groupEl.querySelectorAll('input[type="checkbox"][data-category-id]')];
+    groupCheckbox.checked = itemCheckboxes.length > 0 && itemCheckboxes.every((cb) => cb.checked);
+  }
+
+  updateCustomTrainingSelectedCount();
 }
 
 function setupCustomTrainingSettings() {
@@ -668,27 +758,30 @@ function setupCustomTrainingSettings() {
   els.customTrainingCategoryList.addEventListener("change", (e) => {
     const checkbox = e.target.closest('input[type="checkbox"]');
     if (!checkbox) return;
-    const categoryId = checkbox.dataset.categoryId;
-    if (checkbox.checked) {
-      if (!customTrainingSelectedIds.includes(categoryId)) {
-        customTrainingSelectedIds = [...customTrainingSelectedIds, categoryId];
-      }
+    if (checkbox.dataset.groupGradeTerm !== undefined) {
+      handleCustomTrainingGroupCheckboxChange(checkbox);
     } else {
-      customTrainingSelectedIds = customTrainingSelectedIds.filter((id) => id !== categoryId);
+      handleCustomTrainingCategoryCheckboxChange(checkbox);
     }
-    saveCustomTrainingCategoryIds(customTrainingSelectedIds);
-    updateCustomTrainingSelectedCount();
   });
 
-  els.customTrainingResetBtn.addEventListener("click", () => {
-    customTrainingSelectedIds = [];
-    clearCustomTrainingCategoryIds();
-    // 問題数スライダーは変更しない（第12章の仕様）。カテゴリのチェックだけを外す。
+  els.customTrainingToggleAllBtn.addEventListener("click", () => {
+    // 選択中が0件なら全カテゴリをON、1件以上あれば全カテゴリをOFFにする
+    // （運用開始後に変更。以前は常に全解除だけを行う「設定リセット」ボタンだった）。
+    const shouldSelectAll = customTrainingSelectedIds.length === 0;
+    customTrainingSelectedIds = shouldSelectAll ? getEnabledTrainingCategories().map((c) => c.id) : [];
+    if (shouldSelectAll) {
+      saveCustomTrainingCategoryIds(customTrainingSelectedIds);
+    } else {
+      clearCustomTrainingCategoryIds();
+    }
+    // 問題数スライダーは変更しない（第12章の仕様）。カテゴリのチェック（大カテゴリ・
+    // 個別カテゴリの両方）だけをまとめて切り替える。
     els.customTrainingCategoryList.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
-      cb.checked = false;
+      cb.checked = shouldSelectAll;
     });
     updateCustomTrainingSelectedCount();
-    focusElement(els.customTrainingResetBtn);
+    focusElement(els.customTrainingToggleAllBtn);
   });
 
   els.customTrainingStartBtn.addEventListener("click", () => {
@@ -982,10 +1075,17 @@ function setupScoreDelta() {
 /**
  * トレーニング画面のヘッダー（カテゴリ名）と、問題番号（例: "問題 2／5"）を更新する。
  * 2段階問題のときは、既存の #step-indicator（"式を2つ答えよう！"）と同時に表示される。
+ * isCustom（カスタムトレーニングかどうか）が true のときは、「トレーニング」の固定
+ * ラベルを非表示にする（運用開始後に追加。「トレーニング　カスタムトレーニング（Nカテゴリ）
+ * 　リタイア」のように3つ並ぶと折り返されて見た目が崩れるという指摘を受けて、
+ * カスタムトレーニングではヘッダーにカテゴリラベルの文言とリタイアボタンだけを表示する）。
  */
-export function updateTrainingHeader(categoryLabel, questionNumber, totalQuestions) {
+export function updateTrainingHeader(categoryLabel, questionNumber, totalQuestions, isCustom) {
   if (els.trainingCategoryDisplay) {
     els.trainingCategoryDisplay.textContent = categoryLabel;
+  }
+  if (els.trainingStatusLabel) {
+    els.trainingStatusLabel.hidden = !!isCustom;
   }
   if (els.trainingProgress) {
     els.trainingProgress.textContent = `問題 ${questionNumber}／${totalQuestions}`;

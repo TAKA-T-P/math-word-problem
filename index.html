@@ -177,7 +177,10 @@
     <p id="custom-training-error-message" class="custom-training-error-message" aria-live="assertive" role="alert" hidden></p>
 
     <div class="custom-training-footer">
-      <button id="custom-training-reset-btn" class="secondary-btn" type="button">設定リセット</button>
+      <!-- 選択中カテゴリ数に応じて「すべてON」／「すべてOFF」に文言・挙動が切り替わる
+           （js/ui.js の updateCustomTrainingToggleAllBtnLabel()。運用開始後に変更。
+           以前は常に全解除だけを行う「設定リセット」ボタンだった）。 -->
+      <button id="custom-training-toggle-all-btn" class="secondary-btn" type="button">すべてOFF</button>
       <button id="custom-training-start-btn" class="primary-btn" type="button" disabled>スタート</button>
     </div>
   </section>
@@ -315,7 +318,10 @@
         <span id="score-delta" class="score-delta" aria-hidden="true"></span>
       </div>
       <div class="status-pill training-status-pill training-only" id="training-status-pill" aria-hidden="true">
-        <span class="status-label">トレーニング</span>
+        <!-- カスタムトレーニングでは、このラベルとリタイアボタンが並ぶと折り返されて見た目が
+             崩れるため、js/ui.js の updateTrainingHeader() がこのラベルを非表示にする
+             （運用開始後に追加）。通常トレーニングでは常に表示する。 -->
+        <span id="training-status-label" class="status-label">トレーニング</span>
         <span id="training-category-display" class="status-value">－</span>
       </div>
       <!-- 総復習モード専用。スコア表示の位置に「4年のまとめ　1問目／13問」のように

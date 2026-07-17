@@ -290,6 +290,19 @@ function getCurrentQuestionCategoryLabel(problem) {
   return category ? category.label : problem.category || "";
 }
 
+/**
+ * バトルヘッダーの表示を更新する。カスタムトレーニングでは、結果画面・デバッグ表示用の
+ * trainingState.categoryLabel（「カスタムトレーニング（8カテゴリ）」のようなカテゴリ数つき）
+ * とは別に、ヘッダーには「カスタムトレーニング」の文言だけを渡す（運用開始後に追加。
+ * 「トレーニング」ラベル・カテゴリ数つきの表示・リタイアボタンが並ぶと折り返されて
+ * 見た目が崩れるという指摘を受けて、ヘッダーの表示だけを簡略化した）。
+ */
+function updateTrainingHeaderDisplay() {
+  const isCustom = trainingState.trainingVariant === "custom";
+  const headerLabel = isCustom ? "カスタムトレーニング" : trainingState.categoryLabel;
+  ui.updateTrainingHeader(headerLabel, trainingState.currentQuestionNumber, trainingState.totalQuestions, isCustom);
+}
+
 function beginTrainingQuestion() {
   const problem = trainingState.questions[trainingState.currentIndex];
   // 同分母分数のたし算・ひき算を、約分をまだ学習していない学期（4-3・5-1）で練習している場合は、
@@ -330,14 +343,13 @@ function beginTrainingQuestion() {
     };
   }
 
-  // カスタムトレーニングでは問題ごとにカテゴリが変わるため、ヘッダーには固定の
-  // trainingState.categoryLabel ではなく、今の問題自身のカテゴリ表示名を出す
-  // （通常トレーニングは1カテゴリしか出題しないため、従来どおり trainingState.categoryLabel のまま）。
-  const headerCategoryLabel =
-    trainingState.trainingVariant === "custom"
-      ? getCurrentQuestionCategoryLabel(problem)
-      : trainingState.categoryLabel;
-  ui.updateTrainingHeader(headerCategoryLabel, trainingState.currentQuestionNumber, trainingState.totalQuestions);
+  // カスタムトレーニングでは、問題ごとの実際のカテゴリ名をヘッダーに出さない
+  // （複数カテゴリから出題されるからこそ「今の問題が何のカテゴリか」を答えの前に
+  // 明かさないことが重要なため。運用開始後に修正：以前は問題ごとのカテゴリ表示名を
+  // 出していたが、これが実質的なヒントになってしまうという指摘を受けて、通常トレーニング
+  // と同じくtrainingState.categoryLabel（「カスタムトレーニング（8カテゴリ）」のような
+  // カテゴリ名を含まない総称）をそのまま使うよう統一した）。
+  updateTrainingHeaderDisplay();
   ui.renderProblem(problem);
   ui.unlockInput();
   isBusy = false;
@@ -432,7 +444,7 @@ function handleTrainingIntermediateCorrect(problem, stepResult) {
   window.setTimeout(() => {
     ui.hideIntermediateStepEffect();
     ui.renderStepChoices(problem);
-    ui.updateTrainingHeader(trainingState.categoryLabel, trainingState.currentQuestionNumber, trainingState.totalQuestions);
+    updateTrainingHeaderDisplay();
     ui.unlockInput();
     isBusy = false;
   }, INTERMEDIATE_STEP_DELAY_MS);

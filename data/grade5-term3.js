@@ -754,7 +754,9 @@ export const grade5Term3Templates = [
     template: "{originalPrice}円の商品が{discountRate}引きで売られています。代金は何円ですか。",
     variables: {
       originalPrice: { min: 1000, max: 5000, step: 100 },
-      discountRate: { type: "percent", values: [10, 20, 25, 30, 40, 50] }
+      // 50%は「50%引き」の支払う割合(100%-50%=50%)が割引率自身と同じ数字になってしまう
+      // ため、値の一覧から除外している（運用開始後に修正）。
+      discountRate: { type: "percent", values: [10, 20, 25, 30, 40] }
     },
     generatorType: "discountTwoStep",
     solutionRoutes: [
@@ -806,7 +808,9 @@ export const grade5Term3Templates = [
     template: "{originalPrice}円のかばんが{discountRate}引きのセールになっています。代金は何円ですか。",
     variables: {
       originalPrice: { min: 1000, max: 5000, step: 100 },
-      discountRate: { type: "percent", values: [10, 20, 25, 30, 40, 50] }
+      // 50%は「50%引き」の支払う割合(100%-50%=50%)が割引率自身と同じ数字になってしまう
+      // ため、値の一覧から除外している（運用開始後に修正）。
+      discountRate: { type: "percent", values: [10, 20, 25, 30, 40] }
     },
     generatorType: "discountTwoStep",
     solutionRoutes: [
@@ -858,7 +862,9 @@ export const grade5Term3Templates = [
     template: "{originalPrice}円の本が{discountRate}引きで販売されています。代金は何円ですか。",
     variables: {
       originalPrice: { min: 1000, max: 4000, step: 100 },
-      discountRate: { type: "percent", values: [10, 20, 25, 30, 40, 50] }
+      // 50%は「50%引き」の支払う割合(100%-50%=50%)が割引率自身と同じ数字になってしまう
+      // ため、値の一覧から除外している（運用開始後に修正）。
+      discountRate: { type: "percent", values: [10, 20, 25, 30, 40] }
     },
     generatorType: "discountTwoStep",
     solutionRoutes: [
@@ -910,7 +916,9 @@ export const grade5Term3Templates = [
     template: "{originalPrice}円の洋服が{discountRate}引きになっています。代金は何円ですか。",
     variables: {
       originalPrice: { min: 2000, max: 6000, step: 200 },
-      discountRate: { type: "percent", values: [10, 20, 25, 30, 40, 50] }
+      // 50%は「50%引き」の支払う割合(100%-50%=50%)が割引率自身と同じ数字になってしまう
+      // ため、値の一覧から除外している（運用開始後に修正）。
+      discountRate: { type: "percent", values: [10, 20, 25, 30, 40] }
     },
     generatorType: "discountTwoStep",
     solutionRoutes: [
@@ -962,7 +970,9 @@ export const grade5Term3Templates = [
     template: "{originalPrice}円のおもちゃが{discountRate}引きで売られています。代金は何円ですか。",
     variables: {
       originalPrice: { min: 1000, max: 5000, step: 100 },
-      discountRate: { type: "percent", values: [10, 20, 25, 30, 40, 50] }
+      // 50%は「50%引き」の支払う割合(100%-50%=50%)が割引率自身と同じ数字になってしまう
+      // ため、値の一覧から除外している（運用開始後に修正）。
+      discountRate: { type: "percent", values: [10, 20, 25, 30, 40] }
     },
     generatorType: "discountTwoStep",
     solutionRoutes: [

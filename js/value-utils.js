@@ -449,6 +449,23 @@ export function divideValuesAsFraction(left, right) {
   return divided === null ? null : normalizeValue(divided);
 }
 
+/**
+ * 数値÷整数を、通常の calculateValues()（既定で小数点以下2桁までしか認めない
+ * divideExactByInteger）よりも多い桁数まで許容して計算します（運用開始後に追加）。
+ * 縮尺の「実際の長さ(km)÷縮尺の分母」のように、割り切れるが小数点以下5桁程度になる
+ * （例: 1.5÷25000＝0.00006）計算のためだけに用意した専用の関数で、通常の数値どうしの
+ * わり算（既定2桁までのcalculateValues）には一切影響しません。
+ * わる数が整数でない場合、または指定した桁数までに割り切れない場合は null を返します。
+ * `js/question-generator.js` の `resultType:"decimalHighPrecision"` 指定時に使います。
+ */
+export function divideNumberByIntegerWithPrecision(left, right, maxDecimalPlaces = 5) {
+  if (typeof left !== "number" || typeof right !== "number" || !Number.isFinite(left) || !Number.isFinite(right)) {
+    return null;
+  }
+  if (!Number.isInteger(right)) return null;
+  return divideExactByInteger(normalizeNumber(left), right, maxDecimalPlaces);
+}
+
 export { isValidFraction };
 export { isValidPercent } from "./percentage-utils.js";
 export { isValidRatio, formatRatio } from "./ratio-utils.js";

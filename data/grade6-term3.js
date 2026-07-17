@@ -923,13 +923,24 @@ export const grade6Term3Templates = [
       {
         // 先に「変換係数(100000)÷縮尺の分母」で比を求めてから、実際の長さにかけるルート
         // （運用開始後に追加。1つ目の式の選択肢カードに縮尺の分母・実際の長さ・変換係数(100000)の
-        // 3枚が必ずそろうようにするため）。km単位は「実際の長さ÷縮尺の分母」を先にすると
-        // 小数点以下の桁数が多くなりすぎて計算不能になるため、m単位のテンプレートとは逆の順序にしている。
-        // 例: 縮尺1：10000なら 100000÷10000=10（比）→ 実際の長さ0.5kmなら 10×0.5=5(cm)。
+        // 3枚が必ずそろうようにするため）。
         id: "ratio-then-multiply-route",
         steps: [
           { left: { source: "literal", value: 100000 }, operator: "÷", right: { source: "variable", key: "scaleDenominator" }, resultKey: "ratio" },
           { left: { source: "result", key: "ratio" }, operator: "×", right: { source: "variable", key: "actualLength" }, resultKey: "answer" }
+        ]
+      },
+      {
+        // 先に「実際の長さ÷縮尺の分母」で地図上の長さをkm単位のまま求めてから、最後に
+        // ×100000でcmへ変換するルート（運用開始後に追加。m単位のテンプレートと同じ素朴な順序で
+        // 解いた場合も正解にするため）。km単位はこの順序だと商が小数点以下5桁程度になり
+        // （例: 1.5÷25000＝0.00006）、通常のわり算（既定2桁までしか認めない）では
+        // 「計算できません」になってしまうため、1つ目の式だけ resultType:"decimalHighPrecision"
+        // （js/value-utils.js の divideNumberByIntegerWithPrecision()。既定5桁まで許容）を使う。
+        id: "divide-then-convert-route",
+        steps: [
+          { left: { source: "variable", key: "actualLength" }, operator: "÷", right: { source: "variable", key: "scaleDenominator" }, resultKey: "mapLengthInActualUnit", resultType: "decimalHighPrecision" },
+          { left: { source: "result", key: "mapLengthInActualUnit" }, operator: "×", right: { source: "literal", value: 100000 }, resultKey: "answer" }
         ]
       }
     ],
@@ -1064,6 +1075,16 @@ export const grade6Term3Templates = [
           { left: { source: "literal", value: 100000 }, operator: "÷", right: { source: "variable", key: "scaleDenominator" }, resultKey: "ratio" },
           { left: { source: "result", key: "ratio" }, operator: "×", right: { source: "variable", key: "actualLength" }, resultKey: "answer" }
         ]
+      },
+      {
+        // 先に「実際の長さ÷縮尺の分母」で地図上の長さをkm単位のまま求めてから、最後に
+        // ×100000でcmへ変換するルート（運用開始後に追加）。1つ目の式だけ
+        // resultType:"decimalHighPrecision" を使い、小数点以下5桁程度になる商も計算できるようにする。
+        id: "divide-then-convert-route",
+        steps: [
+          { left: { source: "variable", key: "actualLength" }, operator: "÷", right: { source: "variable", key: "scaleDenominator" }, resultKey: "mapLengthInActualUnit", resultType: "decimalHighPrecision" },
+          { left: { source: "result", key: "mapLengthInActualUnit" }, operator: "×", right: { source: "literal", value: 100000 }, resultKey: "answer" }
+        ]
       }
     ],
     answerUnit: "cm"
@@ -1151,6 +1172,16 @@ export const grade6Term3Templates = [
         steps: [
           { left: { source: "literal", value: 100000 }, operator: "÷", right: { source: "variable", key: "scaleDenominator" }, resultKey: "ratio" },
           { left: { source: "result", key: "ratio" }, operator: "×", right: { source: "variable", key: "actualLength" }, resultKey: "answer" }
+        ]
+      },
+      {
+        // 先に「実際の長さ÷縮尺の分母」で地図上の長さをkm単位のまま求めてから、最後に
+        // ×100000でcmへ変換するルート（運用開始後に追加）。1つ目の式だけ
+        // resultType:"decimalHighPrecision" を使い、小数点以下5桁程度になる商も計算できるようにする。
+        id: "divide-then-convert-route",
+        steps: [
+          { left: { source: "variable", key: "actualLength" }, operator: "÷", right: { source: "variable", key: "scaleDenominator" }, resultKey: "mapLengthInActualUnit", resultType: "decimalHighPrecision" },
+          { left: { source: "result", key: "mapLengthInActualUnit" }, operator: "×", right: { source: "literal", value: 100000 }, resultKey: "answer" }
         ]
       }
     ],

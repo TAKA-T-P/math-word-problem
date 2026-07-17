@@ -25,9 +25,10 @@ import {
   formatValue,
   calculateValues,
   divideValuesAsFraction,
+  divideNumberByIntegerWithPrecision,
   areValuesEqual
 } from "./value-utils.js";
-import { fractionToNumber, gcd, mixedNumberToImproperFraction } from "./fraction-utils.js";
+import { fractionToNumber, gcd, mixedNumberToImproperFraction, multiplyFractionByInteger } from "./fraction-utils.js";
 import { percentToRatio, ratioToPercent, formatPercent } from "./percentage-utils.js";
 import { formatRatio, createRatio } from "./ratio-utils.js";
 import { formatScale, createScale } from "./scale-utils.js";
@@ -193,6 +194,25 @@ function generateExactDivisionValues(variables) {
     divisor,
     quotient,
     dividend: divisor * quotient
+  };
+}
+
+/**
+ * 分数÷分数だが、商（quotient）が必ず整数になるようにする生成ルール（運用開始後に追加）。
+ * generateExactDivisionValues() の分数版で、考え方は同じです。
+ * 先に divisor（分数のわる数）と quotient（整数の商）を決めてから、
+ * dividend（分数のわられる数）= divisor × quotient を計算します（fraction-utils.js の
+ * multiplyFractionByInteger() が約分済みの値を返すため、そのまま使えます）。
+ * 「1ふくろ○kgずつ分ける」のように、分けた結果の個数（ふくろの数）を尋ねる問題で、
+ * 答えが整数でないと不自然にならないようにするために使います。
+ */
+function generateExactFractionDivisionValues(variables) {
+  const divisor = pickFractionValue(variables.divisor);
+  const quotient = pickStepped(variables.quotient);
+  return {
+    divisor,
+    quotient,
+    dividend: multiplyFractionByInteger(divisor, quotient)
   };
 }
 
@@ -778,6 +798,8 @@ const GENERATOR_TYPE_HANDLERS = {
   fractionDividedByInteger: (variables) => generateStandardValues(variables),
   integerDividedByFraction: (variables) => generateStandardValues(variables),
   fractionDividedByFraction: (variables) => generateStandardValues(variables),
+  // 分数÷分数だが、商が必ず整数になるようにする（運用開始後に追加）。
+  exactFractionDivision: (variables) => generateExactFractionDivisionValues(variables),
   // 分数倍・比べる量／分数倍・もとの量（小学6年生1学期、第10段階で追加）。
   // もとにする量×分数倍＝比べる量の関係を持つ2つのカテゴリで共有します。
   fractionMultiplierFindCompared: (variables, template) =>
@@ -823,7 +845,10 @@ const DIVISION_GENERATOR_TYPES = new Set([
   "exactDivision",
   "exactDivisionTwoDigit",
   "exactDecimalDivisionByInteger",
-  "exactDecimalDivisionByDecimal"
+  "exactDecimalDivisionByDecimal",
+  // 商(quotient)が必ず整数になる分数÷分数（運用開始後に追加）。dividend/divisorだけを見せ、
+  // 答えであるquotientはカードに出さない。
+  "exactFractionDivision"
 ]);
 
 // getVisibleNumbers で「quantityRelation の参照先から見えている数値を判定する」対象のgeneratorType。
@@ -926,12 +951,20 @@ function getVisibleNumbers(template, values) {
  *   わり算は「割り切れる場合だけ商を返す」（かつ割り切れても小数のまま返す）という安全設計のため、
  *   分数の速さの単位変換・分数の割合のように「必ず分数として表示したい」場面では、
  *   value-utils.js の divideValuesAsFraction() で計算し直す（0でわる場合は null のまま）。
+ * - resultType:"decimalHighPrecision" ... 数値÷整数を、通常の safeCalculate()（既定で
+ *   小数点以下2桁までしか認めない）よりも多い桁数（既定5桁）まで許容して計算し直す
+ *   （運用開始後に追加。縮尺の「実際の長さ(km)÷縮尺の分母」のように、割り切れるが
+ *   小数点以下5桁程度になる計算専用。通常の数値どうしのわり算には一切影響しない）。
  * - resultType が指定されていない場合（"number"／"numberOrFraction" を含む）は、
  *   通常どおり safeCalculate() の結果をそのまま返す（型は左右の値から自動的に決まる）。
  */
 function computeStepResult(left, operator, right, resultType) {
   if (resultType === "fraction" && operator === "÷") {
     const forced = divideValuesAsFraction(left, right);
+    if (forced !== null) return forced;
+  }
+  if (resultType === "decimalHighPrecision" && operator === "÷") {
+    const forced = divideNumberByIntegerWithPrecision(left, right);
     if (forced !== null) return forced;
   }
   const result = safeCalculate(left, operator, right);

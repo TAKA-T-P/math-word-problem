@@ -580,18 +580,22 @@ export const grade6Term1Templates = [
     contentGroup: "new",
     difficulty: 3,
     questionType: "singleStep",
+    // 「1ふくろ○kgずつ分ける」→「何ふくろ分になりますか」という問題文は、分けた結果の
+    // ふくろの個数を尋ねているため、答えが整数でないと不自然（運用開始後に修正）。
+    // わる数(divisor=1ふくろ分の重さ)と商(quotient=ふくろの数)を先に決め、
+    // わられる数(dividend=お米全体の重さ)を逆算する generatorType: "exactFractionDivision" に変更した。
     textParts: [
-      { type: "value", ref: "totalAmount" },
+      { type: "value", ref: "dividend" },
       { type: "text", value: "kgのお米を、1ふくろ" },
-      { type: "value", ref: "perBag" },
+      { type: "value", ref: "divisor" },
       { type: "text", value: "kgずつ分けます。何ふくろ分になりますか。" }
     ],
     variables: {
-      totalAmount: { type: "fraction", denominator: 3, numeratorMin: 1, numeratorMax: 2 },
-      perBag: { type: "fraction", denominator: 6, numeratorMin: 1, numeratorMax: 5 }
+      divisor: { type: "fraction", denominator: 6, numeratorMin: 1, numeratorMax: 5 },
+      quotient: { min: 2, max: 6, step: 1 }
     },
-    generatorType: "fractionDividedByFraction",
-    solutionRoutes: [{ left: "totalAmount", operator: "÷", right: "perBag", commutative: false }],
+    generatorType: "exactFractionDivision",
+    solutionRoutes: [{ left: "dividend", operator: "÷", right: "divisor", commutative: false }],
     answerUnit: "ふくろ"
   },
   {

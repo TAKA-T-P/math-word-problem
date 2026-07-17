@@ -525,28 +525,54 @@ button {
 .custom-training-category-list {
   display: flex;
   flex-direction: column;
+  gap: 12px;
+}
+
+/* 学年・学期ごとのグループ（見出し＋その配下のカテゴリ一覧）をひとまとまりにする
+   コンテナ（運用開始後に追加。大カテゴリのチェックボックスから配下のカテゴリ一覧を
+   querySelectorAll() で取得するため、DOM上でも親子関係にしている）。 */
+.custom-training-group {
+  display: flex;
+  flex-direction: column;
   gap: 2px;
 }
 
+/* 大カテゴリ（学年・学期）のチェックボックス付き見出し（運用開始後に変更。以前は
+   チェックボックスの無い純粋な見出しテキストだった）。.custom-training-category-item と
+   同じ「ラベル全体をタップ領域にする」考え方を踏襲する。 */
 .custom-training-group-heading {
-  margin: 12px 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 4px 6px;
+  border-radius: 8px;
   font-size: 0.8rem;
   color: var(--color-accent);
   letter-spacing: 0.04em;
 }
 
-.custom-training-group-heading:first-child {
-  margin-top: 0;
+.custom-training-group-heading:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.custom-training-group-heading input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  accent-color: var(--color-accent);
 }
 
 /* ラベル全体をクリック領域にすることで、チェックボックス本体が小さくてもタップしやすくする。
-   タップ領域そのものは min-height:44px 以上を確保する。 */
+   タップ領域そのものは min-height:44px 以上を確保する。左側のpaddingを大カテゴリ見出し
+   （.custom-training-group-heading）より広くして、小カテゴリのチェックボックスが少し右に
+   ずれて見えるようにし、大カテゴリとの親子関係を視覚的に分かりやすくする（運用開始後に追加）。 */
 .custom-training-category-item {
   display: flex;
   align-items: center;
   gap: 10px;
   min-height: 44px;
-  padding: 4px 6px;
+  padding: 4px 6px 4px 22px;
   border-radius: 8px;
   font-size: 0.85rem;
   line-height: 1.3;
