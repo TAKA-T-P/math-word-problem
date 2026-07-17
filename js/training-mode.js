@@ -429,6 +429,35 @@ export function handleNextTap() {
   }
 }
 
+/**
+ * 「同じ問題をもう一度」（トレーニング専用。運用開始後に追加）。正解した直後
+ * （handleTrainingCorrect()の後、「タップして次へ」を押す前）だけ呼び出される。
+ * handleTrainingCorrect()が加算したカウント（完了数・1回で正解数）と履歴を取り消し、
+ * 同じ問題を答える前の状態（2段階問題なら1つ目の式を答える前の状態）に戻す。
+ * currentIndex／currentQuestionNumberは変更しないため、問題番号は進まない。
+ */
+export function handleRetrySameQuestion() {
+  ui.hideCorrectEffect();
+
+  trainingState.completedQuestions -= 1;
+  if (!trainingState.currentQuestionHadMistake) {
+    trainingState.firstTryCorrectCount -= 1;
+  }
+  if (trainingState.historyPushed) {
+    trainingState.history.pop();
+  }
+  trainingState.pendingOutcome = null;
+
+  const problem = trainingState.currentProblem;
+  if (problem.questionType === "multiStep") {
+    // 1つ目の式に正解した時点の内部状態（currentStepIndex・中間結果・候補ルート・
+    // 選択肢カード）が残ったままのため、再初期化して1つ目の式の状態へ戻す。
+    multiStepEngine.initializeMultiStepQuestion(problem);
+  }
+
+  beginTrainingQuestion();
+}
+
 // ============================================================
 // リタイア（トレーニングにはタイマーが無いため、一時停止/再開の処理は不要）
 // ============================================================

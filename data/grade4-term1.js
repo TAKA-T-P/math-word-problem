@@ -333,14 +333,14 @@ export const grade4Term1Templates = [
   },
 
   // ============================================================
-  // 整数のわり算（6種類）
+  // 1けたでわるわり算（6種類）
   // わる数（divisor）は必ず1けた（2〜9）。
   // dividend = divisor × quotient として生成するため、必ず割り切れます。
   // ============================================================
   {
     id: "g4t1_div_001",
     gradeTerm: "4-1",
-    category: "整数のわり算",
+    category: "1けたでわるわり算",
     categoryId: "integer-division-one-digit",
     difficulty: 1,
     questionType: "singleStep",
@@ -356,7 +356,7 @@ export const grade4Term1Templates = [
   {
     id: "g4t1_div_002",
     gradeTerm: "4-1",
-    category: "整数のわり算",
+    category: "1けたでわるわり算",
     categoryId: "integer-division-one-digit",
     difficulty: 1,
     questionType: "singleStep",
@@ -372,7 +372,7 @@ export const grade4Term1Templates = [
   {
     id: "g4t1_div_003",
     gradeTerm: "4-1",
-    category: "整数のわり算",
+    category: "1けたでわるわり算",
     categoryId: "integer-division-one-digit",
     difficulty: 1,
     questionType: "singleStep",
@@ -388,7 +388,7 @@ export const grade4Term1Templates = [
   {
     id: "g4t1_div_004",
     gradeTerm: "4-1",
-    category: "整数のわり算",
+    category: "1けたでわるわり算",
     categoryId: "integer-division-one-digit",
     difficulty: 1,
     questionType: "singleStep",
@@ -404,7 +404,7 @@ export const grade4Term1Templates = [
   {
     id: "g4t1_div_005",
     gradeTerm: "4-1",
-    category: "整数のわり算",
+    category: "1けたでわるわり算",
     categoryId: "integer-division-one-digit",
     difficulty: 2,
     questionType: "singleStep",
@@ -420,7 +420,7 @@ export const grade4Term1Templates = [
   {
     id: "g4t1_div_006",
     gradeTerm: "4-1",
-    category: "整数のわり算",
+    category: "1けたでわるわり算",
     categoryId: "integer-division-one-digit",
     difficulty: 1,
     questionType: "singleStep",

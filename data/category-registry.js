@@ -47,7 +47,7 @@ export const categoryRegistry = [
   },
   {
     id: "integer-division-one-digit",
-    label: "整数のわり算（1けた）",
+    label: "1けたでわるわり算",
     gradeTerm: "4-1",
     gradeLabel: "小学4年生・1学期",
     enabledInTraining: true,
@@ -81,7 +81,7 @@ export const categoryRegistry = [
   },
   {
     id: "integer-division-two-digit",
-    label: "整数のわり算（2けた）",
+    label: "2けたでわるわり算",
     gradeTerm: "4-2",
     gradeLabel: "小学4年生・2学期",
     enabledInTraining: true,
@@ -89,7 +89,7 @@ export const categoryRegistry = [
   },
   {
     id: "multi-step-integer",
-    label: "整数の2段階文章題",
+    label: "2つの式の文章題",
     gradeTerm: "4-2",
     gradeLabel: "小学4年生・2学期",
     enabledInTraining: true,
@@ -115,7 +115,7 @@ export const categoryRegistry = [
   },
   {
     id: "same-denominator-fraction-addition",
-    label: "同分母分数のたし算",
+    label: "分数のたし算（同分母）",
     gradeTerm: "4-3",
     gradeLabel: "小学4年生・3学期",
     enabledInTraining: true,
@@ -123,7 +123,7 @@ export const categoryRegistry = [
   },
   {
     id: "same-denominator-fraction-subtraction",
-    label: "同分母分数のひき算",
+    label: "分数のひき算（同分母）",
     gradeTerm: "4-3",
     gradeLabel: "小学4年生・3学期",
     enabledInTraining: true,
@@ -167,7 +167,7 @@ export const categoryRegistry = [
   // ---- 小学5年生・2学期 ----
   {
     id: "unlike-fraction-addition",
-    label: "異分母分数のたし算",
+    label: "分数のたし算",
     gradeTerm: "5-2",
     gradeLabel: "小学5年生・2学期",
     enabledInTraining: true,
@@ -175,7 +175,7 @@ export const categoryRegistry = [
   },
   {
     id: "unlike-fraction-subtraction",
-    label: "異分母分数のひき算",
+    label: "分数のひき算",
     gradeTerm: "5-2",
     gradeLabel: "小学5年生・2学期",
     enabledInTraining: true,

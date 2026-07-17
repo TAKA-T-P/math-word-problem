@@ -2,8 +2,8 @@
 //
 // 4カテゴリ、各6種類、計24種類のテンプレートを収録します
 // （「縮尺を求める」カテゴリは運用開始後に削除しました）。
-//   - 比例・対応する量（findDirectProportionValue）      : 6種類、うち2種類は関係表つき
-//   - 反比例・対応する量（findInverseProportionValue）    : 6種類、うち2種類は関係表つき
+//   - 比例・対応する量（findDirectProportionValue）      : 6種類
+//   - 反比例・対応する量（findInverseProportionValue）    : 6種類
 //   - 縮尺・実際の長さ（findActualLengthFromScale）        : 6種類
 //   - 縮尺・地図上の長さ（findMapLengthFromScale）          : 6種類
 //
@@ -17,7 +17,7 @@
 
 export const grade6Term3Templates = [
   // ============================================================
-  // 比例・対応する量（6種類、うち2種類は関係表つき） generatorType: "findDirectProportionValue"
+  // 比例・対応する量（6種類） generatorType: "findDirectProportionValue"
   // ============================================================
   {
     id: "g6t3_proportion_001",
@@ -75,14 +75,7 @@ export const grade6Term3Templates = [
         ]
       }
     ],
-    answerUnit: "円",
-    relationTable: {
-      rowHeaders: ["ノートの冊数（さつ）", "代金（円）"],
-      columns: [
-        [{ type: "value", ref: "knownX" }, { type: "value", ref: "knownY" }],
-        [{ type: "value", ref: "targetX" }, { type: "unknown" }]
-      ]
-    }
+    answerUnit: "円"
   },
   {
     id: "g6t3_proportion_002",
@@ -256,14 +249,7 @@ export const grade6Term3Templates = [
         ]
       }
     ],
-    answerUnit: "km",
-    relationTable: {
-      rowHeaders: ["ガソリンの量（L）", "走れる道のり（km）"],
-      columns: [
-        [{ type: "value", ref: "knownX" }, { type: "value", ref: "knownY" }],
-        [{ type: "value", ref: "targetX" }, { type: "unknown" }]
-      ]
-    }
+    answerUnit: "km"
   },
   {
     id: "g6t3_proportion_005",
@@ -383,7 +369,7 @@ export const grade6Term3Templates = [
   },
 
   // ============================================================
-  // 反比例・対応する量（6種類、うち2種類は関係表つき） generatorType: "findInverseProportionValue"
+  // 反比例・対応する量（6種類） generatorType: "findInverseProportionValue"
   // ============================================================
   {
     id: "g6t3_inverse_001",
@@ -434,14 +420,7 @@ export const grade6Term3Templates = [
         ]
       }
     ],
-    answerUnit: "cm",
-    relationTable: {
-      rowHeaders: ["縦（cm）", "横（cm）"],
-      columns: [
-        [{ type: "value", ref: "knownX" }, { type: "value", ref: "knownY" }],
-        [{ type: "value", ref: "targetX" }, { type: "unknown" }]
-      ]
-    }
+    answerUnit: "cm"
   },
   {
     id: "g6t3_inverse_002",
@@ -492,14 +471,7 @@ export const grade6Term3Templates = [
         ]
       }
     ],
-    answerUnit: "日",
-    relationTable: {
-      rowHeaders: ["人数（人）", "日数（日）"],
-      columns: [
-        [{ type: "value", ref: "knownX" }, { type: "value", ref: "knownY" }],
-        [{ type: "value", ref: "targetX" }, { type: "unknown" }]
-      ]
-    }
+    answerUnit: "日"
   },
   {
     id: "g6t3_inverse_003",
@@ -980,6 +952,16 @@ export const grade6Term3Templates = [
         steps: [
           { left: { source: "variable", key: "actualLength" }, operator: "×", right: { source: "literal", value: 100 }, resultKey: "actualLengthInCm" },
           { left: { source: "result", key: "actualLengthInCm" }, operator: "÷", right: { source: "variable", key: "scaleDenominator" }, resultKey: "answer" }
+        ]
+      },
+      {
+        // 先に「実際の長さ÷縮尺の分母」で地図上の長さをm単位のまま求めてから、最後に
+        // ×100でcmへ変換するルート（運用開始後に追加。g6t3_scale_map_003と同じ考え方）。
+        // 例: 縮尺1：800、実際の長さ48mなら 48÷800=0.06(m) → 0.06×100=6(cm)。
+        id: "divide-then-convert-route",
+        steps: [
+          { left: { source: "variable", key: "actualLength" }, operator: "÷", right: { source: "variable", key: "scaleDenominator" }, resultKey: "mapLengthInActualUnit" },
+          { left: { source: "result", key: "mapLengthInActualUnit" }, operator: "×", right: { source: "literal", value: 100 }, resultKey: "answer" }
         ]
       }
     ],

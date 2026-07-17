@@ -38,12 +38,12 @@
 
 export const grade5Term2Templates = [
   // ============================================================
-  // 異分母分数のたし算（6種類） generatorType: "unlikeDenominatorFractionAddition"
+  // 分数のたし算（異分母、6種類） generatorType: "unlikeDenominatorFractionAddition"
   // ============================================================
   {
     id: "g5t2_ufa_001",
     gradeTerm: "5-2",
-    category: "異分母分数のたし算",
+    category: "分数のたし算",
     categoryId: "unlike-fraction-addition",
     contentGroup: "new",
     difficulty: 2,
@@ -66,7 +66,7 @@ export const grade5Term2Templates = [
   {
     id: "g5t2_ufa_002",
     gradeTerm: "5-2",
-    category: "異分母分数のたし算",
+    category: "分数のたし算",
     categoryId: "unlike-fraction-addition",
     contentGroup: "new",
     difficulty: 2,
@@ -89,7 +89,7 @@ export const grade5Term2Templates = [
   {
     id: "g5t2_ufa_003",
     gradeTerm: "5-2",
-    category: "異分母分数のたし算",
+    category: "分数のたし算",
     categoryId: "unlike-fraction-addition",
     contentGroup: "new",
     difficulty: 3,
@@ -112,7 +112,7 @@ export const grade5Term2Templates = [
   {
     id: "g5t2_ufa_004",
     gradeTerm: "5-2",
-    category: "異分母分数のたし算",
+    category: "分数のたし算",
     categoryId: "unlike-fraction-addition",
     contentGroup: "new",
     difficulty: 3,
@@ -135,7 +135,7 @@ export const grade5Term2Templates = [
   {
     id: "g5t2_ufa_005",
     gradeTerm: "5-2",
-    category: "異分母分数のたし算",
+    category: "分数のたし算",
     categoryId: "unlike-fraction-addition",
     contentGroup: "new",
     difficulty: 2,
@@ -158,7 +158,7 @@ export const grade5Term2Templates = [
   {
     id: "g5t2_ufa_006",
     gradeTerm: "5-2",
-    category: "異分母分数のたし算",
+    category: "分数のたし算",
     categoryId: "unlike-fraction-addition",
     contentGroup: "new",
     difficulty: 3,
@@ -180,13 +180,13 @@ export const grade5Term2Templates = [
   },
 
   // ============================================================
-  // 異分母分数のひき算（6種類） generatorType: "unlikeDenominatorFractionSubtraction"
+  // 分数のひき算（異分母、6種類） generatorType: "unlikeDenominatorFractionSubtraction"
   // a の最小値が b の最大値を常に上回るように範囲を設計し、答えが負にならないようにしています。
   // ============================================================
   {
     id: "g5t2_ufs_001",
     gradeTerm: "5-2",
-    category: "異分母分数のひき算",
+    category: "分数のひき算",
     categoryId: "unlike-fraction-subtraction",
     contentGroup: "new",
     difficulty: 2,
@@ -209,7 +209,7 @@ export const grade5Term2Templates = [
   {
     id: "g5t2_ufs_002",
     gradeTerm: "5-2",
-    category: "異分母分数のひき算",
+    category: "分数のひき算",
     categoryId: "unlike-fraction-subtraction",
     contentGroup: "new",
     difficulty: 2,
@@ -232,7 +232,7 @@ export const grade5Term2Templates = [
   {
     id: "g5t2_ufs_003",
     gradeTerm: "5-2",
-    category: "異分母分数のひき算",
+    category: "分数のひき算",
     categoryId: "unlike-fraction-subtraction",
     contentGroup: "new",
     difficulty: 3,
@@ -255,7 +255,7 @@ export const grade5Term2Templates = [
   {
     id: "g5t2_ufs_004",
     gradeTerm: "5-2",
-    category: "異分母分数のひき算",
+    category: "分数のひき算",
     categoryId: "unlike-fraction-subtraction",
     contentGroup: "new",
     difficulty: 3,
@@ -278,7 +278,7 @@ export const grade5Term2Templates = [
   {
     id: "g5t2_ufs_005",
     gradeTerm: "5-2",
-    category: "異分母分数のひき算",
+    category: "分数のひき算",
     categoryId: "unlike-fraction-subtraction",
     contentGroup: "new",
     difficulty: 3,
@@ -301,7 +301,7 @@ export const grade5Term2Templates = [
   {
     id: "g5t2_ufs_006",
     gradeTerm: "5-2",
-    category: "異分母分数のひき算",
+    category: "分数のひき算",
     categoryId: "unlike-fraction-subtraction",
     contentGroup: "new",
     difficulty: 2,

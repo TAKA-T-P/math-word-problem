@@ -427,6 +427,18 @@ button {
   animation: countdown-pop 0.7s ease-out;
 }
 
+/* カウントダウン中、遊び方をひとことで思い出せるようにするヒント文（運用開始後に追加）。
+   文章題バトル・トレーニング・総復習のどのモードもrunCountdown()を共有するため、
+   モードを問わず常に同じ文言を表示する。 */
+.countdown-hint {
+  margin-top: 24px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-text-dim);
+  text-align: center;
+  line-height: 1.6;
+}
+
 @keyframes countdown-pop {
   0% {
     transform: scale(0.4);
@@ -1182,6 +1194,42 @@ button {
 @keyframes tap-bounce {
   0%, 100% { transform: translateX(-50%) translateY(0); }
   50% { transform: translateX(-50%) translateY(-6px); }
+}
+
+/* トレーニング専用の「同じ問題をもう一度」ボタン（運用開始後に追加）。.tap-to-continue と
+   同じ、正解演出から少し遅れてふわっと現れる仕組み（show クラス・opacity）だが、
+   位置は.tap-to-continueの真上に置き、主役の「タップして次へ」より控えめな見た目
+   （外枠だけの縁取りボタン）にして、誤って連打しないようにしている。
+   .training-only の既定の display:none を、#app.mode-training のときだけ上書きして
+   レイアウトに参加させ（display切り替え）、その上で表示/非表示自体は.showの
+   opacity切り替えで行う（.tap-to-continueと同じ二段構え）。 */
+.retry-same-question-btn {
+  position: absolute;
+  left: 50%;
+  bottom: calc(8% + 56px);
+  transform: translateX(-50%);
+  min-height: 44px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.75);
+  background: rgba(43, 27, 87, 0.85);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 22;
+}
+
+#app.mode-training .retry-same-question-btn.training-only {
+  display: inline-block !important;
+}
+
+.retry-same-question-btn.show {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .dialog-overlay {

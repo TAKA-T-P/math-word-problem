@@ -239,6 +239,7 @@
   <!-- ============== カウントダウン画面 ============== -->
   <section id="screen-countdown" class="screen">
     <div id="countdown-text" class="countdown-text">3</div>
+    <p class="countdown-hint">式をつくって<br />＝ボタンで答えよう！</p>
   </section>
 
   <!-- ============== バトル画面 ============== -->
@@ -315,6 +316,9 @@
     </div>
     <div id="battle-message" class="battle-message" aria-hidden="true"></div>
     <button id="tap-to-continue" class="tap-to-continue" type="button" aria-hidden="true">タップして次へ</button>
+    <!-- トレーニングモード専用（training-only）。正解した直後、同じ問題を答える前の状態
+         （2段階問題なら1つ目の式を答える前の状態）に戻ってもう一度解き直せる。 -->
+    <button id="retry-same-question-btn" class="retry-same-question-btn training-only" type="button" aria-hidden="true">同じ問題をもう一度</button>
 
     <div id="retire-confirm-dialog" class="dialog-overlay" aria-hidden="true">
       <div class="dialog-box">

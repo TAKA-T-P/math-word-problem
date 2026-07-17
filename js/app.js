@@ -28,6 +28,11 @@ const MODES = {
     start: (settings) => game.startNewGame(settings),
     judge: (answer) => game.handleJudge(answer),
     nextTap: () => game.handleNextTap(),
+    // 「同じ問題をもう一度」はトレーニング専用機能で、ボタン自体が他モードでは
+    // 表示・操作不能（CSSの.training-only）のため、battle/reviewは何もしない
+    // （運用開始後に追加。トレーニングのpauseForRetireDialog()等と同じ「他モードでは
+    // 何もしない」設計）。
+    retrySameQuestion: () => {},
     retireOpen: () => game.pauseForRetireDialog(),
     retireConfirmed: () => game.confirmRetire(),
     retireCancelled: () => game.cancelRetire(),
@@ -38,6 +43,7 @@ const MODES = {
     start: (settings) => training.startTraining(settings),
     judge: (answer) => training.handleJudge(answer),
     nextTap: () => training.handleNextTap(),
+    retrySameQuestion: () => training.handleRetrySameQuestion(),
     retireOpen: () => training.pauseForRetireDialog(),
     retireConfirmed: () => training.confirmRetire(),
     retireCancelled: () => training.cancelRetire(),
@@ -48,6 +54,7 @@ const MODES = {
     start: (settings) => review.startReview(settings),
     judge: (answer) => review.handleJudge(answer),
     nextTap: () => review.handleNextTap(),
+    retrySameQuestion: () => {},
     retireOpen: () => review.pauseForRetireDialog(),
     retireConfirmed: () => review.confirmRetire(),
     retireCancelled: () => review.cancelRetire(),
@@ -72,6 +79,7 @@ function main() {
     onSoundToggle: () => game.toggleSound(),
     onJudge: (answer) => MODES[currentMode].judge(answer),
     onNextTap: () => MODES[currentMode].nextTap(),
+    onRetrySameQuestion: () => MODES[currentMode].retrySameQuestion(),
     onRetireOpen: () => MODES[currentMode].retireOpen(),
     onRetireConfirmed: () => MODES[currentMode].retireConfirmed(),
     onRetireCancelled: () => MODES[currentMode].retireCancelled(),

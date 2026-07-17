@@ -166,6 +166,7 @@ function cacheElements() {
     correctMark: qs("correct-mark"),
     battleMessage: qs("battle-message"),
     tapToContinue: qs("tap-to-continue"),
+    retrySameQuestionBtn: qs("retry-same-question-btn"),
     retireDialog: qs("retire-confirm-dialog"),
     retireConfirmText: qs("retire-confirm-text"),
     retireYesBtn: qs("retire-confirm-yes"),
@@ -1262,12 +1263,16 @@ export function showCorrectEffect(resultValue, { simplify = true } = {}) {
   nextQuestionTapLock = false;
   window.setTimeout(() => {
     els.tapToContinue.classList.add("show");
+    // トレーニング以外のモードでは .training-only の display:none により常に非表示のまま
+    // なので、show クラスを付けても問題ない（運用開始後に追加）。
+    els.retrySameQuestionBtn.classList.add("show");
   }, 450);
 }
 
 export function hideCorrectEffect() {
   els.correctMark.classList.remove("show");
   els.tapToContinue.classList.remove("show");
+  els.retrySameQuestionBtn.classList.remove("show");
 }
 
 /**
@@ -1315,7 +1320,18 @@ function setupNextQuestionTap() {
     if (nextQuestionTapLock) return;
     nextQuestionTapLock = true;
     els.tapToContinue.classList.remove("show");
+    els.retrySameQuestionBtn.classList.remove("show");
     callbacks.onNextTap && callbacks.onNextTap();
+  });
+
+  // 「同じ問題をもう一度」（トレーニング専用。運用開始後に追加）。tapToContinueと
+  // 同じロックを共有し、どちらか一方を押したら両方のボタンを閉じる。
+  els.retrySameQuestionBtn.addEventListener("click", () => {
+    if (nextQuestionTapLock) return;
+    nextQuestionTapLock = true;
+    els.tapToContinue.classList.remove("show");
+    els.retrySameQuestionBtn.classList.remove("show");
+    callbacks.onRetrySameQuestion && callbacks.onRetrySameQuestion();
   });
 }
 

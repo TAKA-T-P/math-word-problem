@@ -242,13 +242,13 @@ export const grade4Term3Templates = [
   },
 
   // ============================================================
-  // 同分母分数のたし算（6種類） generatorType: "sameDenominatorFractionAddition"
+  // 分数のたし算（同分母）（6種類） generatorType: "sameDenominatorFractionAddition"
   // a・bの分母は同じ固定値を使用し、常に同分母のたし算になります。
   // ============================================================
   {
     id: "g4t3_frac_add_001",
     gradeTerm: "4-3",
-    category: "同分母分数のたし算",
+    category: "分数のたし算（同分母）",
     categoryId: "same-denominator-fraction-addition",
     contentGroup: "new",
     difficulty: 2,
@@ -271,7 +271,7 @@ export const grade4Term3Templates = [
   {
     id: "g4t3_frac_add_002",
     gradeTerm: "4-3",
-    category: "同分母分数のたし算",
+    category: "分数のたし算（同分母）",
     categoryId: "same-denominator-fraction-addition",
     contentGroup: "new",
     difficulty: 1,
@@ -294,7 +294,7 @@ export const grade4Term3Templates = [
   {
     id: "g4t3_frac_add_003",
     gradeTerm: "4-3",
-    category: "同分母分数のたし算",
+    category: "分数のたし算（同分母）",
     categoryId: "same-denominator-fraction-addition",
     contentGroup: "new",
     difficulty: 2,
@@ -317,7 +317,7 @@ export const grade4Term3Templates = [
   {
     id: "g4t3_frac_add_004",
     gradeTerm: "4-3",
-    category: "同分母分数のたし算",
+    category: "分数のたし算（同分母）",
     categoryId: "same-denominator-fraction-addition",
     contentGroup: "new",
     difficulty: 2,
@@ -340,7 +340,7 @@ export const grade4Term3Templates = [
   {
     id: "g4t3_frac_add_005",
     gradeTerm: "4-3",
-    category: "同分母分数のたし算",
+    category: "分数のたし算（同分母）",
     categoryId: "same-denominator-fraction-addition",
     contentGroup: "new",
     difficulty: 2,
@@ -363,7 +363,7 @@ export const grade4Term3Templates = [
   {
     id: "g4t3_frac_add_006",
     gradeTerm: "4-3",
-    category: "同分母分数のたし算",
+    category: "分数のたし算（同分母）",
     categoryId: "same-denominator-fraction-addition",
     contentGroup: "new",
     difficulty: 2,
@@ -385,13 +385,13 @@ export const grade4Term3Templates = [
   },
 
   // ============================================================
-  // 同分母分数のひき算（6種類） generatorType: "sameDenominatorFractionSubtraction"
+  // 分数のひき算（同分母）（6種類） generatorType: "sameDenominatorFractionSubtraction"
   // a.numeratorMin が b.numeratorMax 以上になるように設計し、答えが常に0以上になるようにしています。
   // ============================================================
   {
     id: "g4t3_frac_sub_001",
     gradeTerm: "4-3",
-    category: "同分母分数のひき算",
+    category: "分数のひき算（同分母）",
     categoryId: "same-denominator-fraction-subtraction",
     contentGroup: "new",
     difficulty: 2,
@@ -414,7 +414,7 @@ export const grade4Term3Templates = [
   {
     id: "g4t3_frac_sub_002",
     gradeTerm: "4-3",
-    category: "同分母分数のひき算",
+    category: "分数のひき算（同分母）",
     categoryId: "same-denominator-fraction-subtraction",
     contentGroup: "new",
     difficulty: 2,
@@ -437,7 +437,7 @@ export const grade4Term3Templates = [
   {
     id: "g4t3_frac_sub_003",
     gradeTerm: "4-3",
-    category: "同分母分数のひき算",
+    category: "分数のひき算（同分母）",
     categoryId: "same-denominator-fraction-subtraction",
     contentGroup: "new",
     difficulty: 2,
@@ -460,7 +460,7 @@ export const grade4Term3Templates = [
   {
     id: "g4t3_frac_sub_004",
     gradeTerm: "4-3",
-    category: "同分母分数のひき算",
+    category: "分数のひき算（同分母）",
     categoryId: "same-denominator-fraction-subtraction",
     contentGroup: "new",
     difficulty: 2,
@@ -483,7 +483,7 @@ export const grade4Term3Templates = [
   {
     id: "g4t3_frac_sub_005",
     gradeTerm: "4-3",
-    category: "同分母分数のひき算",
+    category: "分数のひき算（同分母）",
     categoryId: "same-denominator-fraction-subtraction",
     contentGroup: "new",
     difficulty: 2,
@@ -506,7 +506,7 @@ export const grade4Term3Templates = [
   {
     id: "g4t3_frac_sub_006",
     gradeTerm: "4-3",
-    category: "同分母分数のひき算",
+    category: "分数のひき算（同分母）",
     categoryId: "same-denominator-fraction-subtraction",
     contentGroup: "new",
     difficulty: 1,
