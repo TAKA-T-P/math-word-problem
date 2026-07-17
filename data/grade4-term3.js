@@ -385,6 +385,120 @@ export const grade4Term3Templates = [
   },
 
   // ============================================================
+  // 分数のたし算（同分母）帯分数あり（4種類） generatorType: "sameDenominatorFractionAddition"（変更なし）
+  // 帯分数は新しい値の型を作らず、既存の { type:"fraction" }（仮分数）のまま扱います。
+  // variables に type:"mixedFraction"（{ denominator, wholeMin, wholeMax, numeratorMin, numeratorMax }）を
+  // 指定すると、pickValueForRange() が仮分数の値を生成します（js/question-generator.js 参照）。
+  // fractionDisplayMode: "mixed" を指定すると、この問題の値が1以上のとき帯分数として表示されます
+  // （真分数のまま・約分して整数になる場合は、これまで通りの表示のままです）。
+  // mixedNumberPattern はデバッグ表示・品質確認ツール専用のメタ情報で、正誤判定には使用しません。
+  //   - 007: 帯分数＋真分数、くり上がりなし
+  //   - 008: 真分数＋帯分数、くり上がりなし（順序を入れ替えても正しく採点されることを確認する目的）
+  //   - 009: 帯分数＋帯分数、くり上がりなし
+  //   - 010: 帯分数＋帯分数、くり上がりあり（分子の和が分母を超える）
+  // ============================================================
+  {
+    id: "g4t3_frac_add_007",
+    gradeTerm: "4-3",
+    category: "分数のたし算（同分母）",
+    categoryId: "same-denominator-fraction-addition",
+    contentGroup: "new",
+    difficulty: 3,
+    questionType: "singleStep",
+    fractionDisplayMode: "mixed",
+    mixedNumberPattern: "addition-no-carry",
+    textParts: [
+      { type: "text", value: "青いテープが" },
+      { type: "value", ref: "a" },
+      { type: "text", value: "mあります。赤いテープは" },
+      { type: "value", ref: "b" },
+      { type: "text", value: "mあります。合わせて何mですか。" }
+    ],
+    variables: {
+      a: { type: "mixedFraction", denominator: 5, wholeMin: 1, wholeMax: 3, numeratorMin: 1, numeratorMax: 2 },
+      b: { type: "fraction", denominator: 5, numeratorMin: 1, numeratorMax: 2 }
+    },
+    generatorType: "sameDenominatorFractionAddition",
+    solutionRoutes: [{ left: "a", operator: "+", right: "b", commutative: true }],
+    answerUnit: "m"
+  },
+  {
+    id: "g4t3_frac_add_008",
+    gradeTerm: "4-3",
+    category: "分数のたし算（同分母）",
+    categoryId: "same-denominator-fraction-addition",
+    contentGroup: "new",
+    difficulty: 3,
+    questionType: "singleStep",
+    fractionDisplayMode: "mixed",
+    mixedNumberPattern: "addition-no-carry",
+    textParts: [
+      { type: "text", value: "きょう飲んだお茶は" },
+      { type: "value", ref: "a" },
+      { type: "text", value: "Lで、きのう飲んだお茶は" },
+      { type: "value", ref: "b" },
+      { type: "text", value: "Lでした。合わせて何Lですか。" }
+    ],
+    variables: {
+      a: { type: "fraction", denominator: 7, numeratorMin: 1, numeratorMax: 3 },
+      b: { type: "mixedFraction", denominator: 7, wholeMin: 1, wholeMax: 3, numeratorMin: 1, numeratorMax: 3 }
+    },
+    generatorType: "sameDenominatorFractionAddition",
+    solutionRoutes: [{ left: "a", operator: "+", right: "b", commutative: true }],
+    answerUnit: "L"
+  },
+  {
+    id: "g4t3_frac_add_009",
+    gradeTerm: "4-3",
+    category: "分数のたし算（同分母）",
+    categoryId: "same-denominator-fraction-addition",
+    contentGroup: "new",
+    difficulty: 3,
+    questionType: "singleStep",
+    fractionDisplayMode: "mixed",
+    mixedNumberPattern: "addition-no-carry",
+    textParts: [
+      { type: "text", value: "小麦粉が" },
+      { type: "value", ref: "a" },
+      { type: "text", value: "kgありました。そこへ" },
+      { type: "value", ref: "b" },
+      { type: "text", value: "kgの小麦粉を買い足しました。全部で何kgになりましたか。" }
+    ],
+    variables: {
+      a: { type: "mixedFraction", denominator: 6, wholeMin: 1, wholeMax: 3, numeratorMin: 1, numeratorMax: 2 },
+      b: { type: "mixedFraction", denominator: 6, wholeMin: 1, wholeMax: 3, numeratorMin: 1, numeratorMax: 2 }
+    },
+    generatorType: "sameDenominatorFractionAddition",
+    solutionRoutes: [{ left: "a", operator: "+", right: "b", commutative: true }],
+    answerUnit: "kg"
+  },
+  {
+    id: "g4t3_frac_add_010",
+    gradeTerm: "4-3",
+    category: "分数のたし算（同分母）",
+    categoryId: "same-denominator-fraction-addition",
+    contentGroup: "new",
+    difficulty: 3,
+    questionType: "singleStep",
+    fractionDisplayMode: "mixed",
+    mixedNumberPattern: "addition-with-carry",
+    textParts: [
+      { type: "text", value: "ハイキングで、午前に" },
+      { type: "value", ref: "a" },
+      { type: "text", value: "kmの道のりを歩き、午後に" },
+      { type: "value", ref: "b" },
+      { type: "text", value: "kmの道のりを歩きました。合わせて何km歩きましたか。" }
+    ],
+    variables: {
+      a: { type: "mixedFraction", denominator: 5, wholeMin: 1, wholeMax: 3, numeratorMin: 3, numeratorMax: 4 },
+      b: { type: "mixedFraction", denominator: 5, wholeMin: 1, wholeMax: 3, numeratorMin: 3, numeratorMax: 4 }
+    },
+    generatorType: "sameDenominatorFractionAddition",
+    solutionRoutes: [{ left: "a", operator: "+", right: "b", commutative: true }],
+    answerUnit: "km"
+  },
+
+  // ============================================================
   // 分数のひき算（同分母）（6種類） generatorType: "sameDenominatorFractionSubtraction"
   // a.numeratorMin が b.numeratorMax 以上になるように設計し、答えが常に0以上になるようにしています。
   // ============================================================
@@ -525,5 +639,115 @@ export const grade4Term3Templates = [
     generatorType: "sameDenominatorFractionSubtraction",
     solutionRoutes: [{ left: "a", operator: "-", right: "b", commutative: false }],
     answerUnit: "枚分"
+  },
+
+  // ============================================================
+  // 分数のひき算（同分母）帯分数あり（4種類） generatorType: "sameDenominatorFractionSubtraction"（変更なし）
+  // 帯分数のたし算（007〜010）と同じ考え方です。a.numeratorMin側の実効範囲がb.numeratorMax側の
+  // 実効範囲以上になるように（whole・numeratorの組み合わせ全体で）設計し、答えが常に0以上になるようにしています。
+  //   - 007: 帯分数－真分数、くり下がりなし
+  //   - 008: 帯分数－真分数、くり下がりあり（分子部分だけでは引けず、整数部から1くり下げる）
+  //   - 009: 帯分数－帯分数、くり下がりなし
+  //   - 010: 帯分数－帯分数、くり下がりあり
+  // ============================================================
+  {
+    id: "g4t3_frac_sub_007",
+    gradeTerm: "4-3",
+    category: "分数のひき算（同分母）",
+    categoryId: "same-denominator-fraction-subtraction",
+    contentGroup: "new",
+    difficulty: 3,
+    questionType: "singleStep",
+    fractionDisplayMode: "mixed",
+    mixedNumberPattern: "subtraction-no-borrow",
+    textParts: [
+      { type: "text", value: "ジュースが" },
+      { type: "value", ref: "a" },
+      { type: "text", value: "Lありました。そのうち" },
+      { type: "value", ref: "b" },
+      { type: "text", value: "Lを飲みました。残りは何Lですか。" }
+    ],
+    variables: {
+      a: { type: "mixedFraction", denominator: 5, wholeMin: 2, wholeMax: 4, numeratorMin: 3, numeratorMax: 4 },
+      b: { type: "fraction", denominator: 5, numeratorMin: 1, numeratorMax: 2 }
+    },
+    generatorType: "sameDenominatorFractionSubtraction",
+    solutionRoutes: [{ left: "a", operator: "-", right: "b", commutative: false }],
+    answerUnit: "L"
+  },
+  {
+    id: "g4t3_frac_sub_008",
+    gradeTerm: "4-3",
+    category: "分数のひき算（同分母）",
+    categoryId: "same-denominator-fraction-subtraction",
+    contentGroup: "new",
+    difficulty: 3,
+    questionType: "singleStep",
+    fractionDisplayMode: "mixed",
+    mixedNumberPattern: "subtraction-with-borrow",
+    textParts: [
+      { type: "text", value: "ロープが" },
+      { type: "value", ref: "a" },
+      { type: "text", value: "mありました。工作でそのうち" },
+      { type: "value", ref: "b" },
+      { type: "text", value: "mを使いました。残りは何mですか。" }
+    ],
+    variables: {
+      a: { type: "mixedFraction", denominator: 7, wholeMin: 2, wholeMax: 5, numeratorMin: 1, numeratorMax: 2 },
+      b: { type: "fraction", denominator: 7, numeratorMin: 4, numeratorMax: 6 }
+    },
+    generatorType: "sameDenominatorFractionSubtraction",
+    solutionRoutes: [{ left: "a", operator: "-", right: "b", commutative: false }],
+    answerUnit: "m"
+  },
+  {
+    id: "g4t3_frac_sub_009",
+    gradeTerm: "4-3",
+    category: "分数のひき算（同分母）",
+    categoryId: "same-denominator-fraction-subtraction",
+    contentGroup: "new",
+    difficulty: 3,
+    questionType: "singleStep",
+    fractionDisplayMode: "mixed",
+    mixedNumberPattern: "subtraction-no-borrow",
+    textParts: [
+      { type: "text", value: "小麦粉が" },
+      { type: "value", ref: "a" },
+      { type: "text", value: "kgありました。パン作りで" },
+      { type: "value", ref: "b" },
+      { type: "text", value: "kgを使いました。残りは何kgですか。" }
+    ],
+    variables: {
+      a: { type: "mixedFraction", denominator: 6, wholeMin: 3, wholeMax: 5, numeratorMin: 3, numeratorMax: 4 },
+      b: { type: "mixedFraction", denominator: 6, wholeMin: 1, wholeMax: 2, numeratorMin: 1, numeratorMax: 2 }
+    },
+    generatorType: "sameDenominatorFractionSubtraction",
+    solutionRoutes: [{ left: "a", operator: "-", right: "b", commutative: false }],
+    answerUnit: "kg"
+  },
+  {
+    id: "g4t3_frac_sub_010",
+    gradeTerm: "4-3",
+    category: "分数のひき算（同分母）",
+    categoryId: "same-denominator-fraction-subtraction",
+    contentGroup: "new",
+    difficulty: 3,
+    questionType: "singleStep",
+    fractionDisplayMode: "mixed",
+    mixedNumberPattern: "subtraction-with-borrow",
+    textParts: [
+      { type: "text", value: "縄が" },
+      { type: "value", ref: "a" },
+      { type: "text", value: "mありました。そのうち" },
+      { type: "value", ref: "b" },
+      { type: "text", value: "mを切って使いました。残りは何mですか。" }
+    ],
+    variables: {
+      a: { type: "mixedFraction", denominator: 8, wholeMin: 4, wholeMax: 5, numeratorMin: 1, numeratorMax: 2 },
+      b: { type: "mixedFraction", denominator: 8, wholeMin: 1, wholeMax: 2, numeratorMin: 5, numeratorMax: 6 }
+    },
+    generatorType: "sameDenominatorFractionSubtraction",
+    solutionRoutes: [{ left: "a", operator: "-", right: "b", commutative: false }],
+    answerUnit: "m"
   }
 ];

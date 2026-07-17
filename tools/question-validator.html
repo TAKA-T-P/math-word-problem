@@ -28,6 +28,17 @@
   h1 {
     font-size: 1.4rem;
     margin: 0 0 4px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  h1 .cross-link {
+    font-size: 0.8rem;
+    font-weight: 500;
+  }
+  a {
+    color: var(--accent);
   }
   p.desc {
     color: var(--text-dim);
@@ -141,6 +152,7 @@
   }
   .badge-new { background: rgba(255, 210, 63, 0.2); color: var(--accent); }
   .badge-review { background: rgba(157, 175, 255, 0.2); color: #9dafff; }
+  .badge-mixed { background: rgba(93, 220, 190, 0.2); color: #5ddcbe; }
   .filter-bar {
     display: flex;
     align-items: center;
@@ -182,7 +194,7 @@
 </style>
 </head>
 <body>
-  <h1>問題データ検証ツール</h1>
+  <h1>問題データ検証ツール <span class="cross-link">⇔ <a href="./quality-check.html">全範囲品質確認</a></span></h1>
   <p class="desc">
     data/index.js に登録されているすべての問題テンプレートを検証します。
     1段階問題（questionType: "singleStep"）は数値を変えて30回、
@@ -190,6 +202,10 @@
     2段階問題はさらに、すべての解法ルートを実際に最後まで解けるかもシミュレーションします。
     分数を含む問題は、実際のゲームと同じ縦型分数で例を表示します。
     「再検証」を押すたびに乱数を変えて再実行します。
+    個々のテンプレートをすばやく確認したいときはこのページを、全学期・全カテゴリを
+    まとめて100回ずつ耐久テストし、重複出題・数値難易度・スマートフォン表示・出題セットまで
+    まとめて確認したいときは<a href="./quality-check.html">全範囲品質確認</a>を使ってください
+    （運用開始後に追加。このページの検証ロジックをそのまま再利用しています）。
   </p>
 
   <div class="toolbar">
@@ -247,6 +263,13 @@
         <option value="all">すべて</option>
         <option value="ok">正常のみ</option>
         <option value="error">エラーのみ</option>
+      </select>
+    </label>
+    <label>帯分数
+      <select id="filter-mixedNumber">
+        <option value="all">すべて</option>
+        <option value="mixed">帯分数ありのみ</option>
+        <option value="notMixed">帯分数なしのみ</option>
       </select>
     </label>
   </div>
@@ -327,7 +350,9 @@
     function classifyValueType(template) {
       if (!template || !template.variables) return "integer";
       const ranges = Object.values(template.variables);
-      if (ranges.some((r) => r && r.type === "fraction")) return "fraction";
+      // type:"mixedFraction"（帯分数。第11段階で追加）も内部的には分数のため、
+      // type:"fraction" と同じ「分数」として分類する。
+      if (ranges.some((r) => r && (r.type === "fraction" || r.type === "mixedFraction"))) return "fraction";
       if (ranges.some((r) => r && r.type === "percent")) return "percent";
       if (ranges.some((r) => r && r.decimalPlaces > 0)) return "decimal";
       return "integer";
@@ -340,7 +365,10 @@
      * 同時に受け付けるため、1本目のルートだけを見ても正解条件を確認できない）。
      */
     function formatExample(problem) {
-      const textHtml = problem.textParts ? renderTextPartsHtml(problem.textParts) : escapeHtml(problem.text);
+      // 帯分数テンプレート（fractionDisplayMode==="mixed"。第11段階で追加）は、この検証ページの
+      // 例表示でも実際のゲーム画面と同じ帯分数表示にする（仮分数のまま表示されないようにするため）。
+      const mixedNumber = !!(problem.template && problem.template.fractionDisplayMode === "mixed");
+      const textHtml = problem.textParts ? renderTextPartsHtml(problem.textParts, { mixedNumber }) : escapeHtml(problem.text);
       if (problem.questionType === "multiStep") {
         const routesHtml = problem.solutionRoutes
           .map((route) => {
@@ -367,8 +395,8 @@
       const resultIsPercent = isPercentValue(problem.result);
       return {
         textHtml,
-        formulaHtml: `${renderValueHtml(problem.left)}${problem.operator}${renderValueHtml(problem.right)}`,
-        resultHtml: resultIsPercent ? renderPercentConversionHtml(problem.result) : renderValueHtml(problem.result),
+        formulaHtml: `${renderValueHtml(problem.left, { mixedNumber })}${problem.operator}${renderValueHtml(problem.right, { mixedNumber })}`,
+        resultHtml: resultIsPercent ? renderPercentConversionHtml(problem.result) : renderValueHtml(problem.result, { mixedNumber }),
         unit: resultIsPercent ? "" : problem.answerUnit
       };
     }
@@ -397,6 +425,8 @@
           stepCount: template ? (template.questionType === "multiStep" ? template.totalSteps : 1) : "-",
           contentGroup: template ? getContentGroup(template) : "-",
           valueType: classifyValueType(template),
+          // 帯分数テンプレートかどうか（第11段階で追加）。バッジ表示・フィルターに使う。
+          hasMixedNumber: !!(template && template.fractionDisplayMode === "mixed"),
           sampleCount,
           structuralErrors: structural.errors,
           sampleErrors: [],
@@ -462,6 +492,7 @@
         <div class="template-card-head">
           <span class="badge ${row.overallValid ? "badge-ok" : "badge-error"}">${row.overallValid ? "OK" : "NG"}</span>
           <span class="badge ${row.contentGroup === "new" ? "badge-new" : "badge-review"}">${row.contentGroup === "new" ? "新内容" : row.contentGroup === "review" ? "復習内容" : "-"}</span>
+          ${row.hasMixedNumber ? '<span class="badge badge-mixed">帯分数あり</span>' : ""}
           <span class="template-id">${escapeHtml(row.id)}</span>
           <span class="template-category">${escapeHtml(row.category)}</span>
         </div>
@@ -508,6 +539,7 @@
       const stepCount = document.getElementById("filter-stepCount").value;
       const valueType = document.getElementById("filter-valueType").value;
       const validity = document.getElementById("filter-validity").value;
+      const mixedNumber = document.getElementById("filter-mixedNumber").value;
 
       return rows.filter((row) => {
         if (gradeTerm !== "all" && row.gradeTerm !== gradeTerm) return false;
@@ -517,6 +549,8 @@
         if (valueType !== "all" && row.valueType !== valueType) return false;
         if (validity === "ok" && !row.overallValid) return false;
         if (validity === "error" && row.overallValid) return false;
+        if (mixedNumber === "mixed" && !row.hasMixedNumber) return false;
+        if (mixedNumber === "notMixed" && row.hasMixedNumber) return false;
         return true;
       });
     }
@@ -548,7 +582,7 @@
     }
 
     document.getElementById("rerun-btn").addEventListener("click", render);
-    for (const id of ["filter-gradeTerm", "filter-category", "filter-questionType", "filter-stepCount", "filter-valueType", "filter-validity"]) {
+    for (const id of ["filter-gradeTerm", "filter-category", "filter-questionType", "filter-stepCount", "filter-valueType", "filter-validity", "filter-mixedNumber"]) {
       document.getElementById(id).addEventListener("change", renderList);
     }
     render();

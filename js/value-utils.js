@@ -34,7 +34,8 @@ import {
   areFractionsEqual,
   isValidFraction,
   simplifyFraction,
-  fractionToNumber
+  fractionToNumber,
+  toMixedNumberParts
 } from "./fraction-utils.js";
 import { normalizePercent, percentToRatio, formatPercent, arePercentValuesEqual } from "./percentage-utils.js";
 import { formatRatio, isValidRatio } from "./ratio-utils.js";
@@ -310,12 +311,21 @@ export function areValuesEqual(a, b) {
  * （formatValue はデバッグ用テキスト・検証ページのテキスト表示など、
  *  縦型HTMLを使わない場所専用です）。
  */
-export function formatValue(value, { simplify = true } = {}) {
+export function formatValue(value, { simplify = true, mixedNumber = false } = {}) {
   if (isFractionValue(value)) {
     const s = simplify ? simplifyFraction(value) : value;
     // 約分の結果、分母が1になる場合（＝整数値の場合）は整数として表示する
     // （第10段階で追加。renderValueHtml() の同様の分岐と挙動を揃えている）。
-    return s.denominator === 1 ? `${s.numerator}` : `${s.numerator}/${s.denominator}`;
+    if (s.denominator === 1) return `${s.numerator}`;
+    // 帯分数表示（第11段階で追加）。値が1以上（分子が分母以上）のときだけ
+    // 「2と3/5」のような帯分数表記にする。1未満の真分数はこれまで通り「3/5」のまま。
+    if (mixedNumber && Math.abs(s.numerator) >= s.denominator) {
+      const parts = toMixedNumberParts(s);
+      // simplify:false で分子が分母の倍数（実質的に整数）になる場合は「2と0/6」にせず整数表示にする。
+      if (parts.numerator === 0) return `${parts.whole}`;
+      return `${parts.whole}と${parts.numerator}/${parts.denominator}`;
+    }
+    return `${s.numerator}/${s.denominator}`;
   }
   if (isPercentValue(value)) {
     return formatPercent(value);

@@ -837,13 +837,20 @@ export function triggerTrainingIncorrectEffect() {
 // 既定は true（約分して表示。これまでと同じ挙動）。
 let currentSimplifyFractions = true;
 
+// 現在表示中の問題が帯分数表示かどうか（第11段階：同分母分数のたし算・ひき算への帯分数追加で追加）。
+// currentSimplifyFractions と同じ考え方で、renderProblem() が problem.template.fractionDisplayMode
+// から設定し、以後の再描画関数もこのモジュール変数を参照する。fractionDisplayMode はテンプレート
+// 自身に紐づく値（セッションごとに変わらない）なので、simplifyFractions と違い、
+// ゲーム側（game.js等）で毎回計算し直す必要はない。既定は false（これまで通りの仮分数表示）。
+let currentMixedNumberDisplay = false;
+
 // 分数を含む問題文は problem.textParts（文字列/値パーツの配列）を持つため、
 // value-renderer.js の renderTextPartsHtml() で縦型分数を含むHTMLとして描画する。
 // 整数・小数のみの問題は textParts を持たないため、従来どおり problem.text を
 // そのまま（エスケープした上で）表示する。
 function renderQuestionText(problem) {
   els.questionText.innerHTML = problem.textParts
-    ? renderTextPartsHtml(problem.textParts, { simplify: currentSimplifyFractions })
+    ? renderTextPartsHtml(problem.textParts, { simplify: currentSimplifyFractions, mixedNumber: currentMixedNumberDisplay })
     : escapeHtml(problem.text);
 }
 
@@ -863,6 +870,7 @@ function renderRelationTable(problem) {
 
 export function renderProblem(problem) {
   currentSimplifyFractions = problem.simplifyFractions !== false;
+  currentMixedNumberDisplay = !!(problem.template && problem.template.fractionDisplayMode === "mixed");
   renderQuestionText(problem);
   updateStepIndicator(problem);
   renderRelationTable(problem);
@@ -959,7 +967,7 @@ function renderChoices() {
     btn.dataset.cardId = card.cardId;
     if (card.type === "number") {
       // 選択肢カードの数字は桁区切りカンマを付けずに表示する（例: "3,900" ではなく "3900"）。
-      btn.innerHTML = renderValueHtml(card.value, { useSeparator: false, simplify: currentSimplifyFractions });
+      btn.innerHTML = renderValueHtml(card.value, { useSeparator: false, simplify: currentSimplifyFractions, mixedNumber: currentMixedNumberDisplay });
     } else {
       btn.textContent = String(card.value);
     }
@@ -978,7 +986,7 @@ function renderSlots() {
     if (card) {
       if (card.type === "number") {
         // 解答欄も選択肢カードと同じく、桁区切りカンマを付けずに表示する。
-        el.innerHTML = renderValueHtml(card.value, { useSeparator: false, simplify: currentSimplifyFractions });
+        el.innerHTML = renderValueHtml(card.value, { useSeparator: false, simplify: currentSimplifyFractions, mixedNumber: currentMixedNumberDisplay });
       } else {
         el.textContent = String(card.value);
       }
@@ -1109,7 +1117,7 @@ function moveDrag(cardData, source, destIndex, destIsPool) {
 function showGhost(x, y, card) {
   if (card.type === "number") {
     // ドラッグ中のカードも、選択肢カード・解答欄と同じくカンマ無しで表示する。
-    els.dragGhost.innerHTML = renderValueHtml(card.value, { useSeparator: false, simplify: currentSimplifyFractions });
+    els.dragGhost.innerHTML = renderValueHtml(card.value, { useSeparator: false, simplify: currentSimplifyFractions, mixedNumber: currentMixedNumberDisplay });
   } else {
     els.dragGhost.textContent = String(card.value);
   }
@@ -1252,13 +1260,13 @@ export function unlockInput() {
 
 // ============== 正解・不正解演出 ==============
 
-export function showCorrectEffect(resultValue, { simplify = true } = {}) {
+export function showCorrectEffect(resultValue, { simplify = true, mixedNumber = false } = {}) {
   // ■欄の答えの数字は、選択肢カード・解答欄と同じく桁区切りカンマを付けずに表示する。
   // 百分率が答えになるのは「割合・百分率」（何%ですかと問う問題）だけのため、
   // その場合だけ「0.5→50%」のように小数と百分率の両方を示す。
   els.resultBox.innerHTML = isPercentValue(resultValue)
     ? renderPercentConversionHtml(resultValue, { useSeparator: false })
-    : renderValueHtml(resultValue, { useSeparator: false, simplify });
+    : renderValueHtml(resultValue, { useSeparator: false, simplify, mixedNumber });
   els.correctMark.classList.add("show");
   nextQuestionTapLock = false;
   window.setTimeout(() => {
@@ -1782,8 +1790,13 @@ function buildSingleStepHistoryHtml(entry, index) {
   // 分数を含む問題文は entry.textParts（value-renderer.js で縦型分数として描画）を使う。
   // 整数・小数のみの問題は textParts を持たないため、entry.text をそのまま表示する。
   const simplify = entry.simplifyFractions !== false;
+  // 帯分数表示だったかどうかも、entry.fractionDisplayMode（プレイ時の値をそのまま複製したもの）
+  // から判定する。simplifyFractions と違い、プレイ中の学期によって変わらない値のため、
+  // 履歴表示時に改めて計算し直す必要はない（第11段階で追加。プレイ時に見たままの表示形式を、
+  // 後から仮分数表示に戻さないようにするため）。
+  const mixedNumber = entry.fractionDisplayMode === "mixed";
   const questionTextHtml = entry.textParts
-    ? renderTextPartsHtml(entry.textParts, { simplify })
+    ? renderTextPartsHtml(entry.textParts, { simplify, mixedNumber })
     : escapeHtml(entry.text);
   // 約分しない表示のときは、entry.result（生成時にすでに約分済みの値）ではなく、
   // 同分母のまま計算した値を使う（value-utils.js の computeUnsimplifiedFractionResult を参照）。
@@ -1795,14 +1808,14 @@ function buildSingleStepHistoryHtml(entry, index) {
   // answerUnit（"%"）は付け足さない。
   const resultDisplayHtml = isPercentValue(displayResult)
     ? renderPercentConversionHtml(displayResult, { useSeparator: false })
-    : `${renderValueHtml(displayResult, { useSeparator: false, simplify })}${escapeHtml(entry.answerUnit || "")}`;
+    : `${renderValueHtml(displayResult, { useSeparator: false, simplify, mixedNumber })}${escapeHtml(entry.answerUnit || "")}`;
   return `
     <div class="history-item-head">
       <span class="history-index">第${index + 1}問</span>
       <span class="history-category">${escapeHtml(entry.category)}</span>
     </div>
     <p class="history-text">${questionTextHtml}</p>
-    <p class="history-formula">正解式：${renderValueHtml(entry.left, { useSeparator: false, simplify })}${entry.operator}${renderValueHtml(entry.right, { useSeparator: false, simplify })} = ${resultDisplayHtml}</p>
+    <p class="history-formula">正解式：${renderValueHtml(entry.left, { useSeparator: false, simplify, mixedNumber })}${entry.operator}${renderValueHtml(entry.right, { useSeparator: false, simplify, mixedNumber })} = ${resultDisplayHtml}</p>
     ${buildHistoryCountsHtml(entry.incorrectCount, entry.timeoutCount)}
   `;
 }

@@ -195,3 +195,49 @@ export function areFractionsEqual(a, b) {
 export function fractionToNumber(value) {
   return value.numerator / value.denominator;
 }
+
+/**
+ * 帯分数（第11段階：同分母分数のたし算・ひき算への帯分数追加で導入）。
+ * 内部値としての帯分数専用の型は用意せず、既存の
+ * { type:"fraction", numerator, denominator }（仮分数）のまま計算・比較を行い、
+ * 表示のときだけ toMixedNumberParts() で整数部・分子部に分解します。
+ * fraction は正規化済み（分母が正）である前提です。分子が負の場合は
+ * 呼び出し側で符号を扱ってください（このゲームでは帯分数表示の対象を
+ * 常に0以上の分数に限定しているため、負の分数は渡されません）。
+ * 例: 13/5 → { whole:2, numerator:3, denominator:5 }
+ */
+export function toMixedNumberParts(fraction) {
+  const whole = Math.floor(fraction.numerator / fraction.denominator);
+  const numerator = fraction.numerator - whole * fraction.denominator;
+  return { whole, numerator, denominator: fraction.denominator };
+}
+
+/**
+ * 帯分数（整数部・分子部・分母）を仮分数へ変換します。toMixedNumberParts の逆変換。
+ * 例: whole=2, numerator=3, denominator=5 → { type:"fraction", numerator:13, denominator:5 }
+ */
+export function mixedNumberToImproperFraction(whole, numerator, denominator) {
+  return {
+    type: "fraction",
+    numerator: whole * denominator + numerator,
+    denominator
+  };
+}
+
+/**
+ * 帯分数の整数部・分子部・分母として妥当かどうかを判定します
+ * （整数部は1以上、分子は1以上かつ分母未満、分母は2以上の整数であることを要求）。
+ * このゲームでは whole=0 や numerator=0 の帯分数（＝実質整数や真分数）は
+ * 帯分数として表示せず、常にこの条件を満たす値のみを帯分数として扱います。
+ */
+export function isValidMixedNumberParts({ whole, numerator, denominator }) {
+  return (
+    Number.isInteger(whole) &&
+    whole >= 1 &&
+    Number.isInteger(numerator) &&
+    numerator >= 1 &&
+    Number.isInteger(denominator) &&
+    denominator >= 2 &&
+    numerator < denominator
+  );
+}

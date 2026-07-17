@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>全範囲品質確認 - さんすう文章題クエスト！</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #14101f;
+    --panel: #201a33;
+    --panel-border: rgba(255, 255, 255, 0.1);
+    --text: #f2eeff;
+    --text-dim: #a99fc9;
+    --ok: #3ddc84;
+    --error: #ff5d78;
+    --warning: #ffd23f;
+    --review: #9dafff;
+    --accent: #ffd23f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", system-ui, sans-serif;
+    line-height: 1.6;
+  }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  h1 .cross-link { font-size: 0.8rem; font-weight: 500; }
+  h2 { font-size: 1.05rem; margin: 28px 0 10px; }
+  a { color: var(--accent); }
+  p.desc { color: var(--text-dim); margin: 0 0 20px; font-size: 0.9rem; }
+  section { margin-bottom: 12px; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+  }
+  .settings-grid, .checks-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px 16px;
+    margin-bottom: 12px;
+  }
+  label { font-size: 0.82rem; color: var(--text-dim); display: flex; flex-direction: column; gap: 4px; }
+  .checks-grid label { flex-direction: row; align-items: center; gap: 6px; color: var(--text); }
+  select, input[type="text"], input[type="number"] {
+    background: #14102a;
+    color: var(--text);
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 0.85rem;
+  }
+  .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  button {
+    background: var(--accent);
+    color: #2b1b00;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 16px;
+    font-weight: 700;
+    font-size: 0.88rem;
+    cursor: pointer;
+  }
+  button.secondary { background: #372a57; color: var(--text); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .stat-box { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 12px; padding: 10px 16px; min-width: 120px; }
+  .stat-box .label { font-size: 0.72rem; color: var(--text-dim); }
+  .stat-box .value { font-size: 1.4rem; font-weight: 800; }
+  .stat-box.error .value { color: var(--error); }
+  .stat-box.warning .value { color: var(--warning); }
+  .stat-box.review .value { color: var(--review); }
+  .stat-box.ok .value { color: var(--ok); }
+  #progress-text { font-size: 0.85rem; color: var(--text-dim); margin-bottom: 6px; white-space: pre-line; }
+  .progress-bar-outer { background: #14102a; border-radius: 999px; height: 10px; overflow: hidden; }
+  .progress-bar-inner { background: var(--accent); height: 100%; width: 0%; transition: width 0.15s ease; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.82rem; margin-bottom: 10px; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--panel-border); }
+  th { color: var(--text-dim); font-weight: 700; }
+  .breakdown-tables { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .finding-card {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-left-width: 4px;
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    font-size: 0.85rem;
+  }
+  .finding-card.error { border-left-color: var(--error); }
+  .finding-card.warning { border-left-color: var(--warning); }
+  .finding-card.review { border-left-color: var(--review); }
+  .badge { font-size: 0.68rem; font-weight: 800; padding: 2px 8px; border-radius: 999px; margin-right: 6px; }
+  .badge-error { background: rgba(255, 93, 120, 0.2); color: var(--error); }
+  .badge-warning { background: rgba(255, 210, 63, 0.2); color: var(--warning); }
+  .badge-review { background: rgba(157, 175, 255, 0.2); color: var(--review); }
+  .rule-id { font-family: "Consolas", "Menlo", monospace; font-size: 0.72rem; color: var(--text-dim); }
+  .finding-meta { font-size: 0.72rem; color: var(--text-dim); margin: 4px 0; }
+  .finding-message { margin: 4px 0; }
+  .reproduce-btn { font-size: 0.72rem; padding: 4px 10px; margin-top: 4px; }
+  #results-count { font-size: 0.82rem; color: var(--text-dim); margin-bottom: 10px; }
+  #self-test-results .finding-card { border-left-color: var(--ok); }
+  #self-test-results .finding-card.fail { border-left-color: var(--error); }
+  .preview-frame-outer { overflow-x: auto; background: #0c0918; border-radius: 12px; padding: 16px; }
+  .preview-frame {
+    margin: 0 auto;
+    background: #241a3d;
+    border-radius: 12px;
+    padding: 14px;
+    font-size: 0.95rem;
+  }
+  .preview-frame .relation-table-wrap { overflow-x: auto; }
+  .preview-choice-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .preview-card { background: #3a2c5c; border-radius: 8px; padding: 6px 10px; font-size: 0.85rem; white-space: nowrap; }
+  .overflow-warning { color: var(--error); font-size: 0.8rem; margin-top: 8px; }
+  /* 実際のゲームと同じ js/value-renderer.js が出力するクラス名（.fraction 等）に、
+     プレビュー用の最小限のスタイルだけを当てる（見た目の再実装はしない）。 */
+  .fraction { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; font-size: 0.85em; line-height: 1.15; margin: 0 2px; }
+  .fraction-numerator { border-bottom: 1px solid currentColor; padding: 0 3px; }
+  .fraction-denominator { padding: 0 3px; }
+  .relation-table { border-collapse: collapse; margin-top: 8px; }
+  .relation-table th, .relation-table td { border: 1px solid var(--panel-border); padding: 4px 8px; }
+  #self-test-summary, #preview-index-label { font-size: 0.8rem; color: var(--text-dim); }
+</style>
+</head>
+<body>
+  <h1>全範囲品質確認 <span class="cross-link">⇔ <a href="./question-validator.html">問題データ検証ツール</a></span></h1>
+  <p class="desc">
+    開発者用ツールです。<code>data/index.js</code> に登録されているすべての正式学期・
+    <code>category-registry.js</code> に登録されているすべての有効カテゴリを対象に、
+    テンプレートごとに（既定で）100回ずつ、乱数シードを変えながら問題を生成し、正解式・問題文・
+    単位・選択肢カードの整合性、最終答え・中間結果の漏えい、重複・連続出題、数値難易度、
+    通常バトル・トレーニング・総復習の出題セット、1〜3段階問題の回帰（ミス・時間切れ）を
+    まとめて確認します。個々のテンプレートを詳しく見たい場合は
+    <a href="./question-validator.html">問題データ検証ツール</a>を使ってください。
+    プレイヤーの保存データ（ハイスコア・エネミー図鑑・設定など）は一切変更しません。
+  </p>
+
+  <div class="panel">
+    <h2 style="margin-top:0;">検証設定</h2>
+    <div class="settings-grid">
+      <label>出題範囲（学期）
+        <select id="filter-gradeTerm"><option value="all">すべて</option></select>
+      </label>
+      <label>カテゴリ
+        <select id="filter-category"><option value="all">すべて</option></select>
+      </label>
+      <label>テンプレートID（部分一致）
+        <input id="filter-templateId" type="text" placeholder="例: g6t3_scale" />
+      </label>
+      <label style="flex-direction:row;align-items:center;gap:6px;">
+        <input type="checkbox" id="include-dev" />
+        開発版・共有テンプレート（4-multi-step）を含む
+      </label>
+    </div>
+    <div class="settings-grid">
+      <label>1テンプレートあたりの生成回数
+        <select id="generation-count-preset">
+          <option value="10">簡易確認：10回</option>
+          <option value="100" selected>標準確認：100回</option>
+          <option value="500">重点確認：500回</option>
+          <option value="custom">カスタム入力</option>
+        </select>
+      </label>
+      <label id="generation-count-custom-wrap" style="display:none;">カスタム回数
+        <input id="generation-count-custom" type="number" min="1" max="5000" value="100" />
+      </label>
+      <label>出題セットの生成数（通常バトル・トレーニング・総復習）
+        <input id="set-count" type="number" min="1" max="500" value="20" />
+      </label>
+      <label>乱数シードの開始値
+        <input id="base-seed" type="number" value="1" />
+      </label>
+    </div>
+    <div class="checks-grid">
+      <label><input type="checkbox" id="check-generatedQuestion" checked /> テンプレート構造検証・生成済み問題検証・カード検証</label>
+      <label><input type="checkbox" id="check-routeSimulation" checked /> 全解法ルート完答テスト（多段階問題）</label>
+      <label><input type="checkbox" id="check-questionSetQuality" checked /> 問題文・数量関係の検証</label>
+      <label><input type="checkbox" id="check-numericDifficulty" checked /> 数値難易度分析</label>
+      <label><input type="checkbox" id="check-battleSet" checked /> 通常バトル問題セット検証</label>
+      <label><input type="checkbox" id="check-trainingSet" checked /> トレーニング問題セット検証</label>
+      <label><input type="checkbox" id="check-reviewSet" checked /> 総復習問題セット検証</label>
+      <label><input type="checkbox" id="check-multiStepRegression" checked /> 1〜3段階の回帰テスト（ミス・時間切れ）</label>
+    </div>
+    <div class="toolbar">
+      <button id="start-btn" type="button">検証を開始</button>
+      <button id="pause-btn" class="secondary" type="button" disabled>一時停止</button>
+      <button id="resume-btn" class="secondary" type="button" disabled>再開</button>
+      <button id="abort-btn" class="secondary" type="button" disabled>中止</button>
+      <button id="self-test-btn" class="secondary" type="button">自己診断を実行</button>
+    </div>
+  </div>
+
+  <section id="progress-section" class="panel" style="display:none;">
+    <div id="progress-text"></div>
+    <div class="progress-bar-outer"><div class="progress-bar-inner" id="progress-bar"></div></div>
+  </section>
+
+  <section id="self-test-section" style="display:none;">
+    <h2>自己診断結果（意図的な不正データが正しく検出されるか）</h2>
+    <div id="self-test-summary"></div>
+    <div id="self-test-results"></div>
+  </section>
+
+  <section id="summary-section" style="display:none;">
+    <h2>集計結果</h2>
+    <div class="stats" id="summary-stats"></div>
+    <div class="breakdown-tables" id="breakdown-tables"></div>
+  </section>
+
+  <section id="results-section" style="display:none;">
+    <h2>エラー・警告・目視確認の一覧</h2>
+    <div class="settings-grid">
+      <label>種別
+        <select id="result-filter-severity">
+          <option value="all">すべて</option>
+          <option value="error">エラーのみ</option>
+          <option value="warning">警告のみ</option>
+          <option value="review">目視確認のみ</option>
+        </select>
+      </label>
+      <label>ルールID
+        <select id="result-filter-rule"><option value="all">すべて</option></select>
+      </label>
+      <label>出題範囲
+        <select id="result-filter-gradeTerm"><option value="all">すべて</option></select>
+      </label>
+      <label>検索（問題文・メッセージ）
+        <input id="result-search" type="text" placeholder="キーワード" />
+      </label>
+    </div>
+    <div id="results-count"></div>
+    <div id="results-list"></div>
+  </section>
+
+  <section id="mobile-preview-section" class="panel">
+    <h2 style="margin-top:0;">スマートフォン表示プレビュー</h2>
+    <p class="desc">
+      実際のゲームと同じ <code>js/value-renderer.js</code> を使って、代表的な問題（長い問題文・
+      大きな数値・分数・多段階問題・要確認になった問題など）を選んだ幅でプレビューします。
+      横スクロールやはみ出しが起きていないかを自動検出しますが、最終的な見た目の良し悪しは
+      必ず目視でも確認してください。
+    </p>
+    <div class="toolbar">
+      <label>表示幅
+        <select id="preview-width">
+          <option value="320">320px</option>
+          <option value="375" selected>375px</option>
+          <option value="390">390px</option>
+          <option value="768">768px</option>
+        </select>
+      </label>
+      <button id="preview-prev" class="secondary" type="button">← 前の要確認問題</button>
+      <button id="preview-next" class="secondary" type="button">次の要確認問題 →</button>
+      <span id="preview-index-label"></span>
+    </div>
+    <div class="preview-frame-outer">
+      <div class="preview-frame" id="preview-frame"></div>
+    </div>
+    <div id="preview-overflow-warnings"></div>
+  </section>
+
+  <section id="report-section" class="panel">
+    <h2 style="margin-top:0;">レポート出力</h2>
+    <div class="toolbar">
+      <button id="download-json-btn" class="secondary" type="button">JSONをダウンロード</button>
+      <button id="download-csv-btn" class="secondary" type="button">CSVをダウンロード</button>
+      <button id="copy-errors-btn" class="secondary" type="button">エラーのみコピー</button>
+      <span id="report-status" style="font-size:0.8rem;color:var(--text-dim);"></span>
+    </div>
+  </section>
+
+  <script type="module">
+import {
+  runQualityCheck,
+  pauseQualityCheck,
+  resumeQualityCheck,
+  abortQualityCheck,
+  reproduceQuestion,
+  runQualitySelfTest,
+  buildJsonReport,
+  buildCsvReport,
+  buildErrorsOnlyText,
+  getAvailableGradeTerms,
+  DEFAULT_GENERATION_COUNT,
+  formatProblemForPreview
+} from "./quality-check.js";
+import { categoryRegistry } from "../data/category-registry.js";
+import { escapeHtml } from "../js/value-renderer.js";
+
+const el = (id) => document.getElementById(id);
+
+// ============================================================
+// 検証対象の選択肢を、data/index.js・category-registry.js から動的に作る
+// （学期数・カテゴリ数を固定値として書かない）。
+// ============================================================
+
+function populateGradeTermFilter() {
+  const gradeTerms = getAvailableGradeTerms().sort();
+  el("filter-gradeTerm").innerHTML =
+    '<option value="all">すべて</option>' + gradeTerms.map((g) => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join("");
+}
+
+function populateCategoryFilter() {
+  const cats = categoryRegistry.slice().sort((a, b) => a.order - b.order);
+  el("filter-category").innerHTML =
+    '<option value="all">すべて</option>' +
+    cats.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.gradeLabel)} ／ ${escapeHtml(c.label)}</option>`).join("");
+}
+
+populateGradeTermFilter();
+populateCategoryFilter();
+
+el("generation-count-preset").addEventListener("change", () => {
+  const isCustom = el("generation-count-preset").value === "custom";
+  el("generation-count-custom-wrap").style.display = isCustom ? "flex" : "none";
+});
+
+function getGenerationCount() {
+  const preset = el("generation-count-preset").value;
+  if (preset !== "custom") return Number.parseInt(preset, 10);
+  const v = Number.parseInt(el("generation-count-custom").value, 10);
+  if (!Number.isFinite(v) || v <= 0) return DEFAULT_GENERATION_COUNT;
+  if (v > 1000) {
+    const proceed = window.confirm(
+      `生成回数が${v}回に設定されています。テンプレート数によってはブラウザの動作が遅くなる場合がありますが、続けますか？`
+    );
+    if (!proceed) return 1000;
+  }
+  return v;
+}
+
+function buildConfig() {
+  return {
+    gradeTerm: el("filter-gradeTerm").value,
+    categoryId: el("filter-category").value,
+    templateId: el("filter-templateId").value,
+    includeDevTemplates: el("include-dev").checked,
+    generationCount: getGenerationCount(),
+    baseSeed: Number.parseInt(el("base-seed").value, 10) || 1,
+    setCount: Math.max(1, Number.parseInt(el("set-count").value, 10) || 20),
+    checks: {
+      generatedQuestion: el("check-generatedQuestion").checked,
+      routeSimulation: el("check-routeSimulation").checked,
+      battleSet: el("check-battleSet").checked,
+      trainingSet: el("check-trainingSet").checked,
+      reviewSet: el("check-reviewSet").checked,
+      questionSetQuality: el("check-questionSetQuality").checked,
+      numericDifficulty: el("check-numericDifficulty").checked,
+      multiStepRegression: el("check-multiStepRegression").checked
+    }
+  };
+}
+
+// ============================================================
+// 実行制御
+// ============================================================
+
+let lastResult = null;
+let lastConfig = null;
+
+function setRunningButtons(running, paused) {
+  el("start-btn").disabled = running;
+  el("pause-btn").disabled = !running || paused;
+  el("resume-btn").disabled = !running || !paused;
+  el("abort-btn").disabled = !running;
+}
+
+function formatElapsed(ms) {
+  const s = Math.floor(ms / 1000);
+  return `${Math.floor(s / 60)}分${s % 60}秒`;
+}
+
+function updateProgress(p) {
+  el("progress-section").style.display = "block";
+  let text = "";
+  if (p.phase === "templates") {
+    const pct = p.templateCount > 0 ? Math.round((p.templateIndex / p.templateCount) * 100) : 0;
+    text = [
+      `全体進行: ${pct}%（${p.templateIndex}／${p.templateCount}テンプレート）`,
+      `現在: ${p.currentGradeTerm}／${p.currentCategory}`,
+      `テンプレート: ${p.currentTemplateId}`,
+      `${p.currentGenerationIndex}／${p.generationCount}回`,
+      `経過時間: ${formatElapsed(p.elapsedMs)}`
+    ].join("\n");
+    el("progress-bar").style.width = `${pct}%`;
+  } else if (p.phase === "regression") {
+    text = `1〜3段階の回帰テスト中: ${p.currentTemplateId}（${p.templateIndex}／${p.templateCount}）\n経過時間: ${formatElapsed(p.elapsedMs)}`;
+  } else if (p.phase === "battleSet") {
+    text = `通常バトル出題セット検証中: ${p.currentGradeTerm} レベル${p.currentLevel}（${p.currentSetIndex}セット目）\n経過時間: ${formatElapsed(p.elapsedMs)}`;
+  } else if (p.phase === "trainingSet") {
+    text = `トレーニング出題セット検証中: ${p.currentCategory}\n経過時間: ${formatElapsed(p.elapsedMs)}`;
+  } else if (p.phase === "reviewSet") {
+    text = `総復習出題セット検証中: ${p.currentCategory}（${p.currentSetIndex}セット目）\n経過時間: ${formatElapsed(p.elapsedMs)}`;
+  }
+  el("progress-text").textContent = text;
+}
+
+el("start-btn").addEventListener("click", async () => {
+  const config = buildConfig();
+  lastConfig = config;
+  setRunningButtons(true, false);
+  el("summary-section").style.display = "none";
+  el("results-section").style.display = "none";
+  el("progress-bar").style.width = "0%";
+  el("report-status").textContent = "";
+
+  try {
+    const result = await runQualityCheck(config, { onProgress: updateProgress });
+    lastResult = result;
+    renderSummary(result);
+    populateResultFilters(result);
+    renderResultsList();
+    buildReviewQueue(result);
+    el("report-status").textContent = result.aborted ? "（中止されたため、途中結果です）" : "検証が完了しました。";
+  } catch (error) {
+    el("progress-text").textContent = `検証中にエラーが発生しました: ${error.message}`;
+    console.error(error);
+  } finally {
+    setRunningButtons(false, false);
+  }
+});
+
+el("pause-btn").addEventListener("click", () => {
+  pauseQualityCheck();
+  setRunningButtons(true, true);
+});
+el("resume-btn").addEventListener("click", () => {
+  resumeQualityCheck();
+  setRunningButtons(true, false);
+});
+el("abort-btn").addEventListener("click", () => {
+  abortQualityCheck();
+});
+
+// ============================================================
+// 自己診断（意図的な不正データが正しく検出されるか）
+// ============================================================
+
+el("self-test-btn").addEventListener("click", () => {
+  const results = runQualitySelfTest();
+  el("self-test-section").style.display = "block";
+  const passCount = results.filter((r) => r.passed).length;
+  el("self-test-summary").textContent = `${results.length}件中 ${passCount}件が正しく検出されました。`;
+  const container = el("self-test-results");
+  container.innerHTML = "";
+  for (const r of results) {
+    const card = document.createElement("div");
+    card.className = `finding-card ${r.passed ? "" : "fail"}`;
+    const badgeStyle = r.passed
+      ? "background:rgba(61,220,132,0.2);color:var(--ok);"
+      : "background:rgba(255,93,120,0.2);color:var(--error);";
+    card.innerHTML = `
+      <span class="badge" style="${badgeStyle}">${r.passed ? "検出OK" : "未検出"}</span>
+      <span class="rule-id">${escapeHtml(r.expectedRuleId)}</span>
+      <div class="finding-message">${escapeHtml(r.name)}</div>
+      <div class="finding-meta">${escapeHtml(r.detail || "")}</div>
+    `;
+    container.appendChild(card);
+  }
+});
+
+// ============================================================
+// 集計結果の表示
+// ============================================================
+
+function renderSummary(result) {
+  el("summary-section").style.display = "block";
+  const stats = [
+    ["対象テンプレート数", result.templateCount, ""],
+    ["総生成回数", result.totalGenerations, ""],
+    ["エラー件数", result.errorCount, "error"],
+    ["警告件数", result.warningCount, "warning"],
+    ["目視確認待ち件数", result.reviewCount, "review"],
+    ["検証済み学期数", result.gradeTermCount, ""],
+    ["検証済みカテゴリ数", result.categoryCount, ""],
+    ["通常バトルセット数", result.battleSetsChecked, ""],
+    ["トレーニングセット数", result.trainingSetsChecked, ""],
+    ["総復習セット数", result.reviewSetsChecked, ""],
+    ["経過時間", formatElapsed(result.elapsedMs), ""]
+  ];
+  el("summary-stats").innerHTML = stats
+    .map(([label, value, cls]) => `<div class="stat-box ${cls}"><div class="label">${escapeHtml(label)}</div><div class="value">${escapeHtml(String(value))}</div></div>`)
+    .join("");
+
+  const tables = [
+    ["学期別", result.breakdown.byGradeTerm],
+    ["カテゴリ別", result.breakdown.byCategory],
+    ["ルールID別", result.breakdown.byRule]
+  ];
+  el("breakdown-tables").innerHTML = tables
+    .map(([title, map]) => {
+      const rows = Object.entries(map).sort((a, b) => b[1].error + b[1].warning - (a[1].error + a[1].warning));
+      if (rows.length === 0) return `<div><h3>${escapeHtml(title)}</h3><p class="finding-meta">該当なし</p></div>`;
+      return `<div><h3>${escapeHtml(title)}</h3><table><thead><tr><th>${escapeHtml(title)}</th><th>エラー</th><th>警告</th><th>目視確認</th></tr></thead><tbody>
+        ${rows.map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td>${v.error || 0}</td><td>${v.warning || 0}</td><td>${v.review || 0}</td></tr>`).join("")}
+      </tbody></table></div>`;
+    })
+    .join("");
+}
+
+// ============================================================
+// エラー・警告・目視確認の一覧（絞り込み・検索）
+// ============================================================
+
+function populateResultFilters(result) {
+  el("results-section").style.display = "block";
+  const rules = [...new Set(result.findings.map((f) => f.ruleId))].sort();
+  el("result-filter-rule").innerHTML = '<option value="all">すべて</option>' + rules.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join("");
+  const gradeTerms = [...new Set(result.findings.map((f) => f.gradeTerm))].sort();
+  el("result-filter-gradeTerm").innerHTML =
+    '<option value="all">すべて</option>' + gradeTerms.map((g) => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join("");
+}
+
+function applyResultFilters(findings) {
+  const severity = el("result-filter-severity").value;
+  const rule = el("result-filter-rule").value;
+  const gradeTerm = el("result-filter-gradeTerm").value;
+  const search = el("result-search").value.trim().toLowerCase();
+  return findings.filter((f) => {
+    if (severity !== "all" && f.severity !== severity) return false;
+    if (rule !== "all" && f.ruleId !== rule) return false;
+    if (gradeTerm !== "all" && f.gradeTerm !== gradeTerm) return false;
+    if (search) {
+      const haystack = `${f.message} ${f.questionText || ""} ${f.templateId}`.toLowerCase();
+      if (!haystack.includes(search)) return false;
+    }
+    return true;
+  });
+}
+
+function renderResultsList() {
+  if (!lastResult) return;
+  const filtered = applyResultFilters(lastResult.findings);
+  el("results-count").textContent = `表示中: ${filtered.length} / ${lastResult.findings.length} 件`;
+  const container = el("results-list");
+  container.innerHTML = "";
+  const MAX_RENDER = 300;
+  for (const f of filtered.slice(0, MAX_RENDER)) {
+    container.appendChild(renderFindingCard(f));
+  }
+  if (filtered.length > MAX_RENDER) {
+    const note = document.createElement("div");
+    note.className = "finding-meta";
+    note.textContent = `他 ${filtered.length - MAX_RENDER} 件は画面表示を省略しています（検索・絞り込みで対象を絞ってください。JSON/CSVレポートには全件含まれます）。`;
+    container.appendChild(note);
+  }
+}
+
+function renderFindingCard(f) {
+  const card = document.createElement("div");
+  card.className = `finding-card ${f.severity}`;
+  const badgeClass = f.severity === "error" ? "badge-error" : f.severity === "warning" ? "badge-warning" : "badge-review";
+  const badgeLabel = f.severity === "error" ? "エラー" : f.severity === "warning" ? "警告" : "目視確認";
+  const canReproduce = f.templateId && f.templateId !== "-" && f.seed !== null && f.seed !== undefined;
+  card.innerHTML = `
+    <span class="badge ${badgeClass}">${badgeLabel}</span>
+    <span class="rule-id">${escapeHtml(f.ruleId)}</span>
+    <div class="finding-message">${escapeHtml(f.message)}</div>
+    <div class="finding-meta">
+      ${escapeHtml(f.gradeTerm || "-")} / ${escapeHtml(f.category || "-")} / templateId: ${escapeHtml(f.templateId || "-")}
+      ${f.generationIndex !== null && f.generationIndex !== undefined ? ` / generationIndex: ${f.generationIndex}` : ""}
+      ${f.seed !== null && f.seed !== undefined ? ` / seed: ${f.seed}` : ""}
+    </div>
+    ${f.questionText ? `<div class="finding-meta">問題文: ${escapeHtml(f.questionText)}</div>` : ""}
+    ${canReproduce ? `<button class="secondary reproduce-btn" type="button" data-template-id="${escapeHtml(f.templateId)}" data-seed="${f.seed}">この条件で再実行</button>` : ""}
+  `;
+  const btn = card.querySelector(".reproduce-btn");
+  if (btn) {
+    btn.addEventListener("click", () => {
+      const problem = reproduceQuestion(btn.dataset.templateId, Number.parseInt(btn.dataset.seed, 10));
+      if (problem) {
+        showPreview(problem);
+        el("mobile-preview-section").scrollIntoView({ behavior: "smooth" });
+      }
+    });
+  }
+  return card;
+}
+
+for (const id of ["result-filter-severity", "result-filter-rule", "result-filter-gradeTerm", "result-search"]) {
+  el(id).addEventListener("input", renderResultsList);
+  el(id).addEventListener("change", renderResultsList);
+}
+
+// ============================================================
+// スマートフォン表示プレビュー（section 25〜27）
+// ============================================================
+
+let reviewQueue = [];
+let reviewIndex = -1;
+let currentPreviewProblem = null;
+
+function buildReviewQueue(result) {
+  reviewQueue = result.findings.filter((f) => f.severity !== "error" && f.sample && f.sample.questionText && f.templateId && f.seed !== null && f.seed !== undefined);
+  reviewIndex = reviewQueue.length > 0 ? 0 : -1;
+  if (reviewIndex >= 0) {
+    showPreviewFromFinding(reviewQueue[reviewIndex]);
+  }
+}
+
+function showPreviewFromFinding(finding) {
+  if (!finding) return;
+  const problem = reproduceQuestion(finding.templateId, finding.seed);
+  if (problem) showPreview(problem);
+  el("preview-index-label").textContent = reviewQueue.length > 0 ? `${reviewIndex + 1} / ${reviewQueue.length} 件目の要確認問題` : "要確認の問題はありません";
+}
+
+el("preview-prev").addEventListener("click", () => {
+  if (reviewQueue.length === 0) return;
+  reviewIndex = (reviewIndex - 1 + reviewQueue.length) % reviewQueue.length;
+  showPreviewFromFinding(reviewQueue[reviewIndex]);
+});
+el("preview-next").addEventListener("click", () => {
+  if (reviewQueue.length === 0) return;
+  reviewIndex = (reviewIndex + 1) % reviewQueue.length;
+  showPreviewFromFinding(reviewQueue[reviewIndex]);
+});
+el("preview-width").addEventListener("change", () => {
+  if (currentPreviewProblem) showPreview(currentPreviewProblem);
+});
+
+function showPreview(problem) {
+  currentPreviewProblem = problem;
+  const width = Number.parseInt(el("preview-width").value, 10);
+  const frame = el("preview-frame");
+  frame.style.width = `${width}px`;
+  const formatted = formatProblemForPreview(problem);
+  const cardsHtml = (problem.choices || [])
+    .map((c) => {
+      const label = c.type === "number" && typeof c.value === "object" ? JSON.stringify(c.value) : String(c.value);
+      return `<span class="preview-card">${escapeHtml(label)}</span>`;
+    })
+    .join("");
+  const answerLine =
+    problem.questionType === "multiStep"
+      ? `→ 答え: ${formatted.resultHtml}${escapeHtml(formatted.unit || "")}`
+      : `= ${formatted.resultHtml}${escapeHtml(formatted.unit || "")}`;
+  frame.innerHTML = `
+    <div class="preview-text">${formatted.textHtml}</div>
+    ${formatted.relationTableHtml ? `<div class="relation-table-wrap">${formatted.relationTableHtml}</div>` : ""}
+    <div class="preview-choice-row">${cardsHtml}</div>
+    <div class="finding-meta" style="margin-top:10px;">正解: ${formatted.formulaHtml} ${answerLine}</div>
+  `;
+
+  window.requestAnimationFrame(() => {
+    const warnings = [];
+    if (frame.scrollWidth > frame.clientWidth + 1) {
+      warnings.push(`問題カード全体の幅(${frame.scrollWidth}px)が表示幅(${frame.clientWidth}px)を超えています。`);
+    }
+    const textEl = frame.querySelector(".preview-text");
+    if (textEl && textEl.scrollWidth > textEl.clientWidth + 1) {
+      warnings.push("問題文がコンテナからはみ出しています。");
+    }
+    el("preview-overflow-warnings").innerHTML = warnings.length
+      ? warnings.map((w) => `<div class="overflow-warning">⚠ ${escapeHtml(w)}</div>`).join("")
+      : `<div class="finding-meta">横はみ出しは検出されませんでした（自動検出のみのため、必ず目視でも確認してください）。</div>`;
+  });
+}
+
+// ============================================================
+// レポート出力（JSON・CSV・エラーのみコピー）
+// ============================================================
+
+function downloadFile(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+el("download-json-btn").addEventListener("click", () => {
+  if (!lastResult) {
+    el("report-status").textContent = "先に検証を実行してください。";
+    return;
+  }
+  const report = buildJsonReport(lastConfig, lastResult);
+  downloadFile(`quality-check-${Date.now()}.json`, JSON.stringify(report, null, 2), "application/json");
+});
+el("download-csv-btn").addEventListener("click", () => {
+  if (!lastResult) {
+    el("report-status").textContent = "先に検証を実行してください。";
+    return;
+  }
+  downloadFile(`quality-check-${Date.now()}.csv`, buildCsvReport(lastResult), "text/csv");
+});
+el("copy-errors-btn").addEventListener("click", async () => {
+  if (!lastResult) {
+    el("report-status").textContent = "先に検証を実行してください。";
+    return;
+  }
+  const text = buildErrorsOnlyText(lastResult);
+  try {
+    await navigator.clipboard.writeText(text || "（エラーはありません）");
+    el("report-status").textContent = "エラーのみクリップボードへコピーしました。";
+  } catch (error) {
+    el("report-status").textContent = `コピーに失敗しました: ${error.message}`;
+  }
+});
+  </script>
+</body>
+</html>

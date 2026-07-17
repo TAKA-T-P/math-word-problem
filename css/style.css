@@ -761,6 +761,28 @@ button {
   font-size: 0.95rem;
 }
 
+/* 帯分数の表示（整数部＋縦型分数を横並び。同分母分数のたし算・ひき算の一部問題、
+   第11段階で追加）。分数部分は既存の縦型分数（.fraction）をそのまま流用し、
+   整数部と分数部の間で改行されたり、行の途中で分かれて表示されたりしないよう
+   nowrapで1つの単語として扱う。 */
+.mixed-number {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.mixed-number-whole {
+  font-weight: 800;
+  margin-right: 2px;
+}
+
+.choice-card .mixed-number-whole,
+.answer-slot .mixed-number-whole,
+.drag-ghost .mixed-number-whole {
+  font-size: 0.95rem;
+}
+
 /* 比の表示（「5：3」。小学6年生2学期、第11段階で追加）。
    前項・コロン・後項の間で改行させないよう、常に1つの単語として扱う。 */
 .ratio-value {
@@ -1828,6 +1850,10 @@ button {
   .choice-card .fraction-denominator,
   .answer-slot .fraction-numerator,
   .answer-slot .fraction-denominator {
+    font-size: 0.82rem;
+  }
+  .choice-card .mixed-number-whole,
+  .answer-slot .mixed-number-whole {
     font-size: 0.82rem;
   }
 }

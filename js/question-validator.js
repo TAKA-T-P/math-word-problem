@@ -28,6 +28,37 @@ const MAX_REASONABLE_DECIMAL_PLACES = 2;
 const MIN_REASONABLE_FRACTION_DENOMINATOR = 2;
 const MAX_REASONABLE_FRACTION_DENOMINATOR = 12;
 
+// 帯分数機能（fractionDisplayMode="mixed" / variables内のtype:"mixedFraction"）の使用を許可する
+// カテゴリID（第11段階：同分母分数のたし算・ひき算への帯分数追加で追加）。
+// この2カテゴリ以外に帯分数機能が漏れて登録されていないかを検証するために使用します。
+const MIXED_NUMBER_ALLOWED_CATEGORY_IDS = new Set([
+  "same-denominator-fraction-addition",
+  "same-denominator-fraction-subtraction"
+]);
+
+// mixedNumberPattern（デバッグ表示・品質確認ツール専用のメタ情報）として許容する値。
+const VALID_MIXED_NUMBER_PATTERNS = new Set([
+  "addition-no-carry",
+  "addition-with-carry",
+  "subtraction-no-borrow",
+  "subtraction-with-borrow"
+]);
+
+/**
+ * テンプレートが帯分数機能を使用しているかどうかを判定します
+ * （fractionDisplayMode="mixed"、または variables のいずれかが type:"mixedFraction"）。
+ */
+function usesMixedNumberFeature(template) {
+  if (template.fractionDisplayMode === "mixed") return true;
+  const variables = template.variables;
+  if (variables && typeof variables === "object") {
+    for (const range of Object.values(variables)) {
+      if (range && typeof range === "object" && range.type === "mixedFraction") return true;
+    }
+  }
+  return false;
+}
+
 // 現在 data/index.js に登録されている出題範囲キー。新しい学期を追加したら、
 // ここにも追加してください（data/index.js から自動取得すると循環参照になりやすいため、
 // 検証専用の一覧として独立させています）。
@@ -1309,6 +1340,53 @@ function validateFractionVariable(key, range, errors) {
 }
 
 /**
+ * 帯分数型の変数定義 { type:"mixedFraction", denominator, wholeMin, wholeMax, numeratorMin, numeratorMax }
+ * を検証します（第11段階：同分母分数のたし算・ひき算への帯分数追加で追加）。
+ * 分母の妥当性チェックは validateFractionVariable と同じ基準を使い、整数部（whole）は1以上、
+ * 分子（numerator）は1以上かつ分母未満（＝真分数の分子として成立する範囲）であることを要求します
+ * （whole=0 や numerator=0 の帯分数は、このゲームでは仕様上作らないため）。
+ */
+function validateMixedFractionVariable(key, range, errors) {
+  if (!Number.isInteger(range.denominator) || range.denominator === 0) {
+    errors.push(`variables.${key}.denominator は0以外の整数である必要があります: ${range.denominator}`);
+  } else if (
+    range.denominator < MIN_REASONABLE_FRACTION_DENOMINATOR ||
+    range.denominator > MAX_REASONABLE_FRACTION_DENOMINATOR
+  ) {
+    errors.push(
+      `variables.${key}.denominator が範囲外です: ${range.denominator}` +
+        `（${MIN_REASONABLE_FRACTION_DENOMINATOR}〜${MAX_REASONABLE_FRACTION_DENOMINATOR}である必要があります）`
+    );
+  }
+  if (!Number.isInteger(range.wholeMin) || !Number.isInteger(range.wholeMax)) {
+    errors.push(`variables.${key} の wholeMin/wholeMax は整数である必要があります`);
+  } else {
+    if (range.wholeMin < 1) {
+      errors.push(`variables.${key}.wholeMin は1以上である必要があります（帯分数の整数部は0にできません）: ${range.wholeMin}`);
+    }
+    if (range.wholeMin > range.wholeMax) {
+      errors.push(`variables.${key}.wholeMin が wholeMax を超えています`);
+    }
+  }
+  if (!Number.isInteger(range.numeratorMin) || !Number.isInteger(range.numeratorMax)) {
+    errors.push(`variables.${key} の numeratorMin/numeratorMax は整数である必要があります`);
+  } else {
+    if (range.numeratorMin < 1) {
+      errors.push(`variables.${key}.numeratorMin は1以上である必要があります（帯分数の分子部分は0にできません）: ${range.numeratorMin}`);
+    }
+    if (range.numeratorMin > range.numeratorMax) {
+      errors.push(`variables.${key}.numeratorMin が numeratorMax を超えています`);
+    }
+    if (Number.isInteger(range.denominator) && range.numeratorMax >= range.denominator) {
+      errors.push(
+        `variables.${key}.numeratorMax は denominator 未満である必要があります（帯分数の分子部分は真分数）: ` +
+          `numeratorMax=${range.numeratorMax}, denominator=${range.denominator}`
+      );
+    }
+  }
+}
+
+/**
  * 百分率型の変数定義 { type:"percent", values:[10,20,25,...] } を検証します（第9段階で追加）。
  * 「10%、20%、25%…」のような、値の一覧（values）から選ぶ離散的な形式のため、
  * 分数の min/max ではなく配列そのものを検証します。0%以下の値は許可しません
@@ -1331,31 +1409,54 @@ function validatePercentVariable(key, range, errors) {
 }
 
 /**
+ * 分数型（type:"fraction"）・帯分数型（type:"mixedFraction"）の変数範囲を、
+ * どちらも「分子の実効範囲（分母を1とした通分不要の比較用の値）」に変換します
+ * （第11段階で追加）。真分数はそのまま numeratorMin/numeratorMax を、帯分数は
+ * 整数部を含めた仮分数としての分子（whole×denominator+numerator）の範囲を返すため、
+ * 型を問わず同じ基準で「答えが負にならないか」を比較できます。
+ */
+function effectiveFractionNumeratorRange(range) {
+  if (range.type === "mixedFraction") {
+    return {
+      min: range.wholeMin * range.denominator + range.numeratorMin,
+      max: range.wholeMax * range.denominator + range.numeratorMax
+    };
+  }
+  return { min: range.numeratorMin, max: range.numeratorMax };
+}
+
+/**
  * 同分母分数のたし算・ひき算のテンプレートについて、a・bの分母が一致しているか、
  * ひき算の場合に答えが負にならない範囲設計になっているかを検証します
  * （実際の生成値ではなく、テンプレートの範囲定義そのものを静的にチェックします）。
+ * a・bは、真分数（type:"fraction"）・帯分数（type:"mixedFraction"）のどちらでも構いません
+ * （第11段階：帯分数追加時に、mixedFractionも受け付けるよう一般化）。
  */
 function validateSameDenominatorFractionRanges(template, errors) {
   const variables = template.variables || {};
   const a = variables.a;
   const b = variables.b;
-  if (!a || !b || a.type !== "fraction" || b.type !== "fraction") {
-    errors.push(`generatorType="${template.generatorType}" には、a と b が分数型の変数として必要です`);
+  const isFractionLike = (range) => range && (range.type === "fraction" || range.type === "mixedFraction");
+  if (!isFractionLike(a) || !isFractionLike(b)) {
+    errors.push(`generatorType="${template.generatorType}" には、a と b が分数型または帯分数型の変数として必要です`);
     return;
   }
   if (a.denominator !== b.denominator) {
     errors.push(`同分母分数の問題なのに、a と b の分母が異なります: ${a.denominator} / ${b.denominator}`);
   }
-  if (
-    template.generatorType === "sameDenominatorFractionSubtraction" &&
-    typeof a.numeratorMin === "number" &&
-    typeof b.numeratorMax === "number" &&
-    a.numeratorMin < b.numeratorMax
-  ) {
-    errors.push(
-      `ひき算の答えが負になる可能性があります: a.numeratorMin(${a.numeratorMin}) が` +
-        ` b.numeratorMax(${b.numeratorMax}) より小さいです`
-    );
+  if (template.generatorType === "sameDenominatorFractionSubtraction") {
+    const effectiveA = effectiveFractionNumeratorRange(a);
+    const effectiveB = effectiveFractionNumeratorRange(b);
+    if (
+      typeof effectiveA.min === "number" &&
+      typeof effectiveB.max === "number" &&
+      effectiveA.min < effectiveB.max
+    ) {
+      errors.push(
+        `ひき算の答えが負になる可能性があります: a の実効最小値(${effectiveA.min})が` +
+          ` b の実効最大値(${effectiveB.max})より小さいです`
+      );
+    }
   }
 }
 
@@ -1448,6 +1549,22 @@ export function validateTemplate(template) {
     errors.push(`contentGroupが不正です: ${template.contentGroup}（"new" か "review" のみ）`);
   }
 
+  if (template.fractionDisplayMode !== undefined && template.fractionDisplayMode !== "mixed") {
+    errors.push(`fractionDisplayModeが不正です: ${template.fractionDisplayMode}（"mixed" のみ対応）`);
+  }
+  if (template.mixedNumberPattern !== undefined && !VALID_MIXED_NUMBER_PATTERNS.has(template.mixedNumberPattern)) {
+    errors.push(
+      `mixedNumberPatternが不正です: ${template.mixedNumberPattern}（${[...VALID_MIXED_NUMBER_PATTERNS].join(" / ")} のいずれかである必要があります）`
+    );
+  }
+  if (usesMixedNumberFeature(template) && !MIXED_NUMBER_ALLOWED_CATEGORY_IDS.has(template.categoryId)) {
+    errors.push(
+      `帯分数機能（fractionDisplayMode="mixed" または variables内のtype:"mixedFraction"）は、` +
+        `同分母分数のたし算・ひき算（${[...MIXED_NUMBER_ALLOWED_CATEGORY_IDS].join(" / ")}）以外のカテゴリでは使用できません: ` +
+        `categoryId="${template.categoryId}"`
+    );
+  }
+
   const generatorTypeKnown = VALID_GENERATOR_TYPES.includes(template.generatorType);
   if (template.generatorType !== undefined && !generatorTypeKnown) {
     errors.push(`generatorTypeが不正です: ${template.generatorType}`);
@@ -1536,6 +1653,8 @@ export function validateTemplate(template) {
       if (!range || typeof range !== "object") continue;
       if (range.type === "fraction") {
         validateFractionVariable(key, range, errors);
+      } else if (range.type === "mixedFraction") {
+        validateMixedFractionVariable(key, range, errors);
       } else if (range.type === "percent") {
         validatePercentVariable(key, range, errors);
       } else if (range.decimalPlaces > MAX_REASONABLE_DECIMAL_PLACES) {

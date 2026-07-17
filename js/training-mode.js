@@ -266,6 +266,7 @@ function beginTrainingQuestion() {
       result: problem.result,
       answerUnit: problem.answerUnit,
       simplifyFractions: problem.simplifyFractions,
+      fractionDisplayMode: (problem.template && problem.template.fractionDisplayMode) || null,
       incorrectCount: 0,
       timeoutCount: 0,
       lastAttemptText: "（未回答）"
@@ -409,11 +410,12 @@ function handleTrainingCorrect(resultValue) {
     trainingState.completedQuestions >= trainingState.totalQuestions ? "complete" : "next";
   const problem = trainingState.currentProblem;
   const simplify = !problem || problem.simplifyFractions !== false;
+  const mixedNumber = !!(problem && problem.template && problem.template.fractionDisplayMode === "mixed");
   const displayResultValue =
     simplify || !problem
       ? resultValue
       : computeUnsimplifiedFractionResult(problem.left, problem.operator, problem.right) ?? resultValue;
-  ui.showCorrectEffect(displayResultValue, { simplify });
+  ui.showCorrectEffect(displayResultValue, { simplify, mixedNumber });
   // isBusy は「タップして次へ」が押されるまで true のまま維持し、連続タップを防ぐ
   logTrainingDebugInfo();
 }
@@ -523,6 +525,7 @@ export function returnToTitle() {
 function formatSolutionRoutesForDebug(problem) {
   if (!problem) return "(なし)";
   const simplify = problem.simplifyFractions !== false;
+  const mixedNumber = !!(problem.template && problem.template.fractionDisplayMode === "mixed");
   if (problem.questionType === "multiStep") {
     return (problem.solutionRoutes || [])
       .map(
@@ -538,7 +541,7 @@ function formatSolutionRoutesForDebug(problem) {
   return routes
     .map((r) => {
       const displayResult = simplify ? r.result : computeUnsimplifiedFractionResult(r.left, r.operator, r.right) ?? r.result;
-      return `${formatValue(r.left, { simplify })}${r.operator}${formatValue(r.right, { simplify })} = ${formatValue(displayResult, { simplify })}`;
+      return `${formatValue(r.left, { simplify, mixedNumber })}${r.operator}${formatValue(r.right, { simplify, mixedNumber })} = ${formatValue(displayResult, { simplify, mixedNumber })}`;
     })
     .join(" / ");
 }

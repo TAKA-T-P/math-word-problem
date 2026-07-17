@@ -95,6 +95,24 @@ export function getQuestionCountForScope(scope) {
   return categoriesForScope(scope).length;
 }
 
+/**
+ * 総復習で選べるスコープキー（"4"|"5"|"6"|"all"）の一覧を返します
+ * （tools/quality-check.js からの再利用のためexport。運用開始後に追加。
+ * REVIEW_SCOPE_LABELSをこのファイル内だけで完結させ、スコープ一覧を複製させないための
+ * 薄いラッパーです）。
+ */
+export function getReviewScopeKeys() {
+  return Object.keys(REVIEW_SCOPE_LABELS);
+}
+
+/**
+ * 総復習のスコープキーから、表示名（例:「4年のまとめ」）を返します
+ * （tools/quality-check.js からの再利用のためexport。運用開始後に追加）。
+ */
+export function getReviewScopeLabel(scope) {
+  return REVIEW_SCOPE_LABELS[scope] || scope;
+}
+
 // ============================================================
 // 問題生成（各カテゴリから、ちょうど1問ずつ）
 // ============================================================
@@ -110,7 +128,7 @@ function getAllValidatedTemplates() {
  * カテゴリをまたいだ重複回避（同じ問題文が2回出るのを防ぐ処理）は不要です
  * （カテゴリが違えば、問題文もほぼ確実に異なるため）。
  */
-function generateReviewQuestions(scope) {
+export function generateReviewQuestions(scope) {
   const categories = categoriesForScope(scope);
   const allTemplates = getAllValidatedTemplates();
   const questions = categories.map((category) => {
@@ -231,6 +249,7 @@ function beginReviewQuestion() {
       result: problem.result,
       answerUnit: problem.answerUnit,
       simplifyFractions: problem.simplifyFractions,
+      fractionDisplayMode: (problem.template && problem.template.fractionDisplayMode) || null,
       incorrectCount: 0,
       timeoutCount: 0,
       lastAttemptText: "（未回答）"
@@ -336,10 +355,11 @@ function handleCorrect(resultValue) {
 
   reviewState.pendingOutcome = reviewState.solvedQuestions >= reviewState.totalQuestions ? "clear" : "next";
   const simplify = problem.simplifyFractions !== false;
+  const mixedNumber = !!(problem.template && problem.template.fractionDisplayMode === "mixed");
   const displayResultValue = simplify
     ? resultValue
     : computeUnsimplifiedFractionResult(problem.left, problem.operator, problem.right) ?? resultValue;
-  ui.showCorrectEffect(displayResultValue, { simplify });
+  ui.showCorrectEffect(displayResultValue, { simplify, mixedNumber });
   // isBusy は「タップして次へ」が押されるまで true のまま維持し、連続タップを防ぐ
   logReviewDebugInfo();
 }
@@ -485,6 +505,7 @@ export function returnToTitle() {
 function formatSolutionRoutesForDebug(problem) {
   if (!problem) return "(なし)";
   const simplify = problem.simplifyFractions !== false;
+  const mixedNumber = !!(problem.template && problem.template.fractionDisplayMode === "mixed");
   if (problem.questionType === "multiStep") {
     return (problem.solutionRoutes || [])
       .map(
@@ -500,7 +521,7 @@ function formatSolutionRoutesForDebug(problem) {
   return routes
     .map((r) => {
       const displayResult = simplify ? r.result : computeUnsimplifiedFractionResult(r.left, r.operator, r.right) ?? r.result;
-      return `${formatValue(r.left, { simplify })}${r.operator}${formatValue(r.right, { simplify })} = ${formatValue(displayResult, { simplify })}`;
+      return `${formatValue(r.left, { simplify, mixedNumber })}${r.operator}${formatValue(r.right, { simplify, mixedNumber })} = ${formatValue(displayResult, { simplify, mixedNumber })}`;
     })
     .join(" / ");
 }

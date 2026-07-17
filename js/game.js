@@ -24,7 +24,7 @@ import { filterValidTemplateSets } from "./question-validator.js";
 import { getDecimalPlaces } from "./number-utils.js";
 import { formatValue, isFractionValue, computeUnsimplifiedFractionResult } from "./value-utils.js";
 import { renderValueHtml } from "./value-renderer.js";
-import { gcd, simplifyFraction } from "./fraction-utils.js";
+import { gcd, simplifyFraction, toMixedNumberParts } from "./fraction-utils.js";
 import { ENEMY_LIST } from "./enemy-list.js";
 import * as multiStepEngine from "./multi-step-engine.js";
 import * as audio from "./audio.js";
@@ -279,6 +279,25 @@ function heartsForLevel(level) {
   return 2;
 }
 
+/**
+ * 指定した出題範囲（gradeTerm）が、新内容/復習内容の出題プラン方式の対象かどうかを返します
+ * （tools/quality-check.js＝全範囲品質確認ツールからの再利用のためexport。運用開始後に追加。
+ * PLANNED_GRADE_TERMS自体はこのファイル内だけで完結させ、判定ロジックを複製させないための
+ * 薄いラッパーです）。
+ */
+export function isPlannedGradeTerm(gradeTerm) {
+  return PLANNED_GRADE_TERMS.has(gradeTerm);
+}
+
+/**
+ * 指定したレベルの、通常バトルの必要正解数（問題数）を返します
+ * （tools/quality-check.js からの再利用のためexport。運用開始後に追加。startNewGame()の
+ * `2 * settings.level` と同じ式を1箇所にまとめています）。
+ */
+export function getTotalQuestionsForLevel(level) {
+  return 2 * level;
+}
+
 // value-renderer.js の renderValueHtml() を使うことで、分数を含む式でも
 // 縦型分数のHTMLとして履歴（さいごに作った式）に表示できるようにしている。
 // 整数・小数の場合は従来と同じ見た目の文字列になる。
@@ -309,6 +328,7 @@ function formatSolutionRoutes(problem) {
   // 構造が異なるため、questionType に応じてフォーマット方法を分ける
   // （分けないと "undefinedundefinedundefined = undefined" のような表示になってしまう）。
   const simplify = problem.simplifyFractions !== false;
+  const mixedNumber = !!(problem.template && problem.template.fractionDisplayMode === "mixed");
   if (problem.questionType === "multiStep") {
     return (problem.solutionRoutes || [])
       .map(
@@ -324,7 +344,7 @@ function formatSolutionRoutes(problem) {
   return routes
     .map((r) => {
       const displayResult = simplify ? r.result : computeUnsimplifiedFractionResult(r.left, r.operator, r.right) ?? r.result;
-      return `${formatValue(r.left, { simplify })}${r.operator}${formatValue(r.right, { simplify })} = ${formatValue(displayResult, { simplify })}`;
+      return `${formatValue(r.left, { simplify, mixedNumber })}${r.operator}${formatValue(r.right, { simplify, mixedNumber })} = ${formatValue(displayResult, { simplify, mixedNumber })}`;
     })
     .join(" / ");
 }
@@ -358,8 +378,11 @@ function summarizePlanComposition() {
 /**
  * problem.values の各値（数値・分数）を、デバッグ表示用に詳しく説明するオブジェクトへ変換する。
  * 分数は、分子・分母・最大公約数・約分後の値まで表示する（?debug=true 専用）。
+ * mixedNumber が true の問題（帯分数表示テンプレート）では、whole（整数部）・
+ * remainderNumerator（帯分数の分子部分）も追加で表示する（第11段階で追加。
+ * デバッグ・品質確認専用の情報で、正誤判定には使用しない）。
  */
-function describeValuesForDebug(values) {
+function describeValuesForDebug(values, mixedNumber = false) {
   const result = {};
   for (const [key, value] of Object.entries(values || {})) {
     if (isFractionValue(value)) {
@@ -371,8 +394,13 @@ function describeValuesForDebug(values) {
         gcd: gcd(value.numerator, value.denominator),
         simplifiedNumerator: simplified.numerator,
         simplifiedDenominator: simplified.denominator,
-        display: formatValue(value)
+        display: formatValue(value, { mixedNumber })
       };
+      if (mixedNumber) {
+        const parts = toMixedNumberParts(value);
+        result[key].whole = parts.whole;
+        result[key].remainderNumerator = parts.numerator;
+      }
     } else {
       result[key] = {
         type: "number",
@@ -405,7 +433,8 @@ function logDebugInfo() {
 
   const problem = gameState.currentProblem;
   const isMultiStep = Boolean(problem && problem.questionType === "multiStep");
-  const valueDetails = problem ? describeValuesForDebug(problem.values) : {};
+  const isMixedNumber = !!(problem && problem.template && problem.template.fractionDisplayMode === "mixed");
+  const valueDetails = problem ? describeValuesForDebug(problem.values, isMixedNumber) : {};
   const composition = gameState.questionPlan ? summarizePlanComposition() : null;
   const fractionCardIds = problem
     ? problem.choices.filter((c) => isFractionValue(c.value)).map((c) => c.cardId)
@@ -413,7 +442,7 @@ function logDebugInfo() {
   const displayHtmlByKey = {};
   if (problem && problem.values) {
     for (const [key, value] of Object.entries(problem.values)) {
-      displayHtmlByKey[key] = renderValueHtml(value);
+      displayHtmlByKey[key] = renderValueHtml(value, { mixedNumber: isMixedNumber });
     }
   }
 
@@ -425,6 +454,11 @@ function logDebugInfo() {
     `単元: ${problem ? problem.category : "(なし)"}`,
     `新内容／復習内容: ${describeContentGroupForDebug(problem)}`,
     `生成に使用したgeneratorType: ${problem && problem.template ? problem.template.generatorType : "(なし)"}`,
+    // 帯分数テンプレート（第11段階で追加）のときだけ、fractionDisplayMode・mixedNumberPattern
+    // （くり上がり・くり下がりの分類。デバッグ・品質確認専用で正誤判定には使用しない）を表示する。
+    isMixedNumber
+      ? `fractionDisplayMode: ${problem.template.fractionDisplayMode} / mixedNumberPattern: ${problem.template.mixedNumberPattern || "(なし)"}`
+      : null,
     `正解式: ${problem ? formatSolutionRoutes(problem) : "(なし)"}`,
     `元の数値データ: ${problem ? JSON.stringify(problem.values || {}) : "(なし)"}`,
     `値の詳細(型・分数の分子分母・最大公約数・約分後・表示用): ${JSON.stringify(valueDetails)}`,
@@ -649,6 +683,10 @@ function beginQuestion() {
       result: problem.result,
       answerUnit: problem.answerUnit,
       simplifyFractions: problem.simplifyFractions,
+      // 帯分数表示だったかどうかは、テンプレートに紐づく値なので毎回計算し直す必要はない
+      // （simplifyFractionsと違い学期非依存）。履歴表示時にプレイ時の表示形式を再現するために複製する
+      // （第11段階で追加）。
+      fractionDisplayMode: (problem.template && problem.template.fractionDisplayMode) || null,
       incorrectCount: 0,
       timeoutCount: 0,
       lastAttemptText: "（未回答）"
@@ -829,10 +867,11 @@ function handleCorrect(resultValue) {
 
   gameState.pendingOutcome = gameState.solvedQuestions >= gameState.totalQuestions ? "clear" : "next";
   const simplify = problem.simplifyFractions !== false;
+  const mixedNumber = !!(problem.template && problem.template.fractionDisplayMode === "mixed");
   const displayResultValue = simplify
     ? resultValue
     : computeUnsimplifiedFractionResult(problem.left, problem.operator, problem.right) ?? resultValue;
-  ui.showCorrectEffect(displayResultValue, { simplify });
+  ui.showCorrectEffect(displayResultValue, { simplify, mixedNumber });
   // isBusy は「タップして次へ」が押されるまで true のまま維持し、連続タップを防ぐ
   logDebugInfo();
 }

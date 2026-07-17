@@ -17,6 +17,7 @@ import { initializeMultiStepQuestion } from "./multi-step-engine.js";
 import { normalizeNumber, multiplyDecimal } from "./number-utils.js";
 import {
   valueKey,
+  normalizeValue,
   isFractionValue,
   isPercentValue,
   isRatioValue,
@@ -26,7 +27,7 @@ import {
   divideValuesAsFraction,
   areValuesEqual
 } from "./value-utils.js";
-import { fractionToNumber, gcd } from "./fraction-utils.js";
+import { fractionToNumber, gcd, mixedNumberToImproperFraction } from "./fraction-utils.js";
 import { percentToRatio, ratioToPercent, formatPercent } from "./percentage-utils.js";
 import { formatRatio, createRatio } from "./ratio-utils.js";
 import { formatScale, createScale } from "./scale-utils.js";
@@ -40,10 +41,32 @@ const MAX_GENERATION_ATTEMPTS = 25;
 
 let questionSequence = 0;
 
+// 問題生成のすべての乱数は、この1つの関数参照を経由します（既定値はMath.random）。
+// tools/quality-check.js（開発者用の全範囲品質確認ページ）が、特定のテンプレート・
+// 生成回だけを再現するために、生成1回ぶんだけ差し替えて使います
+// （setRandomSource()→generateQuestionFromTemplate()等を1回呼ぶ→resetRandomSource()、
+// という短い区間だけの差し替えを想定しており、グローバルなMath.random自体は書き換えません）。
+let randomSource = Math.random;
+
+/**
+ * 問題生成に使う乱数生成関数を差し替えます（品質確認ツール専用。運用開始後に追加）。
+ * 通常のプレイ中は一切呼び出されないため、既定の動作（Math.random）には影響しません。
+ */
+export function setRandomSource(fn) {
+  randomSource = typeof fn === "function" ? fn : Math.random;
+}
+
+/**
+ * 乱数生成関数を既定（Math.random）へ戻します（品質確認ツール専用。運用開始後に追加）。
+ */
+export function resetRandomSource() {
+  randomSource = Math.random;
+}
+
 export function pickInt(min, max) {
   const lo = Math.ceil(Math.min(min, max));
   const hi = Math.floor(Math.max(min, max));
-  return lo + Math.floor(Math.random() * (hi - lo + 1));
+  return lo + Math.floor(randomSource() * (hi - lo + 1));
 }
 
 /**
@@ -89,6 +112,21 @@ function pickFractionValue(range) {
 }
 
 /**
+ * 帯分数の変数定義 { type:"mixedFraction", denominator, wholeMin, wholeMax, numeratorMin, numeratorMax } から、
+ * 整数部・分子部をそれぞれランダムに選び、値を1つ作ります（第11段階：同分母分数のたし算・ひき算への
+ * 帯分数追加で追加）。帯分数専用の内部値型は用意せず、既存の { type:"fraction", numerator, denominator }
+ * （仮分数）のまま返します。表示のときだけ toMixedNumberParts()（fraction-utils.js）で
+ * 整数部・分子部に分解するため、計算・正誤判定・ダミーカード除外は一切の特別扱いなく
+ * 既存の分数処理（addFractions/subtractFractions/areValuesEqual 等）がそのまま使えます。
+ * 分母はテンプレート側で固定値として指定します（同分母分数のたし算・ひき算専用のため）。
+ */
+function pickMixedFractionValue(range) {
+  const whole = pickInt(range.wholeMin, range.wholeMax);
+  const numerator = pickInt(range.numeratorMin, range.numeratorMax);
+  return mixedNumberToImproperFraction(whole, numerator, range.denominator);
+}
+
+/**
  * 百分率の変数定義 { type:"percent", values:[10,20,25,...] } から、
  * 一覧の中からランダムに1つ選び、百分率の値を1つ作ります（第9段階で追加）。
  * 「10%、20%、25%、30%…」のような、小学5年生として自然な値の一覧から選ぶ設計のため、
@@ -103,6 +141,7 @@ function pickPercentValue(range) {
 /**
  * 1つの変数の範囲定義から、その種類（分数・百分率・小数・整数）に応じた値を1つ選びます。
  *   - type: "fraction"      → 分数（pickFractionValue）
+ *   - type: "mixedFraction" → 帯分数（pickMixedFractionValue。第11段階で追加。内部値は仮分数のまま）
  *   - type: "percent"       → 百分率（pickPercentValue。第9段階で追加）
  *   - decimalPlaces あり    → 小数（pickDecimalValue）
  *   - それ以外               → 整数（pickStepped）
@@ -112,6 +151,9 @@ function pickPercentValue(range) {
 function pickValueForRange(range) {
   if (range.type === "fraction") {
     return pickFractionValue(range);
+  }
+  if (range.type === "mixedFraction") {
+    return pickMixedFractionValue(range);
   }
   if (range.type === "percent") {
     return pickPercentValue(range);
@@ -946,10 +988,25 @@ export function generateDummyOperators(correctOperator, count) {
 }
 
 /**
+ * 値の重複判定用キーを、正規化（約分・整数化）した上で valueKey() で表します
+ * （第11段階で追加）。valueKey() 自体は分数を約分せずそのままキー化するため、
+ * 例えば未約分の分数カード「8/4」と、既に約分済みの答え「2」は、valueKey() だけでは
+ * 別の値として扱われてしまいます（"fraction:8/4" と "number:2" は異なる文字列）。
+ * ダミーカード生成の重複回避（generateDummyFraction・buildChoiceCards）は、
+ * 表示形式に関わらず「数値として同じかどうか」を見る必要があるため、
+ * この正規化済みキーを使用します。帯分数（内部的には仮分数）についても、
+ * 約分後の値・整数への収束を正しく同一視できます
+ * （例: 5/2, 10/4, 2と2/4 はすべてこのキーで同じ値として扱われます）。
+ */
+function normalizedValueKey(value) {
+  return valueKey(normalizeValue(value));
+}
+
+/**
  * 既存の数値と重複せず、答えとも一致しないダミー数値を生成します。
  * 桁数の近い、もっともらしい数値になるようにしています。
  * @param {number} referenceValue
- * @param {Set<string>} excludedKeys - valueKey() で表した除外対象の集合
+ * @param {Set<string>} excludedKeys - normalizedValueKey() で表した除外対象の集合
  */
 function generateDummyNumber(referenceValue, excludedKeys) {
   const magnitude = Math.max(1, Math.abs(referenceValue));
@@ -964,13 +1021,13 @@ function generateDummyNumber(referenceValue, excludedKeys) {
     if (candidate === 0) {
       candidate = 1;
     }
-    if (!excludedKeys.has(valueKey(candidate))) {
+    if (!excludedKeys.has(normalizedValueKey(candidate))) {
       return candidate;
     }
   }
   // フォールバック：それでも重複する場合は、十分離れた値を返す
   let fallback = referenceValue + spread + 1;
-  while (excludedKeys.has(valueKey(fallback))) {
+  while (excludedKeys.has(normalizedValueKey(fallback))) {
     fallback += 1;
   }
   return fallback;
@@ -979,8 +1036,11 @@ function generateDummyNumber(referenceValue, excludedKeys) {
 /**
  * 既存の分数と重複しない、同じ分母のダミー分数を生成します
  * （分数カードが正解の分数と紛らわしくなりすぎないよう、同じ分母を使います）。
+ * 未約分・整数化・（帯分数の場合の）分子が分母以上の値も、normalizedValueKey() により
+ * 正しく既存の値と同一視して除外します（第11段階：帯分数追加時に、答え「2と1/2」（5/2）と
+ * 未約分の「10/4」のようなダミー候補が重複してしまわないようにするために対応）。
  * @param {{type:"fraction", numerator:number, denominator:number}} referenceFraction
- * @param {Set<string>} excludedKeys - valueKey() で表した除外対象の集合
+ * @param {Set<string>} excludedKeys - normalizedValueKey() で表した除外対象の集合
  */
 function generateDummyFraction(referenceFraction, excludedKeys) {
   const denominator = referenceFraction.denominator;
@@ -989,14 +1049,14 @@ function generateDummyFraction(referenceFraction, excludedKeys) {
   for (let attempt = 0; attempt < 30; attempt++) {
     const numerator = pickInt(1, maxNumerator);
     const candidate = { type: "fraction", numerator, denominator };
-    if (!excludedKeys.has(valueKey(candidate))) {
+    if (!excludedKeys.has(normalizedValueKey(candidate))) {
       return candidate;
     }
   }
   // フォールバック：それでも重複する場合は、十分離れた分子を返す
   let numerator = referenceFraction.numerator + 1;
   let candidate = { type: "fraction", numerator, denominator };
-  while (excludedKeys.has(valueKey(candidate))) {
+  while (excludedKeys.has(normalizedValueKey(candidate))) {
     numerator += 1;
     candidate = { type: "fraction", numerator, denominator };
   }
@@ -1008,7 +1068,7 @@ function generateDummyFraction(referenceFraction, excludedKeys) {
  * generateDummyNumber() と同じ「参照値の近くをランダムにずらす」考え方を、
  * 百分率の value（例: 20）に対して適用します。0%以下にはしません。
  * @param {{type:"percent", value:number}} referencePercent
- * @param {Set<string>} excludedKeys - valueKey() で表した除外対象の集合
+ * @param {Set<string>} excludedKeys - normalizedValueKey() で表した除外対象の集合
  */
 function generateDummyPercent(referencePercent, excludedKeys) {
   const magnitude = Math.max(1, Math.abs(referencePercent.value));
@@ -1021,14 +1081,14 @@ function generateDummyPercent(referencePercent, excludedKeys) {
       candidateValue = Math.abs(candidateValue) + 1;
     }
     const candidate = { type: "percent", value: candidateValue };
-    if (!excludedKeys.has(valueKey(candidate))) {
+    if (!excludedKeys.has(normalizedValueKey(candidate))) {
       return candidate;
     }
   }
   // フォールバック：それでも重複する場合は、十分離れた値を返す
   let fallbackValue = referencePercent.value + spread + 1;
   let candidate = { type: "percent", value: fallbackValue };
-  while (excludedKeys.has(valueKey(candidate))) {
+  while (excludedKeys.has(normalizedValueKey(candidate))) {
     fallbackValue += 1;
     candidate = { type: "percent", value: fallbackValue };
   }
@@ -1051,7 +1111,7 @@ export function generateDummyValue(referenceValue, excludedKeys) {
 export function shuffleArray(array) {
   const copy = array.slice();
   for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(randomSource() * (i + 1));
     [copy[i], copy[j]] = [copy[j], copy[i]];
   }
   return copy;
@@ -1099,8 +1159,8 @@ export function buildChoiceCards(realNumbers, correctOperators, resultsToExclude
   const uniqueCorrectOps = [...new Set(Array.isArray(correctOperators) ? correctOperators : [correctOperators])];
   const excludedResults = Array.isArray(resultsToExclude) ? resultsToExclude : [resultsToExclude];
   const excludedKeys = new Set([
-    ...realNumbers.map((n) => valueKey(n.value)),
-    ...excludedResults.filter((v) => v !== undefined && v !== null).map((v) => valueKey(v))
+    ...realNumbers.map((n) => normalizedValueKey(n.value)),
+    ...excludedResults.filter((v) => v !== undefined && v !== null).map((v) => normalizedValueKey(v))
   ]);
 
   // 下段：演算記号は常に4枚、"+" "-" "×" "÷" の順で固定位置。
@@ -1114,7 +1174,7 @@ export function buildChoiceCards(realNumbers, correctOperators, resultsToExclude
   while (numberCards.length < NUMBER_ROW_SLOTS) {
     const reference = referenceValues.length > 0 ? referenceValues[numberCards.length % referenceValues.length] : 10;
     const dummy = generateDummyValue(reference, excludedKeys);
-    excludedKeys.add(valueKey(dummy));
+    excludedKeys.add(normalizedValueKey(dummy));
     numberCards.push(makeCard("number", dummy, "dummy"));
   }
 
@@ -1140,7 +1200,7 @@ function numericValueForSort(value) {
  * （「朝に3/10、昼に3/10歩いた」のような問題）、正解の式 3/10+3/10 を作るには
  * 3/10 のカードが2枚必要です。ここで値の一致だけを見て1枚に減らしてしまうと、
  * 正解不可能な問題になってしまいます。各変数は必ず1枚ずつ独立したカードにします
- * （ダミーカードの重複回避は buildChoiceCards() 側の valueKey() が担当します）。
+ * （ダミーカードの重複回避は buildChoiceCards() 側の normalizedValueKey() が担当します）。
  */
 function buildSingleStepChoices(problem) {
   const numbers = getVisibleNumbers(problem.template, problem.values);

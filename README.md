@@ -129,7 +129,7 @@ math-word-battle/
 │  ├─ category-registry.js      … トレーニング・総復習で選べる50カテゴリの単一の情報源（id/表示名/学期/表示可否/表示順。第12段階で5カテゴリ追加、うち「縮尺を求める」は運用開始後に削除し現在は4カテゴリ）。`getCategoriesForGrade()`（学年単位の一覧、運用開始後に追加）は総復習モード専用
 │  ├─ grade4-term1.js           … 小学4年生・1学期の問題テンプレート（24種類、1段階問題）
 │  ├─ grade4-term2.js           … 小学4年生・2学期の問題テンプレート（24種類、小数のたし算/ひき算・大きな数・2けたでわるわり算）
-│  ├─ grade4-term3.js           … 小学4年生・3学期の問題テンプレート（24種類、小数×整数・小数÷整数・同分母分数のたし算/ひき算）
+│  ├─ grade4-term3.js           … 小学4年生・3学期の問題テンプレート（32種類、小数×整数・小数÷整数・同分母分数のたし算/ひき算。うち8種類は帯分数を含む問題、運用開始後に追加）
 │  ├─ grade5-term1.js           … 小学5年生・1学期の問題テンプレート（32種類、小数×小数・小数÷小数・小数倍・もとの量）
 │  ├─ grade5-term2.js           … 小学5年生・2学期の問題テンプレート（30種類、異分母分数のたし算/ひき算・平均・単位量あたり・混み具合。第8段階で新規）
 │  ├─ grade5-term3.js           … 小学5年生・3学期の問題テンプレート（40種類、速さ・道のり・時間・割合（比べる量/百分率/もとにする量）・割引・増量。第9段階で新規）
@@ -138,7 +138,9 @@ math-word-battle/
 │  ├─ grade6-term3.js           … 小学6年生・3学期の問題テンプレート（24種類、比例・対応する量/反比例・対応する量/縮尺・実際の長さ/縮尺・地図上の長さ。第12段階で新規。「縮尺を求める」カテゴリ・6種類は運用開始後に削除）
 │  └─ multi-step-integer.js     … 整数のみの2段階問題テンプレート（12種類。開発版モード「4-multi-step」、4-2モードの「2段階文章題」カテゴリ、4-3/5-1/5-2/5-3モードの復習内容から共有。6-1/6-2モードは運用開始後に4年生の内容を復習対象から外したため対象外）
 └─ tools/
-   └─ question-validator.html   … 開発者用の問題データ検証ページ（1〜3段階・整数/小数/分数/比/縮尺、出題範囲/カテゴリ/段階数等でフィルタ可能、関係表の表示にも対応）
+   ├─ question-validator.html   … 開発者用の問題データ検証ページ（1〜3段階・整数/小数/分数/比/縮尺、出題範囲/カテゴリ/段階数等でフィルタ可能、関係表の表示にも対応）
+   ├─ quality-check.html        … 開発者用の全範囲品質確認ページ（運用開始後に追加。全学期・全カテゴリをテンプレートごとに既定100回ずつ耐久テストする専用ページ。question-validator.htmlと相互リンク）
+   └─ quality-rules.js          … quality-check.htmlが使う、既存の検証ロジックが対応していないチェック（カード漏えい確認・問題文チェック・数量関係照合・重複連続検出・数値難易度分析・乱数シード・意図的な不正データのfixture）をまとめた純粋関数群（運用開始後に追加）
 ```
 
 ## 2. 問題データの共通スキーマ
@@ -559,7 +561,10 @@ solutionRoutes: [
 - 約分した結果、分母が1になる場合（＝整数になる場合）は、分数オブジェクトのままにせず、
   素の整数値に変換します（例: `6/3` → `2`、`4/8+4/8` → `1`）。これは `js/value-utils.js` の
   `normalizeValue()` が行います。
-- 仮分数になった場合、今回のバージョンでは帯分数に変換せず、仮分数のまま扱います。
+- 仮分数になった場合、基本的には帯分数に変換せず、仮分数のまま扱います。
+  ただし、**帯分数は、同分母分数のたし算・ひき算の一部問題で対応しています**（第11段階で追加）。
+  その他の分数カテゴリ（異分母分数のたし算・ひき算、分数×分数・分数÷分数など）では、
+  引き続き仮分数表示を使用します。詳しくは後述の「帯分数の表示（第11段階で追加）」を参照してください。
 
 ### 百分率（第9段階で追加）
 
@@ -728,6 +733,117 @@ CSS（`css/style.css`）側では、`.fraction` `.fraction-numerator` `.fraction
 3つのクラスで縦型レイアウトを組んでいます。分数を含むカード・解答欄には `choice-value-fraction`
 クラスが付き、通常のカードより高さを確保して上下が切れないようにしています。
 
+### 帯分数の表示（運用開始後に追加）
+
+**帯分数は、同分母分数のたし算・ひき算の一部問題で対応しています。その他の分数カテゴリでは、
+引き続き仮分数表示を使用します。**
+
+帯分数専用の内部値型は作らず、既存の `{ type:"fraction", numerator, denominator }`（仮分数）の
+まま計算・比較・保存します（例: 「2と3/5」は内部的には `{ numerator:13, denominator:5 }`）。
+これにより、`addFractions`/`subtractFractions`/`areValuesEqual`/`matchesStep` など、既存の
+分数処理を一切改造せずに帯分数対応できています。整数部・分子部への分解は、表示の直前にだけ
+`js/fraction-utils.js` の次の関数で行います。
+
+- `toMixedNumberParts(fraction)`: 仮分数 → `{ whole, numerator, denominator }`（例: `13/5` → `{whole:2, numerator:3, denominator:5}`）
+- `mixedNumberToImproperFraction(whole, numerator, denominator)`: その逆変換
+- `isValidMixedNumberParts(parts)`: `whole>=1` かつ `1<=numerator<denominator` かどうかの判定（デバッグ・検証専用）
+
+**テンプレート側の指定方法**
+
+- テンプレートに `fractionDisplayMode: "mixed"` を指定すると、その問題の分数値（1以上のもの）が
+  帯分数表示になります。1未満の真分数や、約分の結果ちょうど整数になる値は、これまでどおり
+  真分数／整数のまま表示されます（「0と3/5」「3と0/5」のような表示にはなりません）。
+- 帯分数の範囲を直接指定したい変数には、`type: "fraction"` の代わりに
+  `type: "mixedFraction"`（`{ denominator, wholeMin, wholeMax, numeratorMin, numeratorMax }`）を
+  使います。`js/question-generator.js` の `pickValueForRange()` がこの型を認識し、
+  `pickMixedFractionValue()` で整数部・分子部をそれぞれランダムに選んで仮分数の値を作ります
+  （生成された値そのものは、`type:"fraction"` の場合と同じく素の仮分数オブジェクトです）。
+  帯分数どうし・帯分数と真分数を組み合わせる場合も、`a`・`b`は必ず同じ`denominator`にしてください
+  （同分母分数のたし算・ひき算という性質は変わりません）。
+- 任意で `mixedNumberPattern`（`"addition-no-carry"` / `"addition-with-carry"` /
+  `"subtraction-no-borrow"` / `"subtraction-with-borrow"`）を指定できます。これは
+  `?debug=true` のデバッグ表示・品質確認ツールでの分類専用のメタ情報で、正誤判定・
+  カード生成には一切使用しません。
+
+**表示側の実装**
+
+`js/value-renderer.js` の `renderValueHtml(value, { mixedNumber: true })`・
+`js/value-utils.js` の `formatValue(value, { mixedNumber: true })` に、`mixedNumber` オプションを
+追加しました。`simplify`（約分するかどうか）とは独立したオプションのため、
+4-3/5-1の「約分せずに表示する分数」（前項参照）と組み合わせても正しく動作します
+（例: 未約分の帯分数「1と2/6」、約分後の帯分数「1と1/3」のどちらも正しく表示され、
+内部的には仮分数 `8/6` と `4/3` として同値に扱われます）。HTML構造は次の通りで、
+分数部分は既存の `.fraction` をそのまま流用しています（縦型分数を再実装していません）。
+
+```html
+<span class="mixed-number" aria-label="2と5分の3">
+  <span class="mixed-number-whole" aria-hidden="true">2</span>
+  <span class="fraction" aria-hidden="true">
+    <span class="fraction-numerator">3</span>
+    <span class="fraction-denominator">5</span>
+  </span>
+</span>
+```
+
+`aria-label` は帯分数全体に1つだけ付け、内側の要素は `aria-hidden="true"` にすることで、
+スクリーンリーダーが「2と5分の3」と1回だけ読み上げ、「13分の5」（内部の仮分数）や
+「2 3 5」（数字の羅列）のような誤読を防いでいます。`mixedNumber` オプションは、
+`ui.js` の `renderProblem()` が `problem.template.fractionDisplayMode` から読み取り、
+問題文・選択肢カード・解答欄・ドラッグ中のカード・正解演出・問題履歴のすべてで同じ表示形式に
+揃えています（一部の画面だけ仮分数表示に戻ることはありません）。問題履歴は、その問題を
+実際にプレイしたときの表示形式（`entry.fractionDisplayMode`）をそのまま複製して使うため、
+後から仮分数表示に戻ることもありません。
+
+帯分数はカード1枚（`cardId`が1つ）として扱い、整数部と分数部を別々のカードに分割することは
+ありません（既存のカード生成の仕組み上、1つのJSの値＝1枚のカードという設計のため、
+特別な対応をしなくても自然にそうなります）。
+
+**ダミーカードの重複除外**
+
+既存のダミーカード生成（`js/question-generator.js` の `generateDummyValue`/`buildChoiceCards`）は、
+値の重複判定に `valueKey()`（約分しないままキー化する関数）を使っていたため、未約分の分数
+（例: `10/4`）と約分済みの答え（例: `5/2`）が、実は同じ値なのに別の値として扱われてしまう
+（＝正解と数値的に同じダミーカードが漏れて出てしまう）隙がありました。帯分数の追加にあたり、
+`normalizeValue()` で正規化してからキー化する `normalizedValueKey()` を新設し、ダミーカード生成の
+重複判定をすべてこちらに置き換えました。これは同分母分数のたし算・ひき算に限らず、
+分数を扱うすべてのカテゴリに影響する改善です（26,100件の生成テストで、この種の重複が
+0件になったことを確認済み。以前は特定のテンプレートで発生しうる状態でした）。
+
+**追加したテンプレート（`data/grade4-term3.js`）**
+
+分数のたし算（同分母）・ひき算（同分母）に、既存6種類ずつに加えて、帯分数を含む問題を
+4種類ずつ追加しました（計10種類ずつ）。くり上がり・くり下がりの条件は、分子部分の和・差と
+分母の大小関係で判定しています（たし算: `p+q<分母` ならくり上がりなし、`p+q>分母` なら
+くり上がりあり。`p+q=分母`になる組み合わせは、答えが整数だけになってしまうため避けています。
+ひき算: `p>=q` ならくり下がりなし、`p<q` ならくり下がりあり）。
+
+| テンプレートID | パターン | 例 |
+|---|---|---|
+| `g4t3_frac_add_007` | 帯分数＋真分数、くり上がりなし | `2と1/5 + 2/5 = 2と3/5` |
+| `g4t3_frac_add_008` | 真分数＋帯分数、くり上がりなし | `1/7 + 2と1/7 = 2と2/7` |
+| `g4t3_frac_add_009` | 帯分数＋帯分数、くり上がりなし | `1と1/6 + 1と1/6 = 2と2/6` |
+| `g4t3_frac_add_010` | 帯分数＋帯分数、くり上がりあり | `2と3/5 + 2と4/5 = 5と2/5` |
+| `g4t3_frac_sub_007` | 帯分数－真分数、くり下がりなし | `3と3/5 − 2/5 = 3と1/5` |
+| `g4t3_frac_sub_008` | 帯分数－真分数、くり下がりあり | `2と1/7 − 5/7 = 1と3/7` |
+| `g4t3_frac_sub_009` | 帯分数－帯分数、くり下がりなし | `4と3/6 − 2と1/6 = 2と2/6` |
+| `g4t3_frac_sub_010` | 帯分数－帯分数、くり下がりあり | `4と2/8 − 1と6/8 = 2と4/8` |
+
+既存6種類（真分数どうし）は削除しておらず、カテゴリ内のテンプレートはランダムに1つ選ばれる
+既存の仕組みのため、長期的には約4割が帯分数を含む問題になります。これは意図的な設計で、
+「必ず1問は帯分数にする」のような特別な保証はしていません。
+
+**検証・品質確認ツールの拡張**
+
+`js/question-validator.js` に、`type:"mixedFraction"` の範囲チェック（整数部・分子部・分母の
+妥当性、`same-denominator-fraction-addition`/`same-denominator-fraction-subtraction` 以外の
+カテゴリに帯分数機能が漏れて登録されていないか）を追加しました。`tools/quality-rules.js` には、
+帯分数専用のルールID（`INVALID_MIXED_NUMBER` / `MIXED_NUMBER_VALUE_MISMATCH` /
+`MIXED_NUMBER_PATTERN_MISMATCH` / `MIXED_NUMBER_RENDER_ERROR` / `MIXED_NUMBER_ARIA_ERROR` /
+`MIXED_NUMBER_OVERFLOW`）と、それらを検出する `checkMixedNumberConsistency()` /
+`checkMixedNumberPatternClassification()` を追加し、`tools/quality-check.html` の耐久テストに
+組み込んでいます。`tools/question-validator.html` には「帯分数あり/なし」フィルターと、
+帯分数テンプレートを示す緑色のバッジを追加しました。
+
 ### 問題文中の分数データ（`textParts`）
 
 問題文を単純な文字列だけで管理すると、縦型分数表示ができません。分数を含む問題文は、
@@ -783,7 +899,7 @@ textParts: [
 | モード | 新内容として扱う元データ | 復習内容として扱う元データ |
 |---|---|---|
 | `"4-2"` | `data/grade4-term2.js`（24種類）＋ `data/multi-step-integer.js`（12種類、「2段階文章題」という1つのカテゴリにまとめる） | `data/grade4-term1.js`（24種類） |
-| `"4-3"` | `data/grade4-term3.js`（24種類：小数×整数・小数÷整数・同分母分数のたし算・同分母分数のひき算の4カテゴリ） | `data/grade4-term1.js`（24種類）＋ `data/grade4-term2.js`（24種類）＋ `data/multi-step-integer.js`（12種類、「2段階文章題」というカテゴリ扱い） |
+| `"4-3"` | `data/grade4-term3.js`（32種類：小数×整数・小数÷整数・同分母分数のたし算・同分母分数のひき算の4カテゴリ。分数の2カテゴリはそれぞれ帯分数を含む問題4種類を含む、運用開始後に追加） | `data/grade4-term1.js`（24種類）＋ `data/grade4-term2.js`（24種類）＋ `data/multi-step-integer.js`（12種類、「2段階文章題」というカテゴリ扱い） |
 
 > **`data/multi-step-integer.js` は複製していません。** 開発版モード（`4-multi-step`）・
 > 4-2モードの「2段階文章題」カテゴリ・4-3モードの復習内容の3か所から、同じ12種類のテンプレートを
@@ -897,6 +1013,118 @@ http://localhost:8000/tools/question-validator.html
 「再検証する」ボタンで、乱数を変えて再実行できます。
 新しいテンプレートを追加・変更した際は、このページで **NG（エラー）表示が無いこと** を確認してください。
 
+### 全範囲品質確認ページ（tools/quality-check.html、運用開始後に追加）
+
+こちらも開発者用の検証ページで、プレイヤー向けの画面ではありません（タイトル画面・ヘルプメニューには
+一切リンクしていません）。上記の `question-validator.html` と相互リンクしています。
+
+```
+http://localhost:8000/tools/quality-check.html
+```
+
+**`question-validator.html` との違い**: `question-validator.html` が「個々のテンプレートを見比べながら
+確認する」ためのページなのに対し、こちらは「`data/index.js`・`category-registry.js` に登録されている
+**すべての正式学期・すべての有効カテゴリ**を対象に、テンプレートごとに**既定で100回ずつ**、
+乱数シードを変えながら生成する耐久テスト」に特化しています。テンプレート構造検証・生成済み問題検証・
+全解法ルート完答テストなど、`question-validator.html`（`tools/question-validator.html`）や
+`js/question-validator.js`・`js/multi-step-engine.js` がすでに持っている検証ロジックは複製せず、
+そのまま呼び出しています。追加しているのは、それらがカバーしていない次のチェックです
+（`tools/quality-rules.js` に実装）。
+
+- **カードの漏えい確認**（全カード・全値型対応）: 最終答え・まだ求めていない中間結果が、
+  ダミーカードとして初期状態に紛れ込んでいないかを `js/value-utils.js` の `areValuesEqual()` で
+  値として比較します（`"1/2"`と`"2/4"`のような表記違いも同一視）。なお、正解の式を組み立てるのに
+  実際に必要な値（`source: "variable"`／`"intermediate"`のカード）が答えと数字として偶然一致するのは
+  問題ありません（例: `64÷8=8` は必要な数値カードの1つが答えと同じ8になりますが、この
+  ゲームは「カードを組み立てて＝を押す」方式で答えを直接選ぶ手段が無いため、漏えいにはなりません）。
+- **問題文の異常確認**: `undefined`・`NaN`・`[object Object]`・未解決のプレースホルダーなどの
+  明確なエラーと、極端に長い問題文などの警告
+- **問題文への数値の偶然の一致**: 最終答え・中間結果と同じ数値が、桁の区切りを意識して
+  （`"120"`の中の`"20"`のように、大きい数の一部分だけが一致したと誤判定しないように）
+  問題文中に見つかった場合、エラーにはせず「目視確認」として報告します
+- **数量関係との照合**: `quantityRelation`（比例・反比例・縮尺など）を持つ問題について、
+  正解ルートとは別に数量関係の定義から直接期待値を計算し、生成された値と一致するか照合します
+- **重複・連続出題の検出**: 問題文・使用値・最終答えをまとめた署名（`questionSignature`）、
+  正解式を正規化した署名（`formulaSignature`）、主要な数値の組み合わせの署名（`valueSignature`）を
+  作り、1つの出題セットの中で完全に同じ問題が出ていないか（エラー）、同じテンプレート・同じ式・
+  同じ数値が連続していないか（警告）を確認します。カテゴリのテンプレート数が少なく連続を
+  避けられない場合は、理由付きの警告になります
+- **数値難易度の分析**: テンプレートごとに、生成された数値の最小・最大・中央値・95パーセンタイル、
+  整数・小数・分数の桁数、カードの表示文字数などを集計し、カテゴリ別のしきい値
+  （`QUALITY_RULES_BY_CATEGORY`。縮尺・大きな数のように意図的に大きな値を使うカテゴリは
+  上限を緩めています）と比較して警告します
+- **帯分数の整合性確認**（`fractionDisplayMode:"mixed"` のテンプレート専用、運用開始後に追加）:
+  仮分数⇔帯分数の往復変換、実際の表示HTMLに「Xと0/Y」のような誤表示が無いか、
+  読み上げラベルが「(整数部)と(分母)分の(分子)」の形式になっているか、
+  `mixedNumberPattern`（くり上がり・くり下がりの分類）が実際の値と矛盾していないかを確認します
+  （ルールID: `INVALID_MIXED_NUMBER` / `MIXED_NUMBER_VALUE_MISMATCH` / `MIXED_NUMBER_PATTERN_MISMATCH` /
+  `MIXED_NUMBER_RENDER_ERROR` / `MIXED_NUMBER_ARIA_ERROR` / `MIXED_NUMBER_OVERFLOW`）
+
+**エラー・警告・目視確認の3段階**: そのまま出題してはいけない不正な問題は「エラー」、出題は
+可能だが確認・改善を推奨するものは「警告」、日本語の自然さ・題材のわかりやすさなど自動判定
+できない（誤検出が多くなりがちな）ものは「目視確認」として、明確に区別して表示します
+（`severity: "error"|"warning"|"review"`）。それぞれのチェックには、まとめて絞り込めるよう
+安定したルールID（例: `INITIAL_CARD_CONTAINS_ANSWER`）を付けています。
+
+**乱数シードによる再現**: 100回の生成それぞれに乱数シード（`baseSeed + 生成回数のインデックス`）を
+割り当て、エラー・警告の詳細に記録します。`js/question-generator.js` に追加した
+`setRandomSource()`/`resetRandomSource()`（品質確認ツール専用。既定は`Math.random`のままのため、
+通常のプレイ・`question-validator.html`の動作には一切影響しません）で、1回分の生成の間だけ
+決定的な擬似乱数（mulberry32、外部ライブラリ不使用）に差し替えることで実現しています。
+各エラー・警告カードの「この条件で再実行」ボタンを押すと、同じテンプレートID・同じシードで
+問題を再生成し、スマートフォン表示プレビューにそのまま表示します。
+
+**通常バトル・トレーニング・総復習の出題セット検証**: 既存の出題ルールを再実装せず、
+`js/question-generator.js` の `planQuestionSequence()`/`planQuestionSequenceThreeGroup()`/
+`getCandidateTemplatesForSlot()`、`js/game.js` の `isPlannedGradeTerm()`/`getTotalQuestionsForLevel()`
+（品質確認ツールからの再利用のためexport）、`js/training-mode.js` の `generateTrainingQuestions()`/
+`validateTrainingSetGeneration()`、`js/review-mode.js` の `generateReviewQuestions()`/
+`getReviewScopeKeys()`（同じくexport）をそのまま呼び出します。通常バトルは全学期×レベル1〜6、
+トレーニングは全カテゴリ、総復習は全スコープの組み合わせで、設定した回数ぶんセットを生成し、
+上記の重複・連続検出を適用します。`js/storage.js` のハイスコア等の保存関数は一切呼び出さないため、
+プレイヤーの保存データは変更されません（6年3学期のグループローテーション位置も、
+`localStorage`に永続化される実際の値ではなく、検証中だけのインメモリのカウンタを使います）。
+
+**1〜3段階問題の回帰テスト**: 多段階問題のテンプレートについて、`js/multi-step-engine.js` の
+`submitStepAnswer()`にわざと間違った値を渡す・`recordTimeout()`を呼ぶことで、各段階でのミス・
+時間切れをシミュレーションし、「現在の段階が変わらない」「保存済みの中間結果が失われない」ことを
+確認します。生成したその場限りの問題の複製に対してのみ行うため、実際のスコア・保存データには
+触れません。
+
+**スマートフォン表示プレビュー**: 320／375／390／768pxの表示幅で、実際のゲームと同じ
+`js/value-renderer.js`（`renderValueHtml()`/`renderTextPartsHtml()`/`renderRelationTableHtml()`）を
+使って問題を再現し、要素の`scrollWidth`と`clientWidth`を比較して横方向のはみ出しを自動検出します
+（自動検出はあくまで補助のため、最終的な見た目は必ず目視でも確認してください）。「前の要確認問題」
+「次の要確認問題」ボタンで、目視確認・警告になった問題を順番に見て回れます。
+
+**進行状況・中断**: 全体の進行率・現在の学期/カテゴリ/テンプレート・経過時間を表示し、
+一定件数ごとに`requestIdleCallback`（無い場合は`setTimeout`）でブラウザへ制御を返すため、
+大量の検証中もブラウザが長時間フリーズしません。「一時停止」「再開」「中止」ボタンがあり、
+中止した場合もそれまでの結果を確認・出力できます。
+
+**レポート出力**: 集計・設定・全エラー/警告一覧・代表サンプルを含む完全なJSON、表計算ソフトで
+開きやすいCSV（`severity,ruleId,gradeTerm,categoryId,templateId,generationIndex,seed,message,
+questionText`の列）、エラーのみをクリップボードへコピーする機能があります（いずれも外部
+ライブラリ不使用）。
+
+**自己診断**: 「自己診断を実行」ボタンで、重複ID・存在しないカテゴリID・間違った答え・0で割る式・
+最終答え入りダミーカード・カード超過・`undefined`を含む問題文など、意図的に壊したテスト専用データ
+（`tools/quality-rules.js` の `TEMPLATE_FIXTURES`/`buildGeneratedQuestionFixtures()`。本番の問題データ
+ファイルには一切含まれません）が、想定どおりのルールIDで検出されるかを確認できます。
+
+### 問題データ追加時の推奨確認手順
+
+新しいテンプレートを追加・変更したときは、次の順番で確認することを推奨します。
+
+1. `tools/question-validator.html` で、追加・変更したテンプレートの例を目視確認する
+2. `tools/quality-check.html` で、対象のテンプレートIDだけに絞り、簡易確認（10回）を実行する
+3. 対象カテゴリだけに絞り、100回生成する（標準確認）
+4. 対象を絞らず、全範囲の標準確認を実行する
+5. エラー（`severity: "error"`）が0件であることを確認する
+6. 警告・目視確認になった項目を確認し、必要に応じてテンプレートを調整する
+7. スマートフォン表示プレビュー（320〜768px）で見た目を確認する
+8. JSONまたはCSVレポートを保存し、対応した内容を記録に残す
+
 ## 9. デバッグモードの使い方（?debug=true）
 
 ゲーム画面のURLに `?debug=true` を付けてアクセスすると、問題が切り替わるたびに
@@ -970,11 +1198,11 @@ http://localhost:8000/index.html?debug=true
 | ファイル | 役割 |
 |---|---|
 | `js/app.js` | エントリーポイント。`data/index.js` から問題データを取得し、各モジュールを読み込み、タイトル画面の操作（スタート・音声切り替え）、判定、次へ、リタイア、リトライ、タイトルへ戻る操作を `game.js`（通常バトル）・`training-mode.js`（トレーニング）・`review-mode.js`（総復習）の関数に橋渡しします。**「今どのモードで遊んでいるか」の判定・振り分けは、このファイルの `MODES` ディスパッチテーブルと `currentMode` 変数だけに集約**しており、`game.js`・`training-mode.js`・`review-mode.js`・`ui.js` の内部には `if (mode === "training")` のような分岐を増やしていません（第6段階の設計方針。運用開始後、モードが3つに増えた際、if/三項演算子の連鎖ではなく `MODES.battle`/`MODES.training`/`MODES.review` それぞれが `start`/`judge`/`nextTap`/... の同じ関数名を持つディスパッチテーブルに整理しました）。 |
-| `js/game.js` | 通常バトルの `gameState` オブジェクトでゲーム状態を一元管理。起動時に問題テンプレートを `question-validator.js` の `filterValidTemplateSets()`（トレーニング・総復習と共通）で検証・フィルタします。問題の進行、ハート管理、敵HP管理、タイマー管理、正解/不正解後の処理、クリア/ゲームオーバー判定、`?debug=true` 時のデバッグ出力を行います。2段階問題の判定・進行自体は `multi-step-engine.js` に委譲し、その結果（正解/不正解、最終正解かどうか）を受け取って既存の共通フロー（ハート減少・タイマー・スコア加算など）に橋渡しするだけに留めています。4-2・4-3モードでは、ゲーム開始時に `question-generator.js` の `planQuestionSequence()` で出題計画を作り（[6章](#6-小学4年生2学期3学期の出題プラン新内容復習内容の比率とカテゴリ配分)）、各問題はその計画に沿って生成します。同一ゲーム内での問題文・式の重複を避ける仕組み（`generateNonDuplicateQuestion()`）、分数を含む問題文（`textParts`）の履歴への保存、分数の分子・分母・約分後の値などを含む詳細なデバッグ出力もここにあります。カウントダウン演出（`runCountdown()`）は `training-mode.js`・`review-mode.js` からも再利用されるため export しています。トレーニングモード・総復習モードの状態（`trainingState`／`reviewState`）や、それぞれのファイルを参照することは一切ありません。**運用開始後に追加**: クリアが確定した瞬間（`finishGame()` の `type === "clear"` 分岐）にだけ、登場したエネミーを `js/storage.js` の `recordDefeatedEnemy()` でエネミー図鑑へ記録します（ゲームオーバー・リタイアからは呼びません）。 |
+| `js/game.js` | 通常バトルの `gameState` オブジェクトでゲーム状態を一元管理。起動時に問題テンプレートを `question-validator.js` の `filterValidTemplateSets()`（トレーニング・総復習と共通）で検証・フィルタします。問題の進行、ハート管理、敵HP管理、タイマー管理、正解/不正解後の処理、クリア/ゲームオーバー判定、`?debug=true` 時のデバッグ出力を行います。2段階問題の判定・進行自体は `multi-step-engine.js` に委譲し、その結果（正解/不正解、最終正解かどうか）を受け取って既存の共通フロー（ハート減少・タイマー・スコア加算など）に橋渡しするだけに留めています。4-2・4-3モードでは、ゲーム開始時に `question-generator.js` の `planQuestionSequence()` で出題計画を作り（[6章](#6-小学4年生2学期3学期の出題プラン新内容復習内容の比率とカテゴリ配分)）、各問題はその計画に沿って生成します。同一ゲーム内での問題文・式の重複を避ける仕組み（`generateNonDuplicateQuestion()`）、分数を含む問題文（`textParts`）の履歴への保存、分数の分子・分母・約分後の値などを含む詳細なデバッグ出力もここにあります。カウントダウン演出（`runCountdown()`）は `training-mode.js`・`review-mode.js` からも再利用されるため export しています。トレーニングモード・総復習モードの状態（`trainingState`／`reviewState`）や、それぞれのファイルを参照することは一切ありません。**運用開始後に追加**: クリアが確定した瞬間（`finishGame()` の `type === "clear"` 分岐）にだけ、登場したエネミーを `js/storage.js` の `recordDefeatedEnemy()` でエネミー図鑑へ記録します（ゲームオーバー・リタイアからは呼びません）。**運用開始後に追加**: `isPlannedGradeTerm(gradeTerm)`/`getTotalQuestionsForLevel(level)`（`tools/quality-check.js` からの再利用のためexportした、既存のプラン決定ロジックの薄いラッパー。挙動自体は変更していません）。 |
 | `js/training-mode.js` | トレーニングモード専用の状態（`trainingState`）・進行管理（新規、第6段階）。`gameState` とは完全に独立しており、タイマー・ハート・敵HP・スコア・ランク・ハイスコアを一切参照しません。`generateTrainingQuestions(categoryId, templates, count)` が、指定カテゴリのテンプレートだけから（新内容/復習内容の比率処理は使わず）ちょうど5問を、問題文・式の重複を避けながら生成します。1問ごとの正解/不正解処理は、ハート減少・ゲームオーバーの代わりに「同じ問題（2段階なら同じ式）を解答欄をクリアしたまま再挑戦させる」処理になっており、`answer-checker.js`・`multi-step-engine.js`・`ui.js` のカード生成/正誤判定/分数表示はすべて通常バトルと同じ関数をそのまま再利用します。開発者用検証ページ向けの `validateTrainingSetGeneration()`（指定カテゴリで20回生成し、5問ちょうどか・他カテゴリが混ざらないか・重複が無いかを検証）もここにあります。 |
-| `js/review-mode.js` | 総復習モード専用の状態（`reviewState`）・進行管理（運用開始後に追加）。`gameState`（通常バトル）・`trainingState`（トレーニング）のどちらとも完全に独立しています。「文章題バトルをベースとするが、スコア・ランク・時間制限が無い」という設計のため、ハート・敵HP・クリア/ゲームオーバー/リタイアの判定・演出は `game.js` と同じ考え方、問題を事前にすべて生成しておく進行方式・タイマー概念が無い点は `training-mode.js` と同じ考え方を組み合わせていますが、どちらのファイルも深く参照しません（唯一の例外は `runCountdown()` の再利用）。`getQuestionCountForScope(scope)` がスコープ（`"4"`／`"5"`／`"6"`／`"all"`）に属するカテゴリ数（＝出題数）を `data/category-registry.js` から動的に導出し、開始時にそのスコープの全カテゴリから1問ずつ生成してシャッフルします（`generateReviewQuestions()`）。ゲームスタート（1問目開始）からの経過時間を1秒おきに `ui.updateElapsedTime()` へ渡す処理、固定エネミー（`js/enemy-list.js` の `FORMULA_KAMEN`／`FORMULA_KAMEN_ACE`）の割り当て、スコープに応じたハート数（「小学校のまとめ」だけ1個）の決定もここが担当します。**運用開始後に追加**: `js/game.js` と同じく、クリアが確定した瞬間（`finishReview()` の `type === "clear"` 分岐）にだけ、登場した固定エネミーを `recordDefeatedEnemy()` でエネミー図鑑へ記録します。 |
+| `js/review-mode.js` | 総復習モード専用の状態（`reviewState`）・進行管理（運用開始後に追加）。`gameState`（通常バトル）・`trainingState`（トレーニング）のどちらとも完全に独立しています。「文章題バトルをベースとするが、スコア・ランク・時間制限が無い」という設計のため、ハート・敵HP・クリア/ゲームオーバー/リタイアの判定・演出は `game.js` と同じ考え方、問題を事前にすべて生成しておく進行方式・タイマー概念が無い点は `training-mode.js` と同じ考え方を組み合わせていますが、どちらのファイルも深く参照しません（唯一の例外は `runCountdown()` の再利用）。`getQuestionCountForScope(scope)` がスコープ（`"4"`／`"5"`／`"6"`／`"all"`）に属するカテゴリ数（＝出題数）を `data/category-registry.js` から動的に導出し、開始時にそのスコープの全カテゴリから1問ずつ生成してシャッフルします（`generateReviewQuestions()`）。ゲームスタート（1問目開始）からの経過時間を1秒おきに `ui.updateElapsedTime()` へ渡す処理、固定エネミー（`js/enemy-list.js` の `FORMULA_KAMEN`／`FORMULA_KAMEN_ACE`）の割り当て、スコープに応じたハート数（「小学校のまとめ」だけ1個）の決定もここが担当します。**運用開始後に追加**: `js/game.js` と同じく、クリアが確定した瞬間（`finishReview()` の `type === "clear"` 分岐）にだけ、登場した固定エネミーを `recordDefeatedEnemy()` でエネミー図鑑へ記録します。**運用開始後に追加**: `generateReviewQuestions(scope)` をexport、`getReviewScopeKeys()`/`getReviewScopeLabel(scope)`（`tools/quality-check.js` からの再利用のため追加）。 |
 | `js/ui.js` | 画面の表示切り替え、問題文・選択肢カード・解答欄の表示、HP/ハート/時間ゲージの更新、正解/不正解演出、カードのタップ操作・ドラッグ操作（Pointer Events）、結果画面の表示、デバッグパネルの表示を行います。2〜3段階問題用に、進行表示（「式を2つ答えよう！」／「（それまでの式）の続きを答えよう」。第12段階で「式 ○／○：」の進行番号表示を廃止）・中間結果カードの見た目・途中式正解の演出・`?debug=true` 時の開発版モードボタンの動的追加も担当します。数値・分数の表示は必ず `js/value-renderer.js` の `renderValueHtml()` / `renderTextPartsHtml()` を経由し（問題文・カード・解答欄・結果ボックス・履歴）、分数を含むカード・解答欄には専用のクラス（`choice-value-fraction`）で高さを確保します。タイトル画面で最後に選んだ出題範囲・モード・トレーニングの学期/カテゴリの保存・復元も担当します。**第6段階で追加**: モード選択ボタン（`setMode()`）、`data/category-registry.js` から動的に生成する学年学期/カテゴリ選択ボタン、トレーニング画面のヘッダー更新（`updateTrainingHeader()`）、トレーニング専用の軽い誤答演出（`triggerTrainingIncorrectEffect()`）、トレーニング結果画面（`showTrainingResultScreen()`）。バトル画面・結果画面のバトル専用/トレーニング専用/総復習専用要素の出し分けは、`#app` 要素への `mode-training`／`mode-review` クラスの付け外し（CSS側の `.battle-only` / `.training-only` / `.review-only` / `.hide-in-training`）にまとめており、`ui.js` 自体には要素ごとの表示切り替えロジックをほとんど書いていません。**運用開始後に追加**: 総復習モードの「学年」ボタン（`#review-scope-select`。4つの固定ボタン）・開始確認ダイアログ（`showReviewStartDialog()`。`getReviewQuestionCountForScope()` で問題数を`data/category-registry.js`から動的に算出）、バトル画面ヘッダーの総復習表示（`updateReviewHeader()`）、経過時間表示（`updateElapsedTime()`）、総復習結果画面（`showReviewResultScreen()`）、タイトル画面のサブタイトル（アプリタイトル直下の説明文）をモードに応じて切り替える `updateModeSubtitle()`（以前は常に固定文言で、モード切り替えボタンより上にあったが、ボタンの下へ移動しモードごとに文言を変えるよう変更）。**運用開始後に追加**: ヘルプボタン・ヘルプメニュー・「このゲームについて」・エネミー図鑑の画面遷移（`openHelpMenu()` `openAboutScreen()` `openEnemyDexScreen()` `backToHelpMenuFromDetail()` `closeHelpMenuToTitle()`）、エネミー図鑑の描画（`renderEnemyDex()`。`js/enemy-list.js` の `getAllEnemiesForDex()`/`getEnemyUnlockHint()` と `js/storage.js` の `loadDefeatedEnemyIds()` だけから組み立てる）、画面遷移時のフォーカス移動（`focusElement()`）、ヘルプ関連画面が表示されているときだけ働くEscキーでの1つ前の画面への遷移。ヘルプはゲーム進行を持たない補助画面のため `js/app.js` の `MODES` ディスパッチテーブルには追加していません。 |
-| `js/question-generator.js` | テンプレートから値を生成し、問題文（`text` またはHTML描画用の `textParts`）・選択肢カード（最大8枚）・`solutionRoutes`（解決済みの正解ルート）を作成します。生成直後に `question-validator.js` で検証し、不正な場合はコンソールにエラーを出力した上で再生成します。`questionType: "multiStep"` の場合は、値の生成とルートの数値解決までを行い、進行状態の初期化・最初のカード生成は `multi-step-engine.js` に委譲します。小数変数（`decimalPlaces`）・分数変数（`type:"fraction"`）・百分率変数（`type:"percent"`）の生成、4-2/4-3/5-1/5-2/5-3の出題計画生成（`planQuestionSequence()` `getCandidateTemplatesForSlot()` `getContentGroup()`、`GRADE_TERM_PLAN_CONFIG` にモードを1件追加するだけで新しい学期にも適用できる）もここが担当します。ダミーカード生成・重複排除は、数値・分数・百分率のどの値にも対応した `value-utils.js` の `valueKey()` を使って値の型を意識せず行います。**第7段階で追加**: `quantityRelation` を持つテンプレート（小数倍・もとの量）専用の値生成（`generateDecimalMultiplicativeComparisonValues()`）と、そのテンプレートの「見えている数値」を `solutionRoutes[0]` から動的に判定する `getVisibleNumbers()` の分岐。**第8段階で追加**: 「2つの既知の値から積にあたる3つ目の値を求める」共通ロジック `generateProportionalValues()` を切り出し、`generateDecimalMultiplicativeComparisonValues()`（小数倍・もとの量）に加えて `generateAverageValues()`（平均）・`generateUnitRateValues()`（単位量あたり・混み具合）がこれを共有します。異分母分数のたし算・ひき算は `generateStandardValues()` のエイリアスのため、この点は無改造です。**第9段階で追加**: `pickPercentValue()`（百分率変数の生成）、`generateSpeedValues()`（速さ、`generateProportionalValues()` を再利用）、`generatePercentageValues()`（割合）、`resolveOperand()` の `{source:"literal"}` 対応（割引・増量の固定値「100%」）、`applyResultType()`（`resultType:"percent"` の変換）、`generateDummyPercent()`、`renderTemplateText()` の百分率対応（`String(value)` が `"[object Object]"` になっていたバグの修正）。**第10段階で追加**: `fractionTimesInteger`/`fractionTimesFraction`/`fractionDividedByInteger`/`integerDividedByFraction`/`fractionDividedByFraction`（すべて `generateStandardValues()` のエイリアス）、`generateFractionMultiplicativeComparisonValues()`（分数倍。もとにする量×分数倍を `calculateValues()` に委譲）、`QUANTITY_RELATION_GENERATOR_TYPES`/`GRADE_TERM_PLAN_CONFIG` に `"6-1"` 関連を追加。分数倍の内部ロジックは `generateFractionProportionalValues(variables, aKey, bKey, productKey)` として汎用化しており（小数版の `generateProportionalValues()` と同じ考え方）、`generateFractionUnitRateValues()`（単位量あたり・分数版）がこれを共有します。 |
+| `js/question-generator.js` | テンプレートから値を生成し、問題文（`text` またはHTML描画用の `textParts`）・選択肢カード（最大8枚）・`solutionRoutes`（解決済みの正解ルート）を作成します。生成直後に `question-validator.js` で検証し、不正な場合はコンソールにエラーを出力した上で再生成します。`questionType: "multiStep"` の場合は、値の生成とルートの数値解決までを行い、進行状態の初期化・最初のカード生成は `multi-step-engine.js` に委譲します。小数変数（`decimalPlaces`）・分数変数（`type:"fraction"`）・百分率変数（`type:"percent"`）の生成、4-2/4-3/5-1/5-2/5-3の出題計画生成（`planQuestionSequence()` `getCandidateTemplatesForSlot()` `getContentGroup()`、`GRADE_TERM_PLAN_CONFIG` にモードを1件追加するだけで新しい学期にも適用できる）もここが担当します。ダミーカード生成・重複排除は、数値・分数・百分率のどの値にも対応した `value-utils.js` の `valueKey()` を使って値の型を意識せず行います。**第7段階で追加**: `quantityRelation` を持つテンプレート（小数倍・もとの量）専用の値生成（`generateDecimalMultiplicativeComparisonValues()`）と、そのテンプレートの「見えている数値」を `solutionRoutes[0]` から動的に判定する `getVisibleNumbers()` の分岐。**第8段階で追加**: 「2つの既知の値から積にあたる3つ目の値を求める」共通ロジック `generateProportionalValues()` を切り出し、`generateDecimalMultiplicativeComparisonValues()`（小数倍・もとの量）に加えて `generateAverageValues()`（平均）・`generateUnitRateValues()`（単位量あたり・混み具合）がこれを共有します。異分母分数のたし算・ひき算は `generateStandardValues()` のエイリアスのため、この点は無改造です。**第9段階で追加**: `pickPercentValue()`（百分率変数の生成）、`generateSpeedValues()`（速さ、`generateProportionalValues()` を再利用）、`generatePercentageValues()`（割合）、`resolveOperand()` の `{source:"literal"}` 対応（割引・増量の固定値「100%」）、`applyResultType()`（`resultType:"percent"` の変換）、`generateDummyPercent()`、`renderTemplateText()` の百分率対応（`String(value)` が `"[object Object]"` になっていたバグの修正）。**第10段階で追加**: `fractionTimesInteger`/`fractionTimesFraction`/`fractionDividedByInteger`/`integerDividedByFraction`/`fractionDividedByFraction`（すべて `generateStandardValues()` のエイリアス）、`generateFractionMultiplicativeComparisonValues()`（分数倍。もとにする量×分数倍を `calculateValues()` に委譲）、`QUANTITY_RELATION_GENERATOR_TYPES`/`GRADE_TERM_PLAN_CONFIG` に `"6-1"` 関連を追加。分数倍の内部ロジックは `generateFractionProportionalValues(variables, aKey, bKey, productKey)` として汎用化しており（小数版の `generateProportionalValues()` と同じ考え方）、`generateFractionUnitRateValues()`（単位量あたり・分数版）がこれを共有します。**運用開始後に追加**: `pickInt()`/`shuffleArray()` の乱数を差し替えられる `setRandomSource()`/`resetRandomSource()`（`tools/quality-check.js` 専用。既定は`Math.random`のままのため通常のプレイには一切影響しない）。 |
 | `js/multi-step-engine.js` | 2段階問題専用の進行管理。現在の途中式番号、正解候補となる解法ルートの絞り込み、途中式・最終式の判定、中間結果の保存、中間結果カードの生成、次の途中式への移行、複数解法の管理、結果画面用の履歴データの作成を担当します。開発者用検証ページから使う「全ルート完答シミュレーション」もここにあります。式の文字列表示は `js/value-renderer.js` の `renderValueHtml()` を使っており、すでに解決済みの値（数値・分数・百分率のいずれか）を型を意識せず扱う設計のため、第9段階の百分率2段階問題（割引・増量）にも無改造で対応できました。 |
 | `js/question-validator.js` | 問題テンプレート（構造）と生成済み問題（数値確定後）を検証します。1段階問題・2段階問題の両方に対応し、2段階問題については「式が2つ登録されているか」「ルートID・resultKeyの重複」「存在しない変数/中間結果の参照や循環参照が無いか」「各ルートの最終結果が一致するか」なども検証します。加えて、`gradeTerm`／`contentGroup` の値の妥当性、`template`/`textParts` のどちらかが存在するか、`textParts` の構造・参照先の妥当性、小数の桁数が多すぎないか、分数の分母・分子の範囲や同分母性、百分率の値の妥当性、`exactDivision`系のわる数が想定範囲内か、`formatNumber()`/`parseFormattedNumber()` の往復変換が元の値と一致するか、分数・百分率の表示用HTML・`aria-label`が正しく生成できるか、なども検証します。ゲーム本体（`game.js`・`training-mode.js`）と `tools/question-validator.html` の両方から使われます。**第6段階で追加**: `filterValidTemplateSets()`（不正なテンプレートを出題プールから除外する処理を`game.js`から移設し、通常バトル・トレーニング共通で使う）、`validateCategoryRegistry()`（カテゴリレジストリ自体のID重複・必須項目チェック）、`validateCategoryRegistryAgainstTemplates()`（レジストリとテンプレートの対応関係。孤立した`categoryId`・テンプレート0件のカテゴリが無いかを検証）。**第7段階で追加**: `validateQuantityRelation()`（小数倍・もとの量テンプレートの `quantityRelation` の構造検証）と、`comparedKey` のような動的な変数名も「既知の変数」として扱う `getKnownVariableKeys()` ヘルパー。**第8段階で追加**: `validateQuantityRelation()` を `QUANTITY_RELATION_TYPE_CONFIG` で汎用化し、平均（`type:"average"`）・単位量あたり（`type:"unit-rate"`）にも対応。異分母分数専用の `validateUnlikeDenominators()`（分母が異なることを要求）・`validateNonNegativeUnlikeDenominatorSubtraction()`（クロス乗算で答えが負にならないか検証）を追加。既存の「生成された分数の分母が同じか」というチェックは、同分母専用の `generatorType`（`SAME_DENOMINATOR_GENERATOR_TYPES`）に限定するよう修正（異分母分数を誤って弾かないようにするため）。**第9段階で追加**: `QUANTITY_RELATION_TYPE_CONFIG` に速さ（`type:"speed"`）・割合（`type:"percentage"`）を追加、`validatePercentVariable()`（百分率変数の検証）、`validateValueRepresentation()` の百分率対応、`validateMultiStepSolutionRoutes()` の `{source:"literal"}` オペランド対応、`applyResultTypeForValidation()`（生成側と独立に `resultType:"percent"` を再現し、正解式の再計算と一致させる）。**第10段階で追加**: `VALID_GRADE_TERMS` に `"6-1"` を追加、新しい `generatorType` 7種のルール、`QUANTITY_RELATION_TYPE_CONFIG` に分数倍（`type:"fraction-multiplicative-comparison"`）を追加、0でわるチェックを型を意識せず行う `isZeroValue()`（`value-utils.js`）に統一。`fractionUnitRate` の `generatorType` ルール、`QUANTITY_RELATION_TYPE_CONFIG` の単位量あたり・分数版（`type:"fraction-unit-rate"`）も第10段階で追加しています。 |
 | `js/answer-checker.js` | `eval()` を使わずに、値（数値・分数・百分率）と演算記号から安全に式を計算します。1つの式が正解ステップと一致するかを判定する共通ロジック（`matchesStep`）を持ち、1段階問題の `checkAnswer` と、2段階問題の `multi-step-engine.js` の両方から使われます。実際の計算・比較は自分では行わず、`value-utils.js` の `calculateValues()` / `areValuesEqual()` にすべて委譲しています。 |
@@ -990,12 +1218,14 @@ http://localhost:8000/index.html?debug=true
 | `data/category-registry.js` | トレーニングモードで選べる38カテゴリの単一の情報源（第6段階で新規導入、第7段階で4カテゴリ、第8段階で5カテゴリ、第9段階で8カテゴリ、第10段階で8カテゴリ（分数×整数〜単位量あたり（分数）を含む）追加）。各カテゴリは `{ id, label, gradeTerm, gradeLabel, enabledInTraining, order }` を持ち、`getCategoriesForGradeTerm()` `getGradeTermGroups()` `getCategoryById()` のヘルパーを提供します。`js/ui.js` はこのレジストリからタイトル画面のカテゴリ選択ボタンを動的に生成するだけで、カテゴリ名を個別にハードコードしていません。詳しくは[18章](#18-トレーニングモード第6段階)。 |
 | `data/grade4-term1.js` | 小学4年生・1学期の1段階問題テンプレートのデータのみを定義（ゲーム処理は含みません）。 |
 | `data/grade4-term2.js` | 小学4年生・2学期の1段階問題テンプレートのデータのみを定義（小数のたし算・ひき算、大きな数、2けたでわるわり算、各6種類・計24種類）。 |
-| `data/grade4-term3.js` | 小学4年生・3学期の1段階問題テンプレートのデータのみを定義（小数×整数・小数÷整数・同分母分数のたし算・同分母分数のひき算、各6種類・計24種類）。分数のテンプレートは `textParts` を使用します。 |
+| `data/grade4-term3.js` | 小学4年生・3学期の1段階問題テンプレートのデータのみを定義（小数×整数・小数÷整数、各6種類。同分母分数のたし算・同分母分数のひき算、各10種類（真分数どうし6種類＋帯分数を含む4種類、運用開始後に追加）・計32種類）。分数のテンプレートは `textParts` を使用します。 |
 | `data/grade5-term1.js` | 小学5年生・1学期の1段階問題テンプレートのデータのみを定義（小数×小数・小数÷小数・小数倍・もとの量、各8種類・計32種類）。小数倍・もとの量のテンプレートは `quantityRelation` メタデータを持ちます。詳しくは[19章](#19-小学5年生1学期第7段階)。 |
 | `data/grade5-term2.js` | 小学5年生・2学期の問題テンプレートのデータのみを定義（異分母分数のたし算・ひき算・平均・単位量あたり・混み具合、各6種類・計30種類。第8段階で新規）。平均・単位量あたり・混み具合のテンプレートは `quantityRelation` メタデータを持ち、「2つの数の平均」だけは `questionType:"multiStep"` の2段階問題です。詳しくは[20章](#20-小学5年生2学期第8段階)。 |
 | `data/grade5-term3.js` | 小学5年生・3学期の問題テンプレートのデータのみを定義（速さ・道のり・時間・割合（比べる量/百分率/もとにする量）・割引・増量、各5種類・計40種類。第9段階で新規）。速さ・割合のテンプレートは `quantityRelation` メタデータを持ち、割引・増量は `questionType:"multiStep"` の2段階問題（それぞれ2つの解法ルート）です。詳しくは[21章](#21-小学5年生3学期第9段階)。 |
 | `data/grade6-term1.js` | 小学6年生・1学期の問題テンプレートのデータのみを定義（分数×整数/分数×分数/分数÷整数/整数÷分数/分数÷分数/分数倍・比べる量/分数倍・もとの量/単位量あたり（分数）、各5種類・計40種類。第10段階で新規（単位量あたり（分数）を含む））。すべて `textParts` を使用（分数の値が問題文に直接登場するため）。分数倍・単位量あたり（分数）のテンプレートは `quantityRelation` メタデータを持ちます。詳しくは[22章](#22-小学6年生1学期第10段階)。 |
 | `data/multi-step-integer.js` | 整数のみの2段階問題テンプレートのデータのみを定義。開発版モード（`4-multi-step`）専用のデータであると同時に、4-2モードの「2段階文章題」カテゴリ、4-3/5-1/5-2/5-3モードの復習内容からも同じデータをそのまま参照します（複製はしていません）。 |
+| `tools/quality-check.js` | 全範囲品質確認ページ（`tools/quality-check.html`）のオーケストレーション層（運用開始後に追加）。`data/index.js`・`category-registry.js` からの対象テンプレートの動的な探索・重複排除、テンプレートごとの100回耐久テストのループ（進行状況コールバック・`requestIdleCallback`/`setTimeout`での譲歩・一時停止/再開/中止）、通常バトル・トレーニング・総復習の出題セット検証、1〜3段階の回帰テスト、集計・絞り込み・JSON/CSVレポート生成、乱数シードでの再現、スマートフォンプレビュー用の整形（`js/value-renderer.js`を再利用）を行います。既存の検証ロジック（`js/question-validator.js`・`js/multi-step-engine.js`・`js/training-mode.js`・`js/review-mode.js`・`js/question-generator.js`）はそのまま呼び出すだけで複製していません。DOMに依存しない設計のため、Node.jsからも動作確認できます。 |
+| `tools/quality-rules.js` | `tools/quality-check.js` が使う、既存の検証ロジックがカバーしていないチェックをまとめた純粋関数群（運用開始後に追加）。カードの漏えい確認（全カード・全値型、`areValuesEqual()`使用）、問題文の異常・数値の偶然の一致の確認、`quantityRelation`との照合、重複・連続出題のシグネチャ（`questionSignature`/`formulaSignature`/`valueSignature`）、数値難易度の統計とカテゴリ別しきい値（`QUALITY_RULES_BY_CATEGORY`）、乱数シード生成（mulberry32、外部ライブラリ不使用）、ルールID定数（`RULE`）、意図的な不正データのfixtureと自己診断（`runSelfTest()`）を持ちます。DOM・他のjs/ファイルへの依存を持たない設計です。 |
 
 ## 12. ローカルでの起動方法
 
@@ -1170,7 +1400,8 @@ npx serve .
   - 同じ問題文・同じ式が1回のゲーム内で繰り返し出題されないようにする重複回避
   - タイトル画面で最後に選んだ出題範囲を記憶し、次回起動時に自動選択（無効な値の場合は4-1にフォールバック）
   - ハイスコアは出題範囲＋レベルの組み合わせごとに保存（4-3にも独立したハイスコア枠がある）
-  - 24種類の新規テンプレート（小数×整数・小数÷整数・同分母分数のたし算・同分母分数のひき算、各6種類）
+  - 32種類の新規テンプレート（小数×整数・小数÷整数、各6種類。同分母分数のたし算・同分母分数のひき算、
+    各10種類（真分数どうし6種類＋帯分数を含む4種類、運用開始後に追加））
 - **トレーニングモード（第6段階、新規）**
   - タイトル画面でモード（通常バトル／トレーニング）を選択できる
   - 13カテゴリ（`data/category-registry.js`）から1つを選び、そのカテゴリだけを5問出題
@@ -1459,6 +1690,11 @@ npx serve .
     消去を実行した直後は、確認ボタン（「⚠消去する」「もどる」）を隠して「すべての記録を
     消去しました。」という完了メッセージだけを2.5秒間表示し、そのあと自動的にダイアログを閉じて
     元のヘルプメニュー画面へ戻る（「⚠記録を消す」ボタンへフォーカスも戻す）
+- **全範囲品質確認ページ**（`tools/quality-check.html`、開発者用。運用開始後に追加）: 全学期・
+  全カテゴリのテンプレートを既定100回ずつ耐久テストし、カードの漏えい・問題文の異常・数量関係との
+  不一致・重複連続出題・数値難易度・出題セット・1〜3段階の回帰・スマートフォン表示を確認できる。
+  プレイヤー向け画面にはリンクしておらず、保存データも変更しない。詳しくは
+  [8章の「全範囲品質確認ページ」](#全範囲品質確認ページtoolsquality-checkhtml運用開始後に追加)を参照
 
 ## 15. 今回対応していない内容／今後追加予定の機能
 
@@ -1466,7 +1702,10 @@ npx serve .
 
 分数・小数データの正確性・既存機能の維持を優先するため、次の内容は今回意図的に対象外としています。
 
-- 帯分数への変換（仮分数はそのまま表示します）
+- 帯分数への変換（仮分数はそのまま表示します。**運用開始後に、同分母分数のたし算・ひき算の
+  一部問題に限定して帯分数表示を追加**しました。詳しくは
+  [5章の「帯分数の表示（運用開始後に追加）」](#帯分数の表示運用開始後に追加)を参照。
+  その他の分数カテゴリでは、引き続き仮分数のまま表示します）
 - 小数を使った複数段階文章題（複数段階問題は整数・百分率・分数のみ対応。「2つの数の平均」の
   たし算→わり算のような整数の組み合わせ、割引・増量の百分率、分数の速さ・比を使った数量・
   比例配分の分数は対応済みですが、小数倍・単位量あたりなど小数を含む段階を組み合わせた
@@ -1502,7 +1741,10 @@ npx serve .
 - 分数を使った速さ・分数を使った割合（分数と速さ・百分率が混在する問題。
   **第11段階で、分数を使った速さ・分数の割合として追加**しました。ただし分数と百分率が
   同じ問題の中で混在する問題や、分数と速さの単位換算以外の混在は引き続き対象外）
-- 帯分数を使った入力・表示（今回も仮分数のまま扱います。既存方針の継続）
+- 帯分数を使った入力・表示（今回も仮分数のまま扱います。既存方針の継続。**運用開始後に、
+  同分母分数のたし算・ひき算の一部問題に限定して表示のみ帯分数化**しました。入力（カードの分割）は
+  今後も対象外です。詳しくは
+  [5章の「帯分数の表示（運用開始後に追加）」](#帯分数の表示運用開始後に追加)を参照）
 - 分数の乗除を含む2段階文章題（**第11段階で分数の速さ・比を使った数量として追加**）、
   複数の分数計算を連続して行う問題、括弧を使う式
 - 3回以上の計算が必要な問題（**第11段階で比例配分として追加**。4回以上は引き続き対象外）
@@ -1674,6 +1916,17 @@ npx serve .
 - [ ] 分数カード・解答欄が上下で切れず、タップ領域が44px以上ある
 - [ ] 10問（デフォルト出題数）を通しで見たとき、新内容（3学期の新出内容）と復習内容（1・2学期の内容）が
       およそ半々になっている（`?debug=true` のデバッグパネルで確認できる）
+- [ ] （運用開始後に追加）同分母分数のたし算・ひき算を何度か遊ぶと、「2と3/5」のような帯分数の
+      問題が出題されることがある（帯分数は整数部＋縦型分数の横並びで表示され、1つのカードとして
+      タップ・ドラッグできる）
+- [ ] 帯分数の答えの正誤判定が正しい（例: `2と1/5+2/5=2と3/5`）。内部的には仮分数として比較されるため、
+      未約分表示・約分表示のどちらでも正しく判定される
+- [ ] 帯分数が問題文・選択肢カード・解答欄・■欄・正解演出・問題履歴のすべてで一貫して帯分数表示になる
+      （一部の画面だけ仮分数表示に戻らない）
+- [ ] 真分数（1未満）はこれまで通り仮分数のまま表示され、整数になる値は「3と0/5」ではなく
+      通常の整数として表示される
+- [ ] 分数×分数・分数÷分数など、同分母分数のたし算・ひき算以外のカテゴリでは、
+      仮分数が1以上でも帯分数化されない（帯分数表示が意図せず他のカテゴリへ漏れていない）
 - [ ] 復習内容が1学期・2学期の両方から出題される（どちらか一方に偏らない）
 - [ ] 同じカテゴリの問題（復習内容全体も1つのまとまりとして）が3問以上連続しない
 - [ ] `?debug=true` のデバッグパネルに、値の種類・分数の分子分母・最大公約数・約分後の値・
@@ -2126,6 +2379,33 @@ npx serve .
       （クロス乗算で「aの最小値 ≥ bの最大値」を保証。`validateNonNegativeUnlikeDenominatorSubtraction` が検証）
 - [ ] たし算は `commutative: true`、ひき算は `commutative: false` になっている
 - [ ] 検証ページで、生成された問題の分数が正しく計算・約分され、縦型で表示されている
+
+### 帯分数を含むテンプレート（同分母分数のたし算・ひき算限定、運用開始後に追加）
+
+- [ ] `categoryId` が `"same-denominator-fraction-addition"` または
+      `"same-denominator-fraction-subtraction"` のどちらかになっている（この2カテゴリ以外に
+      `fractionDisplayMode:"mixed"` や `type:"mixedFraction"` を使うと `js/question-validator.js` が
+      エラーにする）
+- [ ] `fractionDisplayMode: "mixed"` を指定している
+- [ ] 帯分数にしたい変数は `type: "mixedFraction"` とし、`wholeMin`（1以上）・`wholeMax`・
+      `numeratorMin`（1以上）・`numeratorMax`（`denominator`未満）を指定している
+      （真分数のまま残したい変数は、これまで通り `type: "fraction"` のままでよい）
+- [ ] `a`・`b`の`denominator`が一致している（帯分数どうし・帯分数と真分数の組み合わせでも同様）
+- [ ] たし算でくり上がりを作る場合は分子部分の和が分母を超える（`p+q>denominator`）ように、
+      くり上がりなしにする場合は分母未満（`p+q<denominator`）になるように範囲を設計している
+      （`p+q=denominator`ちょうどは、答えが整数だけになってしまうため避ける）
+- [ ] ひき算でくり下がりを作る場合は`p<q`に、くり下がりなしにする場合は`p>=q`になるように
+      範囲を設計している（`p`・`q`は帯分数なら分子部分、真分数ならそのままの分子）
+- [ ] ひき算の答えが必ず0以上になっている（整数部・分数部を合わせた実際の大小関係で確認する。
+      `js/question-validator.js` の `validateSameDenominatorFractionRanges` が、
+      帯分数を`whole×denominator+numerator`の実効値に変換したうえで検証する）
+- [ ] 任意で `mixedNumberPattern`（`"addition-no-carry"` / `"addition-with-carry"` /
+      `"subtraction-no-borrow"` / `"subtraction-with-borrow"`）を指定し、実際の値と矛盾していない
+      （`tools/quality-check.html` の `MIXED_NUMBER_PATTERN_MISMATCH` で確認できる）
+- [ ] `tools/question-validator.html` で「帯分数あり」バッジが付き、OK表示になっている
+- [ ] `tools/quality-check.html` で追加したテンプレートを100回・可能であれば500回耐久テストし、
+      エラー・警告が0件になっている（ダミーカードが答えと同値にならないか、
+      「Xと0/Y」のような誤表示が無いかも自動確認される）
 
 ### quantityRelationを持つテンプレート（小数倍・もとの量・平均・単位量あたり・混み具合・速さ・割合・分数倍・分数割合、第7〜11段階）
 

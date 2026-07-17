@@ -6,7 +6,7 @@
 // 各画面で個別にHTMLを組み立てないことで、表示方法の変更を1箇所に閉じ込められます。
 
 import { formatNumber } from "./number-utils.js";
-import { simplifyFraction } from "./fraction-utils.js";
+import { simplifyFraction, toMixedNumberParts } from "./fraction-utils.js";
 import { formatPercent, percentToRatio } from "./percentage-utils.js";
 import { formatRatio } from "./ratio-utils.js";
 import { formatScale } from "./scale-utils.js";
@@ -28,6 +28,15 @@ export function escapeHtml(value) {
 export function buildFractionAriaLabel(fraction, { simplify = true } = {}) {
   const s = simplify ? simplifyFraction(fraction) : fraction;
   return `${s.denominator}分の${s.numerator}`;
+}
+
+/**
+ * 帯分数の読み上げ用ラベルを「(整数部)と(分母)分の(分子)」の形式で返します（第11段階で追加）。
+ * 例: whole=2, numerator=3, denominator=5 → "2と5分の3"
+ * 内部の仮分数「13分の5」のような読み上げにならないよう、必ずこの関数を経由してください。
+ */
+export function buildMixedNumberAriaLabel(whole, numerator, denominator) {
+  return `${whole}と${denominator}分の${numerator}`;
 }
 
 /**
@@ -57,12 +66,15 @@ export function buildScaleAriaLabel(scale) {
  *   別途扱うため、この変更の影響を受けません。
  * - 整数・小数: number-utils.js の formatNumber() で末尾0除去（既定では桁区切りカンマも付与）した上でエスケープ
  * @param {number|{type:"fraction",numerator:number,denominator:number}|{type:"percent",value:number}} value
- * @param {{useSeparator?: boolean, simplify?: boolean}} options - useSeparator: false で桁区切りカンマを付けずに表示する
+ * @param {{useSeparator?: boolean, simplify?: boolean, mixedNumber?: boolean}} options - useSeparator: false で桁区切りカンマを付けずに表示する
  *   （選択肢カード・解答欄・ドラッグ中のカードは「3900」のようにカンマ無しで表示するために使う）。
  *   simplify: false で分数を約分せずそのまま表示する（第9段階で追加。既定は true=約分して表示、
  *   これまでと同じ挙動。百分率には影響しません）。
+ *   mixedNumber: true かつ値が1以上（分子が分母以上）の分数のとき、帯分数（整数部＋縦型分数）
+ *   として表示する（第11段階で追加。同分母分数のたし算・ひき算の一部問題専用。既定は false＝
+ *   これまで通りの仮分数表示で、他のカテゴリには一切影響しません）。
  */
-export function renderValueHtml(value, { useSeparator = true, simplify = true } = {}) {
+export function renderValueHtml(value, { useSeparator = true, simplify = true, mixedNumber = false } = {}) {
   if (isFractionValue(value)) {
     const s = simplify ? simplifyFraction(value) : value;
     // 約分した結果、分母が1になる場合（＝整数値の場合）は、縦型分数ではなく
@@ -72,6 +84,27 @@ export function renderValueHtml(value, { useSeparator = true, simplify = true } 
     // カードに直接載る「操作前の値」の表示だけを対象にしている）。
     if (s.denominator === 1) {
       return escapeHtml(formatNumber(s.numerator, { useSeparator }));
+    }
+    // 帯分数表示（第11段階で追加）。整数部＋分子部・分母部（縦型分数を流用）を
+    // inline-flexで横並びにする。真分数（値が1未満）はこれまで通り仮分数のまま表示する。
+    if (mixedNumber && Math.abs(s.numerator) >= s.denominator) {
+      const parts = toMixedNumberParts(s);
+      // simplify:false（約分なし表示）のときは、分母が1にならなくても分子が分母の倍数
+      // （＝実質的に整数）になることがある（例: 12/6）。その場合は「2と0/6」のような
+      // 誤った帯分数表示にせず、整数として表示する。
+      if (parts.numerator === 0) {
+        return escapeHtml(formatNumber(parts.whole, { useSeparator }));
+      }
+      const label = buildMixedNumberAriaLabel(parts.whole, parts.numerator, parts.denominator);
+      return (
+        `<span class="mixed-number" aria-label="${escapeHtml(label)}">` +
+        `<span class="mixed-number-whole" aria-hidden="true">${parts.whole}</span>` +
+        `<span class="fraction" aria-hidden="true">` +
+        `<span class="fraction-numerator">${parts.numerator}</span>` +
+        `<span class="fraction-denominator">${parts.denominator}</span>` +
+        `</span>` +
+        `</span>`
+      );
     }
     const label = buildFractionAriaLabel(value, { simplify });
     return (
@@ -138,13 +171,14 @@ export function renderRelationTableHtml(table) {
 /**
  * textParts形式（{type:"text", value:string} と {type:"value", value:Value} が交互に並ぶ配列）を
  * HTML文字列に変換します。分数を含む問題文は、このtextPartsを使って組み立ててください。
- * @param {{simplify?: boolean}} options - renderValueHtml() にそのまま引き継がれる（第9段階で追加）。
+ * @param {{simplify?: boolean, mixedNumber?: boolean}} options - renderValueHtml() にそのまま引き継がれる
+ *   （simplify は第9段階、mixedNumber は第11段階で追加）。
  */
-export function renderTextPartsHtml(textParts, { simplify = true } = {}) {
+export function renderTextPartsHtml(textParts, { simplify = true, mixedNumber = false } = {}) {
   return textParts
     .map((part) => {
       if (part && part.type === "value") {
-        return renderValueHtml(part.value, { simplify });
+        return renderValueHtml(part.value, { simplify, mixedNumber });
       }
       return escapeHtml(part ? part.value : "");
     })
