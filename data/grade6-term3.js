@@ -919,6 +919,18 @@ export const grade6Term3Templates = [
           { left: { source: "variable", key: "actualLength" }, operator: "×", right: { source: "literal", value: 100000 }, resultKey: "actualLengthInCm" },
           { left: { source: "result", key: "actualLengthInCm" }, operator: "÷", right: { source: "variable", key: "scaleDenominator" }, resultKey: "answer" }
         ]
+      },
+      {
+        // 先に「変換係数(100000)÷縮尺の分母」で比を求めてから、実際の長さにかけるルート
+        // （運用開始後に追加。1つ目の式の選択肢カードに縮尺の分母・実際の長さ・変換係数(100000)の
+        // 3枚が必ずそろうようにするため）。km単位は「実際の長さ÷縮尺の分母」を先にすると
+        // 小数点以下の桁数が多くなりすぎて計算不能になるため、m単位のテンプレートとは逆の順序にしている。
+        // 例: 縮尺1：10000なら 100000÷10000=10（比）→ 実際の長さ0.5kmなら 10×0.5=5(cm)。
+        id: "ratio-then-multiply-route",
+        steps: [
+          { left: { source: "literal", value: 100000 }, operator: "÷", right: { source: "variable", key: "scaleDenominator" }, resultKey: "ratio" },
+          { left: { source: "result", key: "ratio" }, operator: "×", right: { source: "variable", key: "actualLength" }, resultKey: "answer" }
+        ]
       }
     ],
     answerUnit: "cm"
@@ -1021,7 +1033,9 @@ export const grade6Term3Templates = [
     totalSteps: 2,
     template: "縮尺{scaleValue}の街の地図があります。実際の長さが{actualLength}kmの道のりは、地図上では何cmですか。",
     variables: {
-      scaleDenominator: { values: [25000, 50000, 75000, 100000] },
+      // 75000は「変換係数(100000)÷縮尺の分母」が割り切れない（100000÷75000=1.333…）ため、
+      // 割り切れる40000に変更しています（運用開始後に変更。ratio-then-multiply-routeのため）。
+      scaleDenominator: { values: [25000, 40000, 50000, 100000] },
       mapLength: { min: 2, max: 18, step: 1 }
     },
     generatorType: "findMapLengthFromScale",
@@ -1039,6 +1053,16 @@ export const grade6Term3Templates = [
         steps: [
           { left: { source: "variable", key: "actualLength" }, operator: "×", right: { source: "literal", value: 100000 }, resultKey: "actualLengthInCm" },
           { left: { source: "result", key: "actualLengthInCm" }, operator: "÷", right: { source: "variable", key: "scaleDenominator" }, resultKey: "answer" }
+        ]
+      },
+      {
+        // 先に「変換係数(100000)÷縮尺の分母」で比を求めてから、実際の長さにかけるルート
+        // （運用開始後に追加。1つ目の式の選択肢カードに縮尺の分母・実際の長さ・変換係数(100000)の
+        // 3枚が必ずそろうようにするため）。
+        id: "ratio-then-multiply-route",
+        steps: [
+          { left: { source: "literal", value: 100000 }, operator: "÷", right: { source: "variable", key: "scaleDenominator" }, resultKey: "ratio" },
+          { left: { source: "result", key: "ratio" }, operator: "×", right: { source: "variable", key: "actualLength" }, resultKey: "answer" }
         ]
       }
     ],
@@ -1074,6 +1098,16 @@ export const grade6Term3Templates = [
           { left: { source: "variable", key: "actualLength" }, operator: "×", right: { source: "literal", value: 100 }, resultKey: "actualLengthInCm" },
           { left: { source: "result", key: "actualLengthInCm" }, operator: "÷", right: { source: "variable", key: "scaleDenominator" }, resultKey: "answer" }
         ]
+      },
+      {
+        // 先に「実際の長さ÷縮尺の分母」で地図上の長さをm単位のまま求めてから、最後に
+        // ×100でcmへ変換するルート（運用開始後に追加。1つ目の式の選択肢カードに
+        // 縮尺の分母・実際の長さ・変換係数(100)の3枚が必ずそろうようにするため）。
+        id: "divide-then-convert-route",
+        steps: [
+          { left: { source: "variable", key: "actualLength" }, operator: "÷", right: { source: "variable", key: "scaleDenominator" }, resultKey: "mapLengthInActualUnit" },
+          { left: { source: "result", key: "mapLengthInActualUnit" }, operator: "×", right: { source: "literal", value: 100 }, resultKey: "answer" }
+        ]
       }
     ],
     answerUnit: "cm"
@@ -1107,6 +1141,16 @@ export const grade6Term3Templates = [
         steps: [
           { left: { source: "variable", key: "actualLength" }, operator: "×", right: { source: "literal", value: 100000 }, resultKey: "actualLengthInCm" },
           { left: { source: "result", key: "actualLengthInCm" }, operator: "÷", right: { source: "variable", key: "scaleDenominator" }, resultKey: "answer" }
+        ]
+      },
+      {
+        // 先に「変換係数(100000)÷縮尺の分母」で比を求めてから、実際の長さにかけるルート
+        // （運用開始後に追加。1つ目の式の選択肢カードに縮尺の分母・実際の長さ・変換係数(100000)の
+        // 3枚が必ずそろうようにするため）。
+        id: "ratio-then-multiply-route",
+        steps: [
+          { left: { source: "literal", value: 100000 }, operator: "÷", right: { source: "variable", key: "scaleDenominator" }, resultKey: "ratio" },
+          { left: { source: "result", key: "ratio" }, operator: "×", right: { source: "variable", key: "actualLength" }, resultKey: "answer" }
         ]
       }
     ],

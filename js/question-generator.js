@@ -669,9 +669,38 @@ function generateScaleLengthValues(variables, quantityRelation) {
   const safeScaleDenominatorCandidates = scaleDenominatorCandidates.filter((value) => value !== conversionFactor);
   const candidatesToUse = safeScaleDenominatorCandidates.length > 0 ? safeScaleDenominatorCandidates : scaleDenominatorCandidates;
   const scaleDenominatorValue = candidatesToUse[pickInt(0, candidatesToUse.length - 1)];
-  const mapLengthValue = pickValueForRange(variables[mapLengthKey]);
-  const actualLengthInCm = normalizeNumber(multiplyDecimal(mapLengthValue, scaleDenominatorValue));
-  const actualLengthValue = convertLength(actualLengthInCm, "cm", actualLengthUnit);
+  let mapLengthValue = pickValueForRange(variables[mapLengthKey]);
+  let actualLengthInCm = normalizeNumber(multiplyDecimal(mapLengthValue, scaleDenominatorValue));
+  let actualLengthValue = convertLength(actualLengthInCm, "cm", actualLengthUnit);
+
+  // 「縮尺・地図上の長さ」（quantityRelation.unknown === "mapLength"）では、実際の長さ（B）が
+  // 問題文にそのまま表示される既知の値のため、「実際の長さが1mです」「1kmです」のような
+  // 不自然な問題文にならないよう、ちょうど1になる組み合わせを避ける（運用開始後に追加）。
+  // 「縮尺・実際の長さ」（unknown === "actualLength"）では、実際の長さは表示されない答えの
+  // 値のため、この調整は行わない。
+  if (quantityRelation.unknown === "mapLength" && actualLengthValue === 1) {
+    const range = variables[mapLengthKey];
+    const step = range.step && range.step > 0 ? range.step : 1;
+    for (let attempt = 0; attempt < 30 && actualLengthValue === 1; attempt++) {
+      mapLengthValue = pickValueForRange(range);
+      actualLengthInCm = normalizeNumber(multiplyDecimal(mapLengthValue, scaleDenominatorValue));
+      actualLengthValue = convertLength(actualLengthInCm, "cm", actualLengthUnit);
+    }
+    // フォールバック：それでも1になる場合は、範囲全体を順に探して確実に1以外の値を見つける。
+    if (actualLengthValue === 1) {
+      for (let candidate = range.min; candidate <= range.max; candidate += step) {
+        const candidateInCm = normalizeNumber(multiplyDecimal(candidate, scaleDenominatorValue));
+        const candidateActualLength = convertLength(candidateInCm, "cm", actualLengthUnit);
+        if (candidateActualLength !== 1) {
+          mapLengthValue = candidate;
+          actualLengthInCm = candidateInCm;
+          actualLengthValue = candidateActualLength;
+          break;
+        }
+      }
+    }
+  }
+
   return {
     [scaleKey]: scaleDenominatorValue,
     scaleValue: createScale(scaleDenominatorValue),
