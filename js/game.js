@@ -871,7 +871,10 @@ function handleCorrect(resultValue) {
   const displayResultValue = simplify
     ? resultValue
     : computeUnsimplifiedFractionResult(problem.left, problem.operator, problem.right) ?? resultValue;
-  ui.showCorrectEffect(displayResultValue, { simplify, mixedNumber });
+  // タイムボーナスが上限（TIME_BONUS_MAX=満点）だったときだけ、正解の○を金色にする
+  // （運用開始後に追加。文章題バトル専用の演出のため、トレーニング・総復習側の
+  // showCorrectEffect() 呼び出しではこのオプションを渡さず、常に緑色のまま）。
+  ui.showCorrectEffect(displayResultValue, { simplify, mixedNumber, isMaxTimeBonus: timeBonus === TIME_BONUS_MAX });
   // isBusy は「タップして次へ」が押されるまで true のまま維持し、連続タップを防ぐ
   logDebugInfo();
 }

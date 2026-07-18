@@ -1550,13 +1550,15 @@ export function unlockInput() {
 
 // ============== 正解・不正解演出 ==============
 
-export function showCorrectEffect(resultValue, { simplify = true, mixedNumber = false } = {}) {
+export function showCorrectEffect(resultValue, { simplify = true, mixedNumber = false, isMaxTimeBonus = false } = {}) {
   // ■欄の答えの数字は、選択肢カード・解答欄と同じく桁区切りカンマを付けずに表示する。
   // 百分率が答えになるのは「割合・百分率」（何%ですかと問う問題）だけのため、
   // その場合だけ「0.5→50%」のように小数と百分率の両方を示す。
   els.resultBox.innerHTML = isPercentValue(resultValue)
     ? renderPercentConversionHtml(resultValue, { useSeparator: false })
     : renderValueHtml(resultValue, { useSeparator: false, simplify, mixedNumber });
+  // 文章題バトルでタイムボーナスが満点だったときだけ、○を金色にする（運用開始後に追加）。
+  els.correctMark.classList.toggle("correct-mark-max", isMaxTimeBonus);
   els.correctMark.classList.add("show");
   nextQuestionTapLock = false;
   window.setTimeout(() => {

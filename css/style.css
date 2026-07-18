@@ -1332,6 +1332,14 @@ button {
   animation: correct-pop 0.4s ease-out;
 }
 
+/* 文章題バトルで、タイムボーナスが満点（TIME_BONUS_MAX）だったときだけ金色にする
+   （運用開始後に追加。トレーニング・総復習にはタイムボーナスが無いため付かない）。
+   特別ランク「MAX」（.rank-max）と同じ --color-accent を使い、色の意味を統一している。 */
+.correct-mark.correct-mark-max {
+  color: var(--color-accent);
+  text-shadow: 0 0 24px rgba(255, 210, 63, 0.8);
+}
+
 @keyframes correct-pop {
   0% { transform: scale(0.3); }
   60% { transform: scale(1.2); }
