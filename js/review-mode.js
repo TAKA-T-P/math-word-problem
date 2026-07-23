@@ -73,10 +73,12 @@ let isBusy = false;
 let elapsedTimerHandle = null;
 
 // value-renderer.js の renderValueHtml() を使うことで、分数を含む式でも
-// 縦型分数のHTMLとして「最後に試した式」を表示できるようにしている。
+// 縦型分数のHTMLとして「最後に試した式・まちがえた式」を表示できるようにしている。
+// 結果画面の履歴内の他の数値表示（正解式・カード等）と同じく、桁区切りカンマは
+// 付けない（useSeparator: false）。
 function formatFormula(answer) {
   if (!answer) return "（未回答）";
-  return `${renderValueHtml(answer.left)}${answer.operator}${renderValueHtml(answer.right)}`;
+  return `${renderValueHtml(answer.left, { useSeparator: false })}${answer.operator}${renderValueHtml(answer.right, { useSeparator: false })}`;
 }
 
 function pickEnemyForScope(scope) {
@@ -252,7 +254,9 @@ function beginReviewQuestion() {
       fractionDisplayMode: (problem.template && problem.template.fractionDisplayMode) || null,
       incorrectCount: 0,
       timeoutCount: 0,
-      lastAttemptText: "（未回答）"
+      lastAttemptText: "（未回答）",
+      // 結果画面の履歴に「まちがえた式」として表示する、最初に誤答した式（運用開始後に追加）。
+      firstWrongFormulaText: null
     };
   }
 
@@ -285,6 +289,9 @@ export function handleJudge(answer) {
     handleCorrect(result);
   } else {
     reviewState.currentQuestionRecord.incorrectCount += 1;
+    if (reviewState.currentQuestionRecord.firstWrongFormulaText === null) {
+      reviewState.currentQuestionRecord.firstWrongFormulaText = reviewState.currentQuestionRecord.lastAttemptText;
+    }
     reviewState.isNoMiss = false;
     logReviewDebugInfo();
     handleIncorrect();

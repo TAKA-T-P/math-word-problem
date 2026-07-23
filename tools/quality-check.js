@@ -836,7 +836,7 @@ async function runMultiStepRegression(entry, count, baseSeed, onProgress) {
     // 時間切れシミュレーション（1問につき1回、最初の未完了段階で）。
     try {
       const snapshotBefore = multiStepEngine.getDebugSnapshot(problem);
-      multiStepEngine.recordTimeout(problem, null);
+      multiStepEngine.recordTimeout(problem);
       const snapshotAfter = multiStepEngine.getDebugSnapshot(problem);
       if (snapshotAfter.currentStepIndex !== snapshotBefore.currentStepIndex) {
         findings.push(

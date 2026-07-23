@@ -43,6 +43,10 @@ import {
 
 const DRAG_THRESHOLD = 6;
 
+// 外部の姉妹アプリ「スペース計算ラリー」のURL（運用開始後に追加。ヘルプメニューの
+// 確認ダイアログから新しいタブで開く。setupSpaceRallyDialog() 参照）。
+const SPACE_CALC_RALLY_URL = "https://TAKA-T-P.github.io/space-calculation-game/";
+
 // URL に ?debug=true を付けた場合だけ、タイトル画面に開発版の出題範囲
 // 「2段階問題・整数（開発版）」を表示する。通常アクセスでは要素自体を作らない。
 const DEBUG_MODE = new URLSearchParams(window.location.search).get("debug") === "true";
@@ -121,8 +125,12 @@ function cacheElements() {
     helpMenuTitle: qs("help-menu-title"),
     helpAboutBtn: qs("help-about-btn"),
     helpDexBtn: qs("help-dex-btn"),
+    helpSpaceRallyBtn: qs("help-space-rally-btn"),
     helpResetBtn: qs("help-reset-btn"),
     helpMenuBackBtn: qs("help-menu-back-btn"),
+    spaceRallyDialog: qs("space-rally-confirm-dialog"),
+    spaceRallyYesBtn: qs("space-rally-confirm-yes"),
+    spaceRallyNoBtn: qs("space-rally-confirm-no"),
     resetRecordsDialog: qs("reset-records-confirm-dialog"),
     resetRecordsConfirmText: qs("reset-records-confirm-text"),
     resetRecordsDialogButtons: qs("reset-records-dialog-buttons"),
@@ -193,6 +201,7 @@ function cacheElements() {
     timerFill: qs("timer-fill"),
     answerSlots: [qs("answer-slot-0"), qs("answer-slot-1"), qs("answer-slot-2")],
     judgeBtn: qs("judge-btn"),
+    submitAnswerBtn: qs("submit-answer-btn"),
     resultBox: qs("result-box"),
     clearSlotsBtn: qs("clear-slots-btn"),
     choicesContainer: qs("choices-container"),
@@ -1298,6 +1307,11 @@ function renderSlots() {
 function updateJudgeButtonState() {
   const allFilled = slots[0] !== null && slots[1] !== null && slots[2] !== null;
   els.judgeBtn.classList.toggle("ready", allFilled);
+  // 「解答する」ボタン（運用開始後に追加）も「＝」ボタンと全く同じ役割のため、
+  // 同じ条件で"ready"状態を同期させる。
+  if (els.submitAnswerBtn) {
+    els.submitAnswerBtn.classList.toggle("ready", allFilled);
+  }
 }
 
 export function clearAnswerSlots() {
@@ -1520,16 +1534,23 @@ function setupCardInteraction() {
     clearAnswerSlots();
   });
 
-  els.judgeBtn.addEventListener("click", () => {
-    if (inputLocked) return;
-    const answer = getPlacedAnswer();
-    if (!answer) {
-      shakeElement(els.judgeBtn);
-      return;
-    }
-    lockInput();
-    callbacks.onJudge && callbacks.onJudge(answer);
-  });
+  els.judgeBtn.addEventListener("click", () => handleJudgeButtonClick(els.judgeBtn));
+  // 「解答する」ボタン（運用開始後に追加）。役割は「＝」ボタンと全く同じにするため、
+  // 同じ判定処理を共有する（handleJudgeButtonClick()）。
+  if (els.submitAnswerBtn) {
+    els.submitAnswerBtn.addEventListener("click", () => handleJudgeButtonClick(els.submitAnswerBtn));
+  }
+}
+
+function handleJudgeButtonClick(triggerEl) {
+  if (inputLocked) return;
+  const answer = getPlacedAnswer();
+  if (!answer) {
+    shakeElement(triggerEl);
+    return;
+  }
+  lockInput();
+  callbacks.onJudge && callbacks.onJudge(answer);
 }
 
 function shakeElement(el) {
@@ -1909,6 +1930,25 @@ function setupResetRecordsDialog() {
   });
 }
 
+/**
+ * 「スペース計算ラリー」ボタンの確認ダイアログ（運用開始後に追加）。
+ * 「はい」を押すと、外部の姉妹アプリを新しいタブで開く（ゲームの状態は失われない）。
+ * 「いいえ」を押すとダイアログを閉じるだけで、何も起きない。
+ */
+function setupSpaceRallyDialog() {
+  els.helpSpaceRallyBtn.addEventListener("click", () => {
+    els.spaceRallyDialog.classList.add("show");
+  });
+  els.spaceRallyYesBtn.addEventListener("click", () => {
+    els.spaceRallyDialog.classList.remove("show");
+    window.open(SPACE_CALC_RALLY_URL, "_blank", "noopener,noreferrer");
+  });
+  els.spaceRallyNoBtn.addEventListener("click", () => {
+    els.spaceRallyDialog.classList.remove("show");
+    focusElement(els.helpSpaceRallyBtn);
+  });
+}
+
 function setupHelpScreens() {
   els.helpBtn.addEventListener("click", openHelpMenu);
   els.helpAboutBtn.addEventListener("click", openAboutScreen);
@@ -2081,6 +2121,17 @@ function buildHistoryCountsHtml(incorrectCount, timeoutCount) {
   return `<div class="history-counts">${parts.join("")}</div>`;
 }
 
+/**
+ * 不正解だった問題（entry.incorrectCount > 0）で、最初に誤答した式を赤字で表示する行を組み立てる
+ * （運用開始後に追加）。同じ問題で複数回誤答していても、最初の1回だけを表示する
+ * （entry.firstWrongFormulaText は各モードの判定処理側ですでに「最初の1回」に絞り込み済み）。
+ * 不正解が無い問題・誤答の記録が無い問題（例: 時間切れのみ）では何も表示しない。
+ */
+function buildWrongFormulaHtml(entry) {
+  if (!entry.incorrectCount || !entry.firstWrongFormulaText) return "";
+  return `<p class="history-wrong-formula">まちがえた式：${entry.firstWrongFormulaText}</p>`;
+}
+
 function buildSingleStepHistoryHtml(entry, index) {
   // 分数を含む問題文は entry.textParts（value-renderer.js で縦型分数として描画）を使う。
   // 整数・小数のみの問題は textParts を持たないため、entry.text をそのまま表示する。
@@ -2111,6 +2162,7 @@ function buildSingleStepHistoryHtml(entry, index) {
     </div>
     <p class="history-text">${questionTextHtml}</p>
     <p class="history-formula">正解式：${renderValueHtml(entry.left, { useSeparator: false, simplify, mixedNumber })}${entry.operator}${renderValueHtml(entry.right, { useSeparator: false, simplify, mixedNumber })} = ${resultDisplayHtml}</p>
+    ${buildWrongFormulaHtml(entry)}
     ${buildHistoryCountsHtml(entry.incorrectCount, entry.timeoutCount)}
   `;
 }
@@ -2128,16 +2180,22 @@ function buildMultiStepHistoryHtml(entry, index) {
         // 型を意識せず扱える renderValueHtml() を使う（百分率は小数で表示される）。
         return `<p class="history-step">式${step.stepNumber}：${step.formula}＝${renderValueHtml(step.result, { useSeparator: false })}</p>`;
       }
-      if (step.lastAttemptFormula) {
-        return `<p class="history-step history-step-incomplete">式${step.stepNumber}：${step.lastAttemptFormula}（解答途中）</p>`;
+      // 完了しなかったステップも、正解の式を確認できるように表示する（運用開始後に変更。
+      // 以前はゲームオーバー・リタイアで最後まで解けなかった問題は「未回答」（または
+      // 解答途中に最後に試した式）としか表示しておらず、正解を確認できなかった）。
+      if (step.correctFormula) {
+        return `<p class="history-step history-step-incomplete">式${step.stepNumber}（正解）：${step.correctFormula}＝${renderValueHtml(step.correctResult, { useSeparator: false })}</p>`;
       }
       return `<p class="history-step history-step-incomplete">式${step.stepNumber}：未回答</p>`;
     })
     .join("");
 
+  // 最後まで解けなかった問題でも、正解（finalAnswer）は生成時にすでに確定しているため、
+  // 1段階問題の履歴と同じく常に表示する（運用開始後に変更。以前は「状態：解答途中」としか
+  // 表示せず、正解を確認できなかった）。
   const answerLine = entry.isComplete
     ? `<p class="history-final">答え：${renderValueHtml(entry.finalAnswer, { useSeparator: false })}${escapeHtml(entry.answerUnit || "")}</p>`
-    : `<p class="history-final history-step-incomplete">状態：解答途中</p>`;
+    : `<p class="history-final history-step-incomplete">正解：${renderValueHtml(entry.finalAnswer, { useSeparator: false })}${escapeHtml(entry.answerUnit || "")}（最後まで解けませんでした）</p>`;
 
   // 比例・反比例の関係表（小学6年生3学期、第12段階で追加）。表を持たない問題では空文字列。
   const relationTableHtml = entry.relationTable ? renderRelationTableHtml(entry.relationTable) : "";
@@ -2150,6 +2208,7 @@ function buildMultiStepHistoryHtml(entry, index) {
     <p class="history-text">${questionTextHtml}</p>
     ${relationTableHtml}
     ${stepsHtml}
+    ${buildWrongFormulaHtml(entry)}
     ${answerLine}
     ${buildHistoryCountsHtml(entry.incorrectCount, entry.timeoutCount)}
   `;
@@ -2196,6 +2255,7 @@ export function initUI(cb) {
   setupCustomTrainingSettings();
   setupReviewStartConfirmDialog();
   setupHelpScreens();
+  setupSpaceRallyDialog();
   setupResetRecordsDialog();
   setupResultScreen();
   setupScoreDelta();

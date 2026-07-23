@@ -299,11 +299,12 @@ export function getTotalQuestionsForLevel(level) {
 }
 
 // value-renderer.js の renderValueHtml() を使うことで、分数を含む式でも
-// 縦型分数のHTMLとして履歴（さいごに作った式）に表示できるようにしている。
-// 整数・小数の場合は従来と同じ見た目の文字列になる。
+// 縦型分数のHTMLとして履歴（さいごに作った式・まちがえた式）に表示できるようにしている。
+// 整数・小数の場合は従来と同じ見た目の文字列になる。結果画面の履歴内の他の数値表示
+// （正解式・カード等）と同じく、桁区切りカンマは付けない（useSeparator: false）。
 function formatFormula(answer) {
   if (!answer) return "（未回答）";
-  return `${renderValueHtml(answer.left)}${answer.operator}${renderValueHtml(answer.right)}`;
+  return `${renderValueHtml(answer.left, { useSeparator: false })}${answer.operator}${renderValueHtml(answer.right, { useSeparator: false })}`;
 }
 
 function pushCurrentRecordToHistory() {
@@ -689,7 +690,10 @@ function beginQuestion() {
       fractionDisplayMode: (problem.template && problem.template.fractionDisplayMode) || null,
       incorrectCount: 0,
       timeoutCount: 0,
-      lastAttemptText: "（未回答）"
+      lastAttemptText: "（未回答）",
+      // 結果画面の履歴に「まちがえた式」として表示する、最初に誤答した式（運用開始後に追加）。
+      // 複数回誤答しても上書きせず、最初の1回だけを保持する（handleJudge()参照）。
+      firstWrongFormulaText: null
     };
   }
 
@@ -729,6 +733,9 @@ export function handleJudge(answer) {
     handleCorrect(result);
   } else {
     gameState.currentQuestionRecord.incorrectCount += 1;
+    if (gameState.currentQuestionRecord.firstWrongFormulaText === null) {
+      gameState.currentQuestionRecord.firstWrongFormulaText = gameState.currentQuestionRecord.lastAttemptText;
+    }
     gameState.currentQuestionPenalized = true;
     gameState.isNoMiss = false;
     handleIncorrectOrTimeout();
@@ -798,7 +805,7 @@ function onTimerExpired() {
   const placed = ui.getPlacedAnswer();
 
   if (problem.questionType === "multiStep") {
-    multiStepEngine.recordTimeout(problem, placed);
+    multiStepEngine.recordTimeout(problem);
   } else {
     if (placed) {
       gameState.currentQuestionRecord.lastAttemptText = formatFormula(placed);

@@ -191,10 +191,23 @@
     <div class="help-menu-buttons">
       <button id="help-about-btn" class="primary-btn" type="button">このゲームについて</button>
       <button id="help-dex-btn" class="primary-btn" type="button">エネミー図鑑</button>
+      <!-- 外部の姉妹アプリ「スペース計算ラリー」への導線（運用開始後に追加）。確認ダイアログ
+           （space-rally-confirm-dialog）で「はい」を押すと新しいタブでリンクを開く。 -->
+      <button id="help-space-rally-btn" class="primary-btn space-rally-btn" type="button">スペース計算ラリー</button>
       <!-- ハイスコア・エネミー図鑑の記録を消去するボタン（運用開始後に追加）。
            2段階の確認ダイアログ（reset-records-confirm-dialog）を経てから実行する。 -->
       <button id="help-reset-btn" class="secondary-btn warning-btn" type="button">⚠記録を消す</button>
       <button id="help-menu-back-btn" class="secondary-btn" type="button">もどる</button>
+    </div>
+
+    <div id="space-rally-confirm-dialog" class="dialog-overlay" aria-hidden="true">
+      <div class="dialog-box">
+        <p id="space-rally-confirm-text">計算練習アプリ「スペース計算ラリー」を起動しますか？</p>
+        <div class="dialog-buttons">
+          <button id="space-rally-confirm-yes" class="dialog-btn" type="button">はい</button>
+          <button id="space-rally-confirm-no" class="dialog-btn" type="button">いいえ</button>
+        </div>
+      </div>
     </div>
 
     <div id="reset-records-confirm-dialog" class="dialog-overlay" aria-hidden="true">
@@ -370,10 +383,18 @@
         <button id="judge-btn" class="judge-btn" type="button">＝</button>
         <div id="result-box" class="result-box"></div>
       </div>
-      <button id="clear-slots-btn" class="clear-btn" type="button">クリア</button>
     </div>
 
     <div id="choices-container" class="choices-container" aria-label="えらべるカード"></div>
+
+    <!-- クリア・解答するボタン（運用開始後に変更。以前は「クリア」だけが選択肢カードの上
+         （解答欄の下）にあったが、選択肢カード（数字・＋－×÷）の下へ移動し、「＝」ボタンと
+         全く同じ役割を持つ「解答する」ボタンを新設した。js/ui.js が両方のクリックを
+         同じ判定処理につなげる。 -->
+    <div class="answer-action-row">
+      <button id="clear-slots-btn" class="clear-btn" type="button">クリア</button>
+      <button id="submit-answer-btn" class="submit-answer-btn" type="button">解答する</button>
+    </div>
 
     <div id="correct-mark" class="correct-mark" aria-hidden="true">○</div>
     <div id="intermediate-mark" class="intermediate-mark" aria-hidden="true">

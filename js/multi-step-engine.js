@@ -13,10 +13,11 @@
 //     candidateRouteIds:     現在も正解になりうる解法ルートIDの一覧
 //     intermediateResults:   完了したステップの resultKey -> 数値
 //     completedSteps:        完了したステップの記録（履歴表示用）
-//     currentStepAttempts:   現在のステップで児童が試した式の文字列（未完了ステップの履歴用）
 //     incorrectCount:        この問題全体を通した不正解回数
 //     timeoutCount:          この問題全体を通した時間切れ回数
 //     currentQuestionPenalized: この問題で一度でもミス（不正解/時間切れ）があったか
+//     firstWrongFormulaText: この問題を通して最初に誤答した式（結果画面の「まちがえた式」表示用。
+//                            運用開始後に追加）
 //   }
 //
 // question-generator.js の buildChoiceCards / makeCard を再利用するため、
@@ -38,10 +39,12 @@ function createMultiStepState(problem) {
     candidateRouteIds: problem.solutionRoutes.map((route) => route.id),
     intermediateResults: {},
     completedSteps: [],
-    currentStepAttempts: [],
     incorrectCount: 0,
     timeoutCount: 0,
-    currentQuestionPenalized: false
+    currentQuestionPenalized: false,
+    // 結果画面の履歴に「まちがえた式」として表示する、この問題を通して最初に誤答した式
+    // （どのステップで誤答したかは問わない。運用開始後に追加）。
+    firstWrongFormulaText: null
   };
 }
 
@@ -153,7 +156,13 @@ export function submitStepAnswer(problem, submittedLeft, submittedOperator, subm
     .map(({ routeId }) => routeId);
 
   if (matchedRouteIds.length === 0) {
-    state.currentStepAttempts.push(formatFormula(submittedLeft, submittedOperator, submittedRight));
+    // 履歴内の他の数値表示（正解式・カード等）と同じく、桁区切りカンマは付けない
+    // （useSeparator: false。以前は既定のtrueのままだったため、未完了ステップの
+    // 「（解答途中）」表示だけ桁区切りカンマが付く不整合があった）。
+    const attemptFormula = formatFormula(submittedLeft, submittedOperator, submittedRight, { useSeparator: false });
+    if (state.firstWrongFormulaText === null) {
+      state.firstWrongFormulaText = attemptFormula;
+    }
     state.incorrectCount += 1;
     state.currentQuestionPenalized = true;
     return { correct: false, isFinal: false, stepResult: null };
@@ -175,7 +184,6 @@ export function submitStepAnswer(problem, submittedLeft, submittedOperator, subm
   if (step.resultKey) {
     state.intermediateResults[step.resultKey] = step.result;
   }
-  state.currentStepAttempts = [];
 
   const isFinal = state.currentStepIndex >= state.totalSteps - 1;
 
@@ -189,15 +197,9 @@ export function submitStepAnswer(problem, submittedLeft, submittedOperator, subm
 
 /**
  * 時間切れを記録します（不正解と同様、ステップ番号・中間結果は維持します）。
- * @param {object|null} lastPlacedAnswer - 時間切れ時点で解答欄に置かれていた式（未完成なら null）
  */
-export function recordTimeout(problem, lastPlacedAnswer) {
+export function recordTimeout(problem) {
   const state = problem.multiStep;
-  if (lastPlacedAnswer) {
-    state.currentStepAttempts.push(
-      formatFormula(lastPlacedAnswer.left, lastPlacedAnswer.operator, lastPlacedAnswer.right)
-    );
-  }
   state.timeoutCount += 1;
   state.currentQuestionPenalized = true;
 }
@@ -210,6 +212,16 @@ export function buildHistoryEntry(problem) {
   const state = problem.multiStep;
   const steps = [];
 
+  // 完了しなかったステップでも正解の式を確認できるよう、まだ候補として残っている解法
+  // ルートのうち1つ（先頭）を「参照ルート」として使う（運用開始後に追加。ゲームオーバー・
+  // リタイアで最後まで解けなかった問題は、以前は「未回答」としか表示しておらず正解を
+  // 確認できなかった。1段階問題の履歴（buildSingleStepHistoryHtml()）が常に正解式を
+  // 表示するのと同じ考え方に揃えた）。各解法ルートのステップは生成時にすでに確定した値
+  // （question-generator.js の resolveMultiStepRoutes() 参照）のため、プレイヤーが
+  // どこまで解いたかに関わらずそのまま「正解の式」として使える。
+  const referenceRoute =
+    problem.solutionRoutes.find((route) => route.id === state.candidateRouteIds[0]) || problem.solutionRoutes[0];
+
   for (let i = 0; i < state.totalSteps; i++) {
     const completed = state.completedSteps.find((s) => s.stepIndex === i);
     if (completed) {
@@ -220,17 +232,14 @@ export function buildHistoryEntry(problem) {
         result: completed.result,
         completed: true
       });
-    } else if (i === state.currentStepIndex) {
-      const lastAttempt = state.currentStepAttempts[state.currentStepAttempts.length - 1] || null;
+    } else {
+      const refStep = referenceRoute ? referenceRoute.steps[i] : null;
       steps.push({
         stepNumber: i + 1,
-        formula: null,
-        result: null,
         completed: false,
-        lastAttemptFormula: lastAttempt
+        correctFormula: refStep ? formatFormula(refStep.left, refStep.operator, refStep.right, { useSeparator: false }) : null,
+        correctResult: refStep ? refStep.result : null
       });
-    } else {
-      steps.push({ stepNumber: i + 1, formula: null, result: null, completed: false, lastAttemptFormula: null });
     }
   }
 
@@ -251,6 +260,7 @@ export function buildHistoryEntry(problem) {
     steps,
     incorrectCount: state.incorrectCount,
     timeoutCount: state.timeoutCount,
+    firstWrongFormulaText: state.firstWrongFormulaText,
     isComplete,
     usedRouteIds: [...new Set(usedRouteIds)]
   };

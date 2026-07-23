@@ -124,6 +124,17 @@ button {
   border: 1px solid rgba(255, 255, 255, 0.25);
 }
 
+/* 外部の姉妹アプリ「スペース計算ラリー」への導線ボタン（運用開始後に追加）。
+   .primary-btn の形・立体感（box-shadowの"棚"）はそのまま使い、色だけ青系に変える。 */
+.space-rally-btn {
+  background: linear-gradient(180deg, #4d7dff, #2d4fcf);
+  box-shadow: 0 6px 0 #1f3a9e, 0 8px 16px rgba(0, 0, 0, 0.35);
+}
+
+.space-rally-btn:active {
+  box-shadow: 0 2px 0 #1f3a9e, 0 4px 8px rgba(0, 0, 0, 0.35);
+}
+
 .icon-btn {
   position: absolute;
   top: calc(12px + var(--safe-top));
@@ -1219,6 +1230,15 @@ button {
   color: var(--color-good);
 }
 
+/* クリア・解答するボタンの行（運用開始後に追加。選択肢カードの下に配置する）。 */
+.answer-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 2px;
+}
+
 .clear-btn {
   min-height: 32px;
   padding: 4px 16px;
@@ -1227,6 +1247,26 @@ button {
   background: transparent;
   color: var(--color-text-dim);
   font-size: 0.8rem;
+}
+
+/* 「解答する」ボタン（運用開始後に追加）。役割は「＝」ボタン（.judge-btn）と全く同じで、
+   3つの解答欄がすべて埋まっているときだけ、同じ judge-glow アニメーションで目立たせる。 */
+.submit-answer-btn {
+  min-height: 32px;
+  padding: 4px 18px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(253, 249, 255, 0.4);
+  font-size: 0.85rem;
+  font-weight: 800;
+  transition: background 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.submit-answer-btn.ready {
+  background: linear-gradient(180deg, #ffb347, var(--color-primary));
+  color: #fff;
+  animation: judge-glow 1.1s ease-in-out infinite;
 }
 
 .choices-container {
@@ -1837,6 +1877,13 @@ button {
   gap: 12px;
   color: var(--color-bad);
   font-size: 0.78rem;
+}
+
+/* 不正解だった問題で、最初に誤答した式を表示する行（運用開始後に追加）。 */
+.history-wrong-formula {
+  margin: 0 0 2px;
+  color: var(--color-bad);
+  line-height: 1.9;
 }
 
 /* ==========================================================================
