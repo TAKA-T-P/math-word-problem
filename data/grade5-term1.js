@@ -400,6 +400,10 @@ export const grade5Term1Templates = [
   },
   {
     id: "g5t1_mc_005",
+    // カテゴリ共通ヒント（decimal-multiplicative-comparison）は「比べる量を求める」
+    // 問題向けのため、「何倍かを求める」このテンプレートには個別のヒントを設定する
+    // （運用開始後に追加）。
+    hintSteps: ["比べる量が、もとにする量の何倍かを求めるので、「比べる量÷もとにする量」の式にしよう。"],
     gradeTerm: "5-1",
     category: "小数倍",
     categoryId: "decimal-multiplicative-comparison",
@@ -418,6 +422,7 @@ export const grade5Term1Templates = [
   },
   {
     id: "g5t1_mc_006",
+    hintSteps: ["比べる量が、もとにする量の何倍かを求めるので、「比べる量÷もとにする量」の式にしよう。"],
     gradeTerm: "5-1",
     category: "小数倍",
     categoryId: "decimal-multiplicative-comparison",
@@ -436,6 +441,7 @@ export const grade5Term1Templates = [
   },
   {
     id: "g5t1_mc_007",
+    hintSteps: ["比べる量が、もとにする量の何倍かを求めるので、「比べる量÷もとにする量」の式にしよう。"],
     gradeTerm: "5-1",
     category: "小数倍",
     categoryId: "decimal-multiplicative-comparison",
@@ -454,6 +460,7 @@ export const grade5Term1Templates = [
   },
   {
     id: "g5t1_mc_008",
+    hintSteps: ["比べる量が、もとにする量の何倍かを求めるので、「比べる量÷もとにする量」の式にしよう。"],
     gradeTerm: "5-1",
     category: "小数倍",
     categoryId: "decimal-multiplicative-comparison",

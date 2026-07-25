@@ -40,6 +40,7 @@ import {
   saveCustomTrainingCategoryIds,
   clearCustomTrainingCategoryIds
 } from "./custom-training.js";
+import { getExampleCategoryGroups, generateExample } from "./example-viewer.js";
 
 const DRAG_THRESHOLD = 6;
 
@@ -124,10 +125,17 @@ function cacheElements() {
     helpBtn: qs("help-btn"),
     helpMenuTitle: qs("help-menu-title"),
     helpAboutBtn: qs("help-about-btn"),
+    helpExampleBtn: qs("help-example-btn"),
     helpDexBtn: qs("help-dex-btn"),
     helpSpaceRallyBtn: qs("help-space-rally-btn"),
     helpResetBtn: qs("help-reset-btn"),
     helpMenuBackBtn: qs("help-menu-back-btn"),
+    exampleCategoriesTitle: qs("example-categories-title"),
+    exampleCategoriesBackBtn: qs("example-categories-back-btn"),
+    exampleCategoryList: qs("example-category-list"),
+    exampleDetailTitle: qs("example-detail-title"),
+    exampleDetailBackBtn: qs("example-detail-back-btn"),
+    exampleDetailContent: qs("example-detail-content"),
     spaceRallyDialog: qs("space-rally-confirm-dialog"),
     spaceRallyYesBtn: qs("space-rally-confirm-yes"),
     spaceRallyNoBtn: qs("space-rally-confirm-no"),
@@ -204,6 +212,9 @@ function cacheElements() {
     submitAnswerBtn: qs("submit-answer-btn"),
     resultBox: qs("result-box"),
     clearSlotsBtn: qs("clear-slots-btn"),
+    hintBtn: qs("hint-btn"),
+    hintPanel: qs("hint-panel"),
+    hintPanelText: qs("hint-panel-text"),
     choicesContainer: qs("choices-container"),
     correctMark: qs("correct-mark"),
     battleMessage: qs("battle-message"),
@@ -1047,10 +1058,14 @@ export function updateScoreboard(score, rank) {
 /**
  * 正解した瞬間に、スコア表示のすぐ下に「+1000」のような加算スコアをポップアップ表示する。
  * 前回のアニメーションが残っていても、reflow を挟んで再生し直すことで毎回きちんと表示させる。
+ * hintUsed=true（運用開始後に追加。文章題バトルでヒントを使った問題を正解したとき）の
+ * ときだけ、既に500点減点された後の addedScore の下に「ヒント使用　－500点」を添える。
  */
-export function showScoreDelta(addedScore) {
+export function showScoreDelta(addedScore, hintUsed = false) {
   if (!els.scoreDelta) return;
-  els.scoreDelta.textContent = `+${addedScore}`;
+  els.scoreDelta.innerHTML = hintUsed
+    ? `+${addedScore}<br><span class="score-delta-hint-note">ヒント使用　－500点</span>`
+    : `+${addedScore}`;
   els.scoreDelta.classList.remove("show");
   void els.scoreDelta.offsetWidth;
   els.scoreDelta.classList.add("show");
@@ -1540,6 +1555,16 @@ function setupCardInteraction() {
   if (els.submitAnswerBtn) {
     els.submitAnswerBtn.addEventListener("click", () => handleJudgeButtonClick(els.submitAnswerBtn));
   }
+
+  // 「ヒント」ボタン（運用開始後に追加）。開閉・使用回数の消費・スコア減点対象フラグの
+  // 管理は各モード（js/game.js等）側の責務のため、ここでは inputLocked のガードだけ行い、
+  // callbacks.onHintToggle を呼ぶだけの薄いハンドラにする。
+  if (els.hintBtn) {
+    els.hintBtn.addEventListener("click", () => {
+      if (inputLocked) return;
+      callbacks.onHintToggle && callbacks.onHintToggle();
+    });
+  }
 }
 
 function handleJudgeButtonClick(triggerEl) {
@@ -1607,6 +1632,47 @@ export function showIntermediateStepEffect(stepResult) {
 
 export function hideIntermediateStepEffect() {
   els.intermediateMark.classList.remove("show");
+}
+
+// ============== ヒント（運用開始後に追加） ==============
+
+/**
+ * 「ヒント」ボタンの文言・disabled状態を更新する。
+ * unlimited=true（トレーニング）のときは常に有効で「ヒント」とだけ表示する。
+ * unlimited=false（文章題バトル・総復習）のときは「ヒント　あと${remaining}回」と表示し、
+ * 残り0回・かつ今の問題でまだヒントを使っていない場合だけ disabled にする
+ * （今の問題で既に使用済みなら、残り0回でも再表示できるように有効のままにする）。
+ */
+export function updateHintButton({ unlimited, remaining, usedForCurrentQuestion }) {
+  if (!els.hintBtn) return;
+  const safeRemaining = Math.max(0, remaining || 0);
+  els.hintBtn.textContent = unlimited ? "ヒント" : `ヒント　あと${safeRemaining}回`;
+  els.hintBtn.disabled = !unlimited && safeRemaining <= 0 && !usedForCurrentQuestion;
+}
+
+/**
+ * ヒント欄を開き、渡された文言を表示する。
+ */
+export function showHintPanel(text) {
+  if (!els.hintPanel) return;
+  if (els.hintPanelText) {
+    els.hintPanelText.textContent = text;
+  }
+  els.hintPanel.hidden = false;
+  if (els.hintBtn) {
+    els.hintBtn.setAttribute("aria-expanded", "true");
+  }
+}
+
+/**
+ * ヒント欄を閉じる。新しい問題の開始時・トレーニングの「同じ問題をもう一度」使用時にも呼ぶ。
+ */
+export function hideHintPanel() {
+  if (!els.hintPanel) return;
+  els.hintPanel.hidden = true;
+  if (els.hintBtn) {
+    els.hintBtn.setAttribute("aria-expanded", "false");
+  }
 }
 
 export function triggerEnemyShake() {
@@ -1763,6 +1829,10 @@ function hideReviewStartDialog() {
 // 戻すか（「このゲームについて」か「エネミー図鑑」、直前に押した方）を覚えておく。
 let lastPressedHelpMenuButton = null;
 
+// 例題確認：例題詳細から「もどる」で戻ったとき、カテゴリ一覧のどのボタンに
+// フォーカスを戻すかを覚えておく（運用開始後に追加）。
+let lastPressedExampleCategoryBtn = null;
+
 /**
  * 指定した要素にフォーカスを移す。画面切り替え直後に呼ばれることが多いため、
  * 描画が落ち着いた次のフレームで実行する（要素が見つからない場合は何もしない）。
@@ -1861,6 +1931,134 @@ function renderEnemyDex() {
   }
 }
 
+// ============== 例題確認（運用開始後に追加） ==============
+//
+// 全50カテゴリの代表例題・ヒント・模範式を閲覧できる、ヘルプの補助画面。
+// カード操作・解答欄・正誤判定・タイマー・スコア・保存は一切持たない閲覧専用画面のため、
+// エネミー図鑑と同じく js/app.js の MODES ディスパッチテーブルには追加しない。
+// データの組み立ては js/example-viewer.js に任せ、ここでは既存の value-renderer.js の
+// 関数だけを使ってDOMを組み立てる（新しい表示ロジックは書かない）。
+
+function openExampleCategories() {
+  lastPressedHelpMenuButton = els.helpExampleBtn;
+  renderExampleCategoryList();
+  showScreen("example-categories");
+  focusElement(els.exampleCategoriesTitle);
+}
+
+function renderExampleCategoryList() {
+  if (!els.exampleCategoryList) return;
+  const groups = getExampleCategoryGroups();
+
+  const fragment = document.createDocumentFragment();
+  for (const group of groups) {
+    const groupEl = document.createElement("div");
+    groupEl.className = "example-category-group";
+
+    const heading = document.createElement("h3");
+    heading.className = "example-category-group-heading";
+    heading.textContent = group.gradeLabel;
+    groupEl.appendChild(heading);
+
+    for (const category of group.categories) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "example-category-btn";
+      btn.dataset.categoryId = category.id;
+      btn.textContent = category.label;
+      btn.addEventListener("click", () => openExampleDetail(category.id, btn));
+      groupEl.appendChild(btn);
+    }
+
+    fragment.appendChild(groupEl);
+  }
+
+  els.exampleCategoryList.innerHTML = "";
+  els.exampleCategoryList.appendChild(fragment);
+}
+
+function openExampleDetail(categoryId, triggerBtn) {
+  let data;
+  try {
+    data = generateExample(categoryId);
+  } catch (e) {
+    // 学習支援データ・テンプレートの不整合は tools/question-validator.html 側で検出する
+    // 想定だが、万一の場合でもゲーム全体を巻き込んでクラッシュさせない安全策。
+    console.error(e);
+    return;
+  }
+  lastPressedExampleCategoryBtn = triggerBtn || null;
+  renderExampleDetail(data);
+  showScreen("example-detail");
+  focusElement(els.exampleDetailTitle);
+}
+
+function renderExampleDetail(data) {
+  if (!els.exampleDetailContent) return;
+
+  if (els.exampleDetailTitle) {
+    els.exampleDetailTitle.textContent = data.category ? data.category.label : "例題";
+  }
+
+  const problem = data.problem;
+  const simplify = problem.simplifyFractions !== false;
+  const mixedNumber = !!(data.template && data.template.fractionDisplayMode === "mixed");
+
+  const questionTextHtml = problem.textParts
+    ? renderTextPartsHtml(problem.textParts, { simplify, mixedNumber })
+    : escapeHtml(problem.text);
+
+  const relationTableHtml = problem.relationTable ? renderRelationTableHtml(problem.relationTable) : "";
+
+  const hintsHtml = data.hintTexts
+    .map((hint, i) => {
+      const label = data.hintTexts.length > 1 ? `${i + 1}. ` : "";
+      return `<p class="example-detail-text">${label}${escapeHtml(hint)}</p>`;
+    })
+    .join("");
+
+  const formulasHtml = data.modelSteps
+    .map((step, i) => {
+      const stepLabel = data.modelSteps.length > 1 ? `式${i + 1}：` : "";
+      return `<p class="example-detail-formula">${stepLabel}${renderValueHtml(step.left, { useSeparator: false, simplify, mixedNumber })}${step.operator}${renderValueHtml(step.right, { useSeparator: false, simplify, mixedNumber })}＝${renderValueHtml(step.result, { useSeparator: false, simplify, mixedNumber })}</p>`;
+    })
+    .join("");
+
+  const answerHtml = isPercentValue(data.finalAnswer)
+    ? renderPercentConversionHtml(data.finalAnswer, { useSeparator: false })
+    : `${renderValueHtml(data.finalAnswer, { useSeparator: false, simplify, mixedNumber })}${escapeHtml(problem.answerUnit || "")}`;
+
+  els.exampleDetailContent.innerHTML = `
+    <div class="example-detail-section">
+      <h3>例題</h3>
+      <p class="example-detail-text">${questionTextHtml}</p>
+      ${relationTableHtml}
+    </div>
+    <div class="example-detail-section">
+      <h3>考え方のヒント</h3>
+      ${hintsHtml}
+    </div>
+    <div class="example-detail-section">
+      <h3>模範式</h3>
+      ${formulasHtml}
+    </div>
+    <div class="example-detail-section">
+      <h3>答え</h3>
+      <p class="example-detail-answer">${answerHtml}</p>
+    </div>
+  `;
+}
+
+function backToExampleCategories() {
+  showScreen("example-categories");
+  focusElement(lastPressedExampleCategoryBtn || els.exampleCategoriesTitle);
+}
+
+function backToHelpMenuFromExamples() {
+  showScreen("help-menu");
+  focusElement(els.helpExampleBtn);
+}
+
 // 「⚠記録を消す」確認ダイアログの現在の段階（1: 最初の確認、2: 赤文字の最終確認）。
 // ダイアログを閉じる（「もどる」を押した／消去完了メッセージが自動で閉じた、どちらの場合も）
 // たびに1へ戻す。
@@ -1956,6 +2154,16 @@ function setupHelpScreens() {
   els.helpMenuBackBtn.addEventListener("click", closeHelpMenuToTitle);
   els.aboutBackBtn.addEventListener("click", backToHelpMenuFromDetail);
   els.enemyDexBackBtn.addEventListener("click", backToHelpMenuFromDetail);
+  // 例題確認（運用開始後に追加）。
+  if (els.helpExampleBtn) {
+    els.helpExampleBtn.addEventListener("click", openExampleCategories);
+  }
+  if (els.exampleCategoriesBackBtn) {
+    els.exampleCategoriesBackBtn.addEventListener("click", backToHelpMenuFromExamples);
+  }
+  if (els.exampleDetailBackBtn) {
+    els.exampleDetailBackBtn.addEventListener("click", backToExampleCategories);
+  }
 
   // ヘルプ関連画面・カスタムトレーニング設定画面が表示されているときだけ、Escキーで
   // 1つ前の画面へ戻れるようにする。ゲーム中（バトル/カウントダウン/結果画面）の
@@ -1965,6 +2173,10 @@ function setupHelpScreens() {
     const activeId = getActiveScreenId();
     if (activeId === "screen-about" || activeId === "screen-enemy-dex") {
       backToHelpMenuFromDetail();
+    } else if (activeId === "screen-example-categories") {
+      backToHelpMenuFromExamples();
+    } else if (activeId === "screen-example-detail") {
+      backToExampleCategories();
     } else if (activeId === "screen-help-menu") {
       closeHelpMenuToTitle();
     } else if (activeId === "screen-custom-training-settings") {

@@ -726,6 +726,14 @@ button {
   pointer-events: none;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
   z-index: 26;
+  white-space: nowrap;
+}
+
+/* ヒントを使った問題を正解したときだけ、加算スコアの下に添える注記（運用開始後に追加）。 */
+.score-delta-hint-note {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--color-bad);
 }
 
 .score-delta.show {
@@ -1230,18 +1238,25 @@ button {
   color: var(--color-good);
 }
 
-/* クリア・解答するボタンの行（運用開始後に追加。選択肢カードの下に配置する）。 */
+/* クリア・ヒント・解答するボタンの行（運用開始後に追加。選択肢カードの下に配置する）。
+   3つのボタンを均等幅にし、320px幅でもはみ出さないようにする（運用開始後に変更。
+   「ヒント」ボタン追加に伴い、以前の中央寄せ固定幅レイアウトから均等幅レイアウトへ変更した）。 */
 .answer-action-row {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
-  gap: 10px;
+  gap: 6px;
   margin-top: 2px;
+}
+
+.answer-action-row > button {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .clear-btn {
   min-height: 32px;
-  padding: 4px 16px;
+  padding: 4px 6px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.3);
   background: transparent;
@@ -1253,7 +1268,7 @@ button {
    3つの解答欄がすべて埋まっているときだけ、同じ judge-glow アニメーションで目立たせる。 */
 .submit-answer-btn {
   min-height: 32px;
-  padding: 4px 18px;
+  padding: 4px 6px;
   border-radius: 999px;
   border: none;
   background: rgba(255, 255, 255, 0.1);
@@ -1267,6 +1282,61 @@ button {
   background: linear-gradient(180deg, #ffb347, var(--color-primary));
   color: #fff;
   animation: judge-glow 1.1s ease-in-out infinite;
+}
+
+/* 「ヒント」ボタン（運用開始後に追加）。文章題バトル・総復習では「ヒント　あと3回」のように
+   残り回数を文言に含めるため、他の2つのボタンより文字が長くなりやすい。font-size を
+   少し小さめにし、白黒だけに頼らず disabled 状態は opacity も下げて区別する
+   （色だけに依存しない＝アクセシビリティ対応）。 */
+.hint-btn {
+  min-height: 32px;
+  padding: 4px 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 210, 63, 0.5);
+  background: rgba(255, 210, 63, 0.12);
+  color: var(--color-accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.2s ease, opacity 0.2s ease;
+}
+
+.hint-btn[aria-expanded="true"] {
+  background: var(--color-accent);
+  color: #2b1b00;
+}
+
+.hint-btn:disabled {
+  opacity: 0.4;
+}
+
+/* ヒントパネル（運用開始後に追加）。「ヒント」ボタンの下側（.answer-action-rowの下）に配置する
+   （運用開始後に変更。以前はボタン行の上に置いていたが、開閉のたびにボタン自体の位置が
+   上下してしまっていたため、ボタンより下にあるものが絶対配置のオーバーレイだけになる
+   この位置へ移動した）。関係表（.relation-table-wrap）と同じ「条件付きで表示される
+   背景パネル」の見た目に揃える。 */
+.hint-panel {
+  background: var(--color-panel);
+  border: 1px solid rgba(255, 210, 63, 0.4);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin: 2px 0;
+}
+
+.hint-panel-heading {
+  margin: 0 0 4px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--color-accent);
+}
+
+.hint-panel-text {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  overflow-wrap: break-word;
 }
 
 .choices-container {
@@ -2098,6 +2168,89 @@ button {
 }
 
 /* ==========================================================================
+   例題確認（運用開始後に追加）。カテゴリ一覧・例題詳細のどちらも .help-detail-screen /
+   .help-screen-header / .help-scroll-area 等、既存のヘルプ画面の骨格をそのまま使う。
+   ========================================================================== */
+
+.example-category-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.example-category-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.example-category-group-heading {
+  margin: 0 0 2px;
+  font-size: 0.8rem;
+  color: var(--color-accent);
+  letter-spacing: 0.04em;
+}
+
+.example-category-btn {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: var(--color-panel);
+  color: var(--color-text);
+  font-size: 0.9rem;
+  text-align: left;
+}
+
+.example-category-btn:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.example-detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.example-detail-section {
+  background: var(--color-panel);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.example-detail-section h3 {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  color: var(--color-accent);
+}
+
+.example-detail-text {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.9;
+}
+
+.example-detail-formula {
+  margin: 0 0 4px;
+  font-size: 0.92rem;
+  line-height: 1.9;
+}
+
+.example-detail-formula:last-child {
+  margin-bottom: 0;
+}
+
+.example-detail-answer {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--color-good);
+}
+
+/* ==========================================================================
    小さい画面の調整
    ========================================================================== */
 
@@ -2130,6 +2283,15 @@ button {
   .choice-card .mixed-number-whole,
   .answer-slot .mixed-number-whole {
     font-size: 0.82rem;
+  }
+  .answer-action-row {
+    gap: 4px;
+  }
+  .clear-btn,
+  .hint-btn,
+  .submit-answer-btn {
+    padding: 4px 2px;
+    font-size: 0.68rem;
   }
 }
 

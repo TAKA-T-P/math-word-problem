@@ -93,6 +93,7 @@
 22. [小学6年生・1学期（第10段階）](#22-小学6年生1学期第10段階)
 23. [小学6年生・2学期（第11段階）](#23-小学6年生2学期第11段階)
 24. [小学6年生・3学期（第12段階）](#24-小学6年生3学期第12段階)
+25. [ヒントボタン・例題確認機能（運用開始後に追加）](#25-ヒントボタン例題確認機能運用開始後に追加)
 
 ## 1. ファイル構成
 
@@ -1711,6 +1712,14 @@ npx serve .
   不一致・重複連続出題・数値難易度・出題セット・1〜3段階の回帰・スマートフォン表示を確認できる。
   プレイヤー向け画面にはリンクしておらず、保存データも変更しない。詳しくは
   [8章の「全範囲品質確認ページ」](#全範囲品質確認ページtoolsquality-checkhtml運用開始後に追加)を参照
+- **ヒントボタン**（運用開始後に追加）: 出題中の画面の「クリア」「解答する」ボタンの間に配置。
+  通常/カスタムトレーニングは無制限、文章題バトル・総復習は1ゲーム3問まで（同じ問題での
+  再表示は追加消費しない）。文章題バトルでヒントを使った問題は正解スコアが500点減点される。
+  1〜3段階問題では、現在解いている式に対応する段階別ヒントに自動的に切り替わる
+- **例題確認**（運用開始後に追加）: ヘルプメニューから、全50カテゴリの代表例題・ヒント・模範式・
+  答えを閲覧できる。カード操作・正誤判定・スコア等は一切持たない閲覧専用画面で、固定シードにより
+  毎回同じ内容が表示される。詳しくは
+  [25章の「ヒントボタン・例題確認機能」](#25-ヒントボタン例題確認機能運用開始後に追加)を参照
 
 ## 15. 今回対応していない内容／今後追加予定の機能
 
@@ -1814,8 +1823,10 @@ npx serve .
 
 - トレーニングの成績（完了数・1回で正解した数・ミス回数など）の永続保存
 - 単元ごとの正答率統計、苦手単元の自動選択
-- ヒント・解説表示
 - ログイン・サーバー/クラウド同期
+
+（ヒント表示は運用開始後に追加済みです。詳しくは
+[25章の「ヒントボタン・例題確認機能」](#25-ヒントボタン例題確認機能運用開始後に追加)を参照）
 
 ## 16. 動作確認用チェックリスト
 
@@ -4695,3 +4706,123 @@ if (gameState.gradeTerm === "6-3") {
 - 詳しいチェック項目は[16章の「小学6年生・3学期（6-3モード、第12段階）」](#16-動作確認用チェックリスト)、
   テンプレート追加時のチェック項目は[17章の「比例・対応する量／反比例・対応する量のテンプレート」
   「縮尺のテンプレート」](#17-問題データ追加時のチェック項目)を参照してください。
+
+## 25. ヒントボタン・例題確認機能（運用開始後に追加）
+
+問題の考え方が分からないときに参照できる「ヒント」ボタンと、ヘルプメニューから全50カテゴリの
+代表例題・ヒント・模範式をあらかじめ確認できる「例題確認」機能を追加しました。既存の問題生成・
+正誤判定・1〜3段階問題・通常/カスタムトレーニング・総復習・スコア・ランク・エネミー図鑑には
+一切影響していません。
+
+**ヒントの内容方針（運用開始後に変更）**: このアプリの目的は計算を実行することではなく、
+文章題を読んで正しい式をカードで作ることです。そのため、ヒントでは、通分・約分・逆数・筆算
+などの**計算方法**ではなく、文章題から式を作るための**数量関係**を表示します。具体的には、
+何を求めるかに注目させ、使用する2つの量を考えさせ、使用する演算とその順番（わり算ならどちらを
+どちらでわるか）を考えさせます。複数段階問題では、まず何を求める必要があるかを段階ごとに示します。
+答えや、問題の数値を入れた具体的な完成式は表示しません。ゲーム中の「ヒント」ボタンと、
+ヘルプメニューの「例題確認」は、同じ学習支援データ（`data/learning-support.js`）を参照するため、
+常に同じヒント文が表示されます（二重管理していません）。
+
+### ファイル構成
+
+| ファイル | 役割 |
+|---|---|
+| `data/learning-support.js`（新規） | カテゴリごとの学習支援データ（`LEARNING_SUPPORT_BY_CATEGORY`。ヒント文・例題用テンプレートID・固定シード・代表解法ルートID）の単一の情報源。`resolveHintText()`（テンプレート側`hintSteps`→カテゴリの段階別ヒント→カテゴリ共通ヒント→安全な共通文、の優先順位でヒント文を1件返す）と`getLearningSupportForCategory()`を提供 |
+| `js/hint-system.js`（新規） | ヒントの状態解決ロジックを一元化する薄いモジュール。`getCurrentStepIndexForHint(problem)`（1段階問題は常に0、多段階問題は`problem.multiStep.currentStepIndex`）・`getHintTextForProblem(problem)`（`resolveHintText()`の薄いラッパー）・`markHintUsedIfFirstTime(problem)`（`problem.hintState.used`を見て初回使用ならtrueを返し使用済みにする）。`js/game.js`・`js/training-mode.js`・`js/review-mode.js`・`js/example-viewer.js`はこの3関数だけを使い、ヒント解決ロジックを複製しない |
+| `js/example-viewer.js`（新規） | 例題確認機能のデータ組み立て専用モジュール。`getExampleCategoryGroups()`（学年・学期見出し付きのカテゴリ一覧）・`generateExample(categoryId)`（固定シードで代表例題を1件生成し、模範式・ヒント・答えをまとめて返す）・`validateAllExamples()`（開発者用検証ツール向け、全カテゴリの一括生成・決定性・模範式の妥当性を確認）。DOM描画は行わない（`js/ui.js`が担当） |
+| `js/question-generator.js` | `generateQuestionFromTemplate()`/`generateMultiStepQuestionFromTemplate()`が返す`problem`オブジェクトに、`hintState: { used: false, visible: false }`を追加（唯一の問題生成箇所2つに追加したため、バトル・トレーニング・総復習・例題確認のどの経路で生成された問題にも自動的に付与される）。`setRandomSource()`/`resetRandomSource()`は、元々は品質確認ツール専用だったが、例題確認も固定シードでの再現に使うようになった |
+| `js/score.js` | `HINT_SCORE_PENALTY = 500`を追加（既存の`calculateQuestionScore()`自体は無改造） |
+| `js/game.js` | `gameState.remainingHints`（初期値3、`startNewGame()`でリセット）・`handleHintToggle()`（ヒントボタンの開閉・初回使用時の残数消費）・`handleCorrect()`内でのスコア減点（`problem.hintState.used`のときだけ加算スコアから500点差し引く、0未満にしない）・`beginQuestion()`/`handleIntermediateStepCorrect()`でのヒント欄の開閉・内容更新 |
+| `js/training-mode.js` | `handleHintToggle()`（トレーニングは無制限のため残数管理なし）・`beginTrainingQuestion()`/`handleTrainingIntermediateCorrect()`でのヒント欄の開閉・内容更新（「同じ問題をもう一度」も`beginTrainingQuestion()`を経由するため、ヒント欄は自動的に閉じる） |
+| `js/review-mode.js` | `reviewState.remainingHints`（初期値3、`startReview()`でリセット）・`handleHintToggle()`・`beginReviewQuestion()`/`handleIntermediateStepCorrect()`でのヒント欄の開閉・内容更新（スコアが無いため減点処理はない） |
+| `js/app.js` | `MODES`ディスパッチテーブルに`hintToggle`を追加（`onJudge`と同じ配線パターン）。例題確認はゲームモードではなくヘルプの補助画面のため、`MODES`には追加していない |
+| `js/ui.js` | ヒントボタン・ヒント欄のDOM操作（`updateHintButton()`・`showHintPanel()`・`hideHintPanel()`）、正解時のスコア加算ポップアップへのヒント使用注記（`showScoreDelta(addedScore, hintUsed)`）、例題確認の2画面（カテゴリ一覧・例題詳細）の描画・画面遷移（`openExampleCategories()`・`openExampleDetail()`・`renderExampleDetail()`・`backToExampleCategories()`・`backToHelpMenuFromExamples()`）。問題文・式・答えの表示は、既存の`value-renderer.js`の関数（`renderValueHtml()`/`renderTextPartsHtml()`/`renderPercentConversionHtml()`/`renderRelationTableHtml()`）だけを使い、新しい表示ロジックは書いていない |
+| `data/index.js` | `getTemplateById(templateId)`を追加（`getAllTemplates()`から`find`するだけ） |
+| `data/multi-step-integer.js` | 12テンプレートすべてに`hintSteps`（テンプレート側の段階別ヒント）を追加。演算の組み合わせ（かけ算→たし算・かけ算→ひき算・たし算→わり算・たし算とひき算の複数解法・わり算→たし算）がテンプレートごとに異なり、カテゴリ共通ヒントだけでは現在のステップが伝わらないため |
+| `data/grade5-term1.js` | `decimal-multiplicative-comparison`（小数倍）の一部テンプレート（g5t1_mc_005〜008、「何倍か」を求める）に`hintSteps`を追加（運用開始後に追加。カテゴリ共通ヒントは「比べる量」を求める問題向けのため、求める量が逆のテンプレートだけ上書きする） |
+| `data/grade5-term2.js` | `average`（平均）・`unit-rate`（単位量あたり）・`crowdedness`（混み具合）の一部テンプレートに`hintSteps`を追加（運用開始後に追加。いずれも同じカテゴリ内に「求める量が逆」または「2段階」のテンプレートが混在しており、カテゴリ共通ヒント1種類だけでは正しい数量関係を示せないため） |
+| `js/question-validator.js` | `validateLearningSupportRegistry(registry, learningSupportByCategory, allTemplates)`を追加。トレーニング選択可能な全カテゴリに学習支援データがあるか・ヒント文が空でないか・`exampleTemplateId`が実在し`categoryId`が一致するか・`exampleRouteId`が実在するルートか・テンプレート側`hintSteps`が不正でないかを検証する。`FORBIDDEN_HINT_PHRASES`（通分・約分・逆数・筆算・くり上がり／くり下がり・分母はそのまま・分子どうし／分母どうし・分母／小数点／位をそろえる、の13語句）も export し、ヒント文・`hintSteps`のいずれかに含まれていないかを検証する（運用開始後に追加。「単位をそろえる」は速さ・縮尺の立式前提として許容するため、「位をそろえる」の判定からは除外している） |
+| `tools/quality-rules.js` | `RULE`に`LEARNING_SUPPORT_INVALID`・`EXAMPLE_GENERATION_FAILED`・`EXAMPLE_NOT_DETERMINISTIC`・`EXAMPLE_ROUTE_FAILED`を追加 |
+| `tools/quality-check.js` | 構造検証（`runStructuralValidation()`）に`validateLearningSupportRegistry()`の結果を統合。「学習支援データ検証」チェックボックス（`config.checks.learningSupportExamples`）で、全50カテゴリの例題を`validateAllExamples()`で一括生成・決定性確認する新しいセクションを追加 |
+| `tools/quality-check.html` | 「学習支援データ検証（ヒント・例題確認）」チェックボックスと、検証済みカテゴリ数のサマリー行を追加 |
+| `tools/question-validator.html` | 「学習支援データ検証（ヒント・例題確認）」セクションを追加。カテゴリレジストリの検証と同じカード形式で、カテゴリごとのヒント件数・例題テンプレート・シード・代表ルート・エラーの有無を一覧表示する |
+
+### テンプレートスキーマへの追加項目
+
+```javascript
+hintSteps: [
+  "まず、「1つ分の数」と「いくつ分」を使って、全部の数を求めよう。",
+  "式1で求めた全部の数から、使った数を取りのぞこう。"
+]
+```
+
+`hintSteps`（省略可）は、多段階問題で現在解いている式に対応するヒントを配列で指定する
+（1段階問題では`hintSteps[0]`だけを使う）。`hintSteps[stepIndex]`が存在すれば、カテゴリ共通の
+ヒントより優先して使われる（`data/learning-support.js`の`resolveHintText()`参照）。カテゴリ内の
+すべてのテンプレートが同じ演算構造・同じ数量関係を共有している場合（割引・増量、比例配分等）は、
+カテゴリ側のヒント（`LEARNING_SUPPORT_BY_CATEGORY[categoryId].hints`）だけで十分なため、
+`hintSteps`はテンプレートによって演算・数量関係が異なる場合だけに使う。対象は主に
+`data/multi-step-integer.js`（演算の組み合わせがテンプレートごとに異なる12テンプレート）と、
+`decimal-multiplicative-comparison`・`average`・`unit-rate`・`crowdedness`のように、同じカテゴリの
+中に「求める量が逆」のテンプレートが混在するもの（`data/grade5-term1.js`・`data/grade5-term2.js`の
+該当テンプレートだけに上書き登録）。全テンプレートに同じヒント文をコピーする必要はない。
+
+### ヒントボタンの仕様
+
+- 配置: 出題中の画面の「クリア」「解答する」ボタンの間（`.answer-action-row`）。ヒント欄
+  （`#hint-panel`）はそのボタン行の下側に表示され、開くまでは非表示（`hidden`属性）。以前は
+  ボタン行の上（問題文の下・解答欄の上）に配置していたが、開閉のたびにボタン自体の位置が
+  上下してしまっていたため、ボタン行より下（絶対配置のオーバーレイしか無い位置）へ移動した
+  （運用開始後に変更）。
+- 使用回数: 通常/カスタムトレーニングは無制限。文章題バトル・総復習は1ゲームにつき3問まで
+  （「ボタンを押した回数」ではなく「初めてヒントを表示した問題数」で数える。同じ問題での
+  再表示・不正解後の再挑戦・多段階問題での次の式への進行では、追加で消費しない）。
+- 残り0回になると、まだヒントを使っていない新しい問題ではボタンが`disabled`になる。ただし、
+  その時点で既にヒントを使用済みの問題では、残り0回でも開閉できる
+  （`usedForCurrentQuestion`フラグで区別。`js/ui.js`の`updateHintButton()`参照）。
+- 文章題バトルでヒントを使った問題は、正解時の加算スコアから500点差し引く（0未満にはしない。
+  総スコアを直接減らす処理ではなく、`js/game.js`の`handleCorrect()`内で加算値そのものを
+  減らしている）。トレーニング・総復習では減点しない（スコアの概念自体が無い/対象外）。
+- `localStorage`には一切保存しない。残り回数は新しいゲーム/総復習を開始するたびに3へ戻る。
+
+### 例題確認の仕様
+
+- 開き方: ヘルプメニュー →「例題確認」（「このゲームについて」と「エネミー図鑑」の間）→
+  学年・学期見出し付きのカテゴリ一覧 → カテゴリを選ぶと代表例題（問題文・ヒント・模範式・答え）
+  を表示。「もどる」・Escキーでそれぞれ1つ前の画面へ戻る。
+- 閲覧専用: カード操作・解答欄・「解答する」ボタン・正誤判定・タイマー・ハート・エネミー・
+  スコア・ランク・問題履歴・ハイスコア・エネミー図鑑の解放・`localStorage`への保存は一切行わない。
+  ゲームモードではなくヘルプの補助画面のため、`js/app.js`の`MODES`ディスパッチテーブルには
+  追加していない。
+- 決定性: 各カテゴリの代表例題は`exampleTemplateId`・`exampleSeed`で固定されており、開くたびに
+  必ず同じ内容になる（`js/question-generator.js`の`setRandomSource()`/`resetRandomSource()`を
+  `try...finally`で対にして使うため、例題確認を開いても直後の通常プレイの乱数列・保存データ・
+  6年3学期の出題ローテーションには一切影響しない）。
+- 複数解法ルートを持つカテゴリ（割引・増量・分数の速さ／道のり／時間・比を使った数量・比例配分・
+  比例／反比例・対応する量・縮尺・地図上の長さ）は、`exampleRouteId`で小学生に説明しやすい代表
+  ルートを明示的に指定している（未指定の場合は生成された先頭のルートを使う）。
+
+### 対応していない内容
+
+- ヒントによる正解カードの自動配置・答えそのものの表示
+- 段階的に答えへ近づく複数レベルのヒント（現状は1問につき1種類の固定ヒント文）
+- 例題確認画面から直接ゲームを開始する機能
+- 例題の閲覧履歴の保存
+- ヒント使用回数の永続保存（`localStorage`には保存しない）
+
+### 動作確認・検証の進め方
+
+- Node.js での単体検証: 全298テンプレート×10回の生成・構造検証・カードリーク・数量関係チェックの
+  回帰スイープ（既存の`g6t2_proportional_allocation`のカードリークのみ残存、新規エラーなし）に加え、
+  全問題で`resolveHintText()`が例外なく非空文字列を返すこと、`markHintUsedIfFirstTime()`が
+  「初回はtrue・2回目以降はfalse」を返すこと、多段階問題で`submitStepAnswer()`によりステップが
+  進んだ際に`getCurrentStepIndexForHint()`が追従することを確認済みです。`validateLearningSupportRegistry()`
+  は50カテゴリ全件でエラー0、`validateAllExamples()`は50カテゴリ全件の生成・決定性（同じシードで
+  2回生成した内容の一致）・模範式の最終結果と答えの一致を確認済みです（エラー0）。スコア減点の
+  計算（`calculateQuestionScore()`の戻り値から500点差し引く、下限0でクランプされる）も
+  Node上で確認済みです。
+- ブラウザでの目視確認: このセッションではPlaywright等のブラウザ操作ツールが利用できないため
+  実施できていません。ヒントボタンの表示位置・開閉アニメーション・残り回数表示・スコア加算
+  ポップアップの見た目、例題確認画面のスクロール・分数/帯分数/百分率/比/縮尺の表示、
+  スマートフォン縦画面（320px〜768px）でのレイアウト崩れの有無は、実機またはブラウザでの
+  確認をおすすめします。

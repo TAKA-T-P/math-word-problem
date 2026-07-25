@@ -76,7 +76,18 @@ export const RULE = Object.freeze({
   MIXED_NUMBER_PATTERN_MISMATCH: "MIXED_NUMBER_PATTERN_MISMATCH",
   MIXED_NUMBER_RENDER_ERROR: "MIXED_NUMBER_RENDER_ERROR",
   MIXED_NUMBER_ARIA_ERROR: "MIXED_NUMBER_ARIA_ERROR",
-  MIXED_NUMBER_OVERFLOW: "MIXED_NUMBER_OVERFLOW"
+  MIXED_NUMBER_OVERFLOW: "MIXED_NUMBER_OVERFLOW",
+  // 学習支援データ（ヒントボタン・例題確認機能。運用開始後に追加）。
+  // LEARNING_SUPPORT_INVALID は、js/question-validator.js の
+  // validateLearningSupportRegistry()（既存の validateCategoryRegistryAgainstTemplates() と
+  // 同じく、個別の理由はメッセージ文字列に埋め込む方式）が返すエラーをまとめて表示するときに
+  // 使うルールID。
+  LEARNING_SUPPORT_INVALID: "LEARNING_SUPPORT_INVALID",
+  // 以下3つは js/example-viewer.js の validateAllExamples() が個別に返す、
+  // カテゴリごとの例題生成チェック用ルールID。
+  EXAMPLE_GENERATION_FAILED: "EXAMPLE_GENERATION_FAILED",
+  EXAMPLE_NOT_DETERMINISTIC: "EXAMPLE_NOT_DETERMINISTIC",
+  EXAMPLE_ROUTE_FAILED: "EXAMPLE_ROUTE_FAILED"
 });
 
 // ============================================================

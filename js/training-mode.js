@@ -15,6 +15,7 @@
 import { generateQuestion, shouldDisplayFractionsUnsimplified } from "./question-generator.js";
 import { checkAnswer } from "./answer-checker.js";
 import { filterValidTemplateSets } from "./question-validator.js";
+import { getHintTextForProblem, markHintUsedIfFirstTime } from "./hint-system.js";
 import { valueKey, formatValue, computeUnsimplifiedFractionResult } from "./value-utils.js";
 import { renderValueHtml } from "./value-renderer.js";
 import * as multiStepEngine from "./multi-step-engine.js";
@@ -355,6 +356,10 @@ function beginTrainingQuestion() {
   // カテゴリ名を含まない総称）をそのまま使うよう統一した）。
   updateTrainingHeaderDisplay();
   ui.renderProblem(problem);
+  // ヒント機能（運用開始後に追加）。トレーニングは無制限のため、常に有効な状態で
+  // 「ヒント」とだけ表示する（残り回数の概念が無い）。
+  ui.hideHintPanel();
+  ui.updateHintButton({ unlimited: true, remaining: 0, usedForCurrentQuestion: false });
   ui.unlockInput();
   isBusy = false;
   logTrainingDebugInfo();
@@ -384,6 +389,26 @@ function retryAfterIncorrect() {
     ui.unlockInput();
     isBusy = false;
   }, INCORRECT_ANIMATION_MS);
+}
+
+/**
+ * 「ヒント」ボタンが押されたときの処理（運用開始後に追加）。トレーニングは無制限のため、
+ * 残り回数の管理は一切行わない。使用済みフラグ（problem.hintState.used）はスコア計算の
+ * 対象外だが、他モードと同じ形で一貫して立てておく。
+ */
+export function handleHintToggle() {
+  if (isBusy || !trainingState.currentProblem) return;
+  const problem = trainingState.currentProblem;
+
+  if (problem.hintState.visible) {
+    problem.hintState.visible = false;
+    ui.hideHintPanel();
+    return;
+  }
+
+  markHintUsedIfFirstTime(problem);
+  problem.hintState.visible = true;
+  ui.showHintPanel(getHintTextForProblem(problem));
 }
 
 export function handleJudge(answer) {
@@ -452,6 +477,10 @@ function handleTrainingIntermediateCorrect(problem, stepResult) {
     ui.hideIntermediateStepEffect();
     ui.renderStepChoices(problem);
     updateTrainingHeaderDisplay();
+    // ヒント欄が開いたままなら、次のステップ用のヒントに内容だけ更新する（運用開始後に追加）。
+    if (problem.hintState && problem.hintState.visible) {
+      ui.showHintPanel(getHintTextForProblem(problem));
+    }
     ui.unlockInput();
     isBusy = false;
   }, INTERMEDIATE_STEP_DELAY_MS);

@@ -27,6 +27,7 @@ const MODES = {
   battle: {
     start: (settings) => game.startNewGame(settings),
     judge: (answer) => game.handleJudge(answer),
+    hintToggle: () => game.handleHintToggle(),
     nextTap: () => game.handleNextTap(),
     // 「同じ問題をもう一度」はトレーニング専用機能で、ボタン自体が他モードでは
     // 表示・操作不能（CSSの.training-only）のため、battle/reviewは何もしない
@@ -42,6 +43,7 @@ const MODES = {
   training: {
     start: (settings) => training.startTraining(settings),
     judge: (answer) => training.handleJudge(answer),
+    hintToggle: () => training.handleHintToggle(),
     nextTap: () => training.handleNextTap(),
     retrySameQuestion: () => training.handleRetrySameQuestion(),
     retireOpen: () => training.pauseForRetireDialog(),
@@ -53,6 +55,7 @@ const MODES = {
   review: {
     start: (settings) => review.startReview(settings),
     judge: (answer) => review.handleJudge(answer),
+    hintToggle: () => review.handleHintToggle(),
     nextTap: () => review.handleNextTap(),
     retrySameQuestion: () => {},
     retireOpen: () => review.pauseForRetireDialog(),
@@ -78,6 +81,7 @@ function main() {
     },
     onSoundToggle: () => game.toggleSound(),
     onJudge: (answer) => MODES[currentMode].judge(answer),
+    onHintToggle: () => MODES[currentMode].hintToggle(),
     onNextTap: () => MODES[currentMode].nextTap(),
     onRetrySameQuestion: () => MODES[currentMode].retrySameQuestion(),
     onRetireOpen: () => MODES[currentMode].retireOpen(),

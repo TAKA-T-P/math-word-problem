@@ -81,3 +81,12 @@ export function getAvailableGradeTerms() {
 export function getAllTemplates() {
   return Object.values(TEMPLATE_SETS_BY_GRADE_TERM).flat();
 }
+
+/**
+ * テンプレートIDから、該当するテンプレートを取得します。見つからない場合は null。
+ * 例題確認（js/example-viewer.js）が data/learning-support.js の exampleTemplateId から
+ * 実際のテンプレートを引くために使います（運用開始後に追加）。
+ */
+export function getTemplateById(templateId) {
+  return getAllTemplates().find((t) => t.id === templateId) || null;
+}

@@ -50,15 +50,17 @@ let questionSequence = 0;
 let randomSource = Math.random;
 
 /**
- * 問題生成に使う乱数生成関数を差し替えます（品質確認ツール専用。運用開始後に追加）。
- * 通常のプレイ中は一切呼び出されないため、既定の動作（Math.random）には影響しません。
+ * 問題生成に使う乱数生成関数を差し替えます（運用開始後に追加）。元々は品質確認ツール専用
+ * だったが、例題確認（js/example-viewer.js）が固定シードで毎回同じ例題を生成するためにも
+ * 使うようになった。通常のプレイ中（バトル・トレーニング・総復習の実際の出題）では
+ * 一切呼び出されないため、既定の動作（Math.random）には影響しない。
  */
 export function setRandomSource(fn) {
   randomSource = typeof fn === "function" ? fn : Math.random;
 }
 
 /**
- * 乱数生成関数を既定（Math.random）へ戻します（品質確認ツール専用。運用開始後に追加）。
+ * 乱数生成関数を既定（Math.random）へ戻します（運用開始後に追加）。
  */
 export function resetRandomSource() {
   randomSource = Math.random;
@@ -369,6 +371,32 @@ function generateUnitRateValues(variables, quantityRelation) {
   }
   const { unitCountKey, perUnitKey, totalKey } = quantityRelation;
   return generateProportionalValues(variables, unitCountKey, perUnitKey, totalKey);
+}
+
+/**
+ * 単位量あたり・混み具合専用の生成ルール（全体量が整数になる版、小学5年生2学期）。
+ * 花の本数・人数・牛の頭数など、全体量(totalKey)が「個数」として数えられる場合、
+ * generateUnitRateValues() のように unitCount・perUnit を独立に選んで積をそのまま
+ * 使うと、全体量が小数になってしまうことがあります（例: 2.6㎡×4.5本/㎡=11.7本）。
+ * この関数は、積が整数になる組み合わせが見つかるまで選び直すことで、
+ * 全体量が必ず整数になることを保証します（1にならない「倍」を選び直す
+ * pickMultiplierValueExcludingOne() と同じ「条件を満たすまで選び直す」設計）。
+ */
+function generateUnitRateExactTotalValues(variables, quantityRelation) {
+  if (!quantityRelation) {
+    throw new Error("quantityRelation が指定されていないテンプレートです（単位量あたり・混み具合には必須です）。");
+  }
+  const { unitCountKey, perUnitKey, totalKey } = quantityRelation;
+  const MAX_ATTEMPTS = 500;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const unitCountValue = pickValueForRange(variables[unitCountKey]);
+    const perUnitValue = pickValueForRange(variables[perUnitKey]);
+    const totalValue = normalizeNumber(multiplyDecimal(unitCountValue, perUnitValue));
+    if (Number.isInteger(totalValue)) {
+      return { [unitCountKey]: unitCountValue, [perUnitKey]: perUnitValue, [totalKey]: totalValue };
+    }
+  }
+  throw new Error("単位量あたり（全体量が整数になる組み合わせ）を生成できませんでした。variables の範囲を見直してください。");
 }
 
 /**
@@ -772,6 +800,12 @@ const GENERATOR_TYPE_HANDLERS = {
   // 2つのカテゴリ（unitRate: 1単位あたりを求める／totalFromUnitRate: 全体量を求める）で共有します。
   unitRate: (variables, template) => generateUnitRateValues(variables, template.quantityRelation),
   totalFromUnitRate: (variables, template) => generateUnitRateValues(variables, template.quantityRelation),
+  // 単位量あたり・混み具合のうち、全体量（花の本数・人数・牛の頭数など）が
+  // 「個数」として数えられ、小数になってはいけないテンプレート専用（不具合修正で追加）。
+  // 生成ロジックは generateUnitRateExactTotalValues() に委譲します。
+  unitRateExactTotal: (variables, template) => generateUnitRateExactTotalValues(variables, template.quantityRelation),
+  totalFromUnitRateExactTotal: (variables, template) =>
+    generateUnitRateExactTotalValues(variables, template.quantityRelation),
   // 速さ・道のり・時間（小学5年生3学期）。速さ×時間＝道のりの関係を持つ3つのカテゴリ
   // （findSpeed: 速さを求める／findDistance: 道のりを求める／findTime: 時間を求める）で共有します。
   findSpeed: (variables, template) => generateSpeedValues(variables, template.quantityRelation),
@@ -862,6 +896,8 @@ const QUANTITY_RELATION_GENERATOR_TYPES = new Set([
   "totalFromAverage",
   "unitRate",
   "totalFromUnitRate",
+  "unitRateExactTotal",
+  "totalFromUnitRateExactTotal",
   "findSpeed",
   "findDistance",
   "findTime",
@@ -1319,7 +1355,11 @@ export function generateQuestionFromTemplate(template) {
     solutionRoutes: resolvedRoutes,
     template,
     values,
-    choices: []
+    choices: [],
+    // ヒント機能（運用開始後に追加）。used=trueになった問題は、文章題バトルの正解スコアが
+    // 500点減点される（js/game.js の handleCorrect() 参照）。js/hint-system.js だけが
+    // このオブジェクトを読み書きする。
+    hintState: { used: false, visible: false }
   };
 
   problem.choices = buildSingleStepChoices(problem);
@@ -1365,7 +1405,10 @@ function generateMultiStepQuestionFromTemplate(template) {
     // 1段階問題と同じフィールド名（result）を参照できるようにするため。
     result: finalAnswer,
     template,
-    choices: []
+    choices: [],
+    // ヒント機能（運用開始後に追加）。1段階問題の生成箇所（generateQuestionFromTemplate()）と
+    // 同じ形。js/hint-system.js だけがこのオブジェクトを読み書きする。
+    hintState: { used: false, visible: false }
   };
 
   return initializeMultiStepQuestion(problem);

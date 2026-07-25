@@ -366,6 +366,9 @@ export const grade5Term2Templates = [
   },
   {
     id: "g5t2_avg_003",
+    // カテゴリ共通ヒント（average）は「平均を求める」問題向けのため、「合計を求める」
+    // このテンプレートには個別のヒントを設定する（運用開始後に追加）。
+    hintSteps: ["平均が1つ分の量を表しているので、「平均×個数」で全部の量を求めよう。"],
     gradeTerm: "5-2",
     category: "平均",
     categoryId: "average",
@@ -384,6 +387,7 @@ export const grade5Term2Templates = [
   },
   {
     id: "g5t2_avg_004",
+    hintSteps: ["平均が1つ分の量を表しているので、「平均×個数」で全部の量を求めよう。"],
     gradeTerm: "5-2",
     category: "平均",
     categoryId: "average",
@@ -402,6 +406,12 @@ export const grade5Term2Templates = [
   },
   {
     id: "g5t2_avg_005",
+    // 2段階（合計を求めてから平均を求める）のため、専用のhintStepsを設定する
+    // （運用開始後に追加）。
+    hintSteps: [
+      "まず、2つの量を合わせた合計を求めよう。",
+      "式1で求めた合計を、量の個数でわろう。"
+    ],
     gradeTerm: "5-2",
     category: "平均",
     categoryId: "average",
@@ -428,6 +438,10 @@ export const grade5Term2Templates = [
   },
   {
     id: "g5t2_avg_006",
+    hintSteps: [
+      "まず、2つの量を合わせた合計を求めよう。",
+      "式1で求めた合計を、量の個数でわろう。"
+    ],
     gradeTerm: "5-2",
     category: "平均",
     categoryId: "average",
@@ -471,7 +485,8 @@ export const grade5Term2Templates = [
       unitCount: { min: 1.5, max: 4.5, decimalPlaces: 1 },
       perUnit: { min: 2.4, max: 9.6, decimalPlaces: 1 }
     },
-    generatorType: "unitRate",
+    // 花の本数（全体量）は個数のため、必ず整数になる版を使う（不具合修正）。
+    generatorType: "unitRateExactTotal",
     quantityRelation: { type: "unit-rate", totalKey: "total", unitCountKey: "unitCount", perUnitKey: "perUnit", unknown: "perUnit" },
     solutionRoutes: [{ left: "total", operator: "÷", right: "unitCount", commutative: false }],
     answerUnit: "本/㎡"
@@ -514,6 +529,11 @@ export const grade5Term2Templates = [
   },
   {
     id: "g5t2_ur_004",
+    // カテゴリ共通ヒント（unit-rate）は「1つ分を求める」問題向けのため、「全部の量を
+    // 求める」このテンプレートには個別のヒントを設定する（運用開始後に追加）。
+    // 「個数」は整数個の印象が強く、わる長さ・時間・面積等の連続量には不自然なため、
+    // 「求めたい分の量」という表現にする（運用開始後に修正）。
+    hintSteps: ["1つ分あたりの量と、求めたい分の量を使って、かけ算の式にしよう。"],
     gradeTerm: "5-2",
     category: "単位量あたり",
     categoryId: "unit-rate",
@@ -532,6 +552,9 @@ export const grade5Term2Templates = [
   },
   {
     id: "g5t2_ur_005",
+    // 「個数」は整数個の印象が強く、わる長さ・時間・面積等の連続量には不自然なため、
+    // 「求めたい分の量」という表現にする（運用開始後に修正）。
+    hintSteps: ["1つ分あたりの量と、求めたい分の量を使って、かけ算の式にしよう。"],
     gradeTerm: "5-2",
     category: "単位量あたり",
     categoryId: "unit-rate",
@@ -550,6 +573,9 @@ export const grade5Term2Templates = [
   },
   {
     id: "g5t2_ur_006",
+    // 「個数」は整数個の印象が強く、わる長さ・時間・面積等の連続量には不自然なため、
+    // 「求めたい分の量」という表現にする（運用開始後に修正）。
+    hintSteps: ["1つ分あたりの量と、求めたい分の量を使って、かけ算の式にしよう。"],
     gradeTerm: "5-2",
     category: "単位量あたり",
     categoryId: "unit-rate",
@@ -585,7 +611,8 @@ export const grade5Term2Templates = [
       unitCount: { min: 15, max: 45, step: 5 },
       perUnit: { min: 0.3, max: 0.9, decimalPlaces: 1 }
     },
-    generatorType: "unitRate",
+    // 人数（全体量）は個数のため、必ず整数になる版を使う（不具合修正）。
+    generatorType: "unitRateExactTotal",
     quantityRelation: { type: "unit-rate", totalKey: "total", unitCountKey: "unitCount", perUnitKey: "perUnit", unknown: "perUnit" },
     solutionRoutes: [{ left: "total", operator: "÷", right: "unitCount", commutative: false }],
     answerUnit: "人/㎡"
@@ -621,13 +648,17 @@ export const grade5Term2Templates = [
       unitCount: { min: 2, max: 8, step: 1 },
       perUnit: { min: 1.5, max: 5.5, decimalPlaces: 1 }
     },
-    generatorType: "unitRate",
+    // 牛の頭数（全体量）は個数のため、必ず整数になる版を使う（不具合修正）。
+    generatorType: "unitRateExactTotal",
     quantityRelation: { type: "unit-rate", totalKey: "total", unitCountKey: "unitCount", perUnitKey: "perUnit", unknown: "perUnit" },
     solutionRoutes: [{ left: "total", operator: "÷", right: "unitCount", commutative: false }],
     answerUnit: "頭/ha"
   },
   {
     id: "g5t2_crowd_004",
+    // カテゴリ共通ヒント（crowdedness）は「1つ分の数を求める」問題向けのため、「全部の数を
+    // 求める」このテンプレートには個別のヒントを設定する（運用開始後に追加）。
+    hintSteps: ["1つ分の数に、広さの数をかけて、全部の数を求めよう。"],
     gradeTerm: "5-2",
     category: "混み具合",
     categoryId: "crowdedness",
@@ -646,6 +677,7 @@ export const grade5Term2Templates = [
   },
   {
     id: "g5t2_crowd_005",
+    hintSteps: ["1つ分の数に、広さの数をかけて、全部の数を求めよう。"],
     gradeTerm: "5-2",
     category: "混み具合",
     categoryId: "crowdedness",
@@ -657,13 +689,15 @@ export const grade5Term2Templates = [
       perUnit: { min: 0.4, max: 1.6, decimalPlaces: 1 },
       unitCount: { min: 15, max: 45, step: 5 }
     },
-    generatorType: "totalFromUnitRate",
+    // 人数（全体量）は個数のため、必ず整数になる版を使う（不具合修正）。
+    generatorType: "totalFromUnitRateExactTotal",
     quantityRelation: { type: "unit-rate", totalKey: "total", unitCountKey: "unitCount", perUnitKey: "perUnit", unknown: "total" },
     solutionRoutes: [{ left: "perUnit", operator: "×", right: "unitCount", commutative: true }],
     answerUnit: "人"
   },
   {
     id: "g5t2_crowd_006",
+    hintSteps: ["1つ分の数に、広さの数をかけて、全部の数を求めよう。"],
     gradeTerm: "5-2",
     category: "混み具合",
     categoryId: "crowdedness",
@@ -675,7 +709,8 @@ export const grade5Term2Templates = [
       perUnit: { min: 1.5, max: 5.5, decimalPlaces: 1 },
       unitCount: { min: 2, max: 8, step: 1 }
     },
-    generatorType: "totalFromUnitRate",
+    // 牛の頭数（全体量）は個数のため、必ず整数になる版を使う（不具合修正）。
+    generatorType: "totalFromUnitRateExactTotal",
     quantityRelation: { type: "unit-rate", totalKey: "total", unitCountKey: "unitCount", perUnitKey: "perUnit", unknown: "total" },
     solutionRoutes: [{ left: "perUnit", operator: "×", right: "unitCount", commutative: true }],
     answerUnit: "頭"

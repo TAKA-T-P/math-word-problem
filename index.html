@@ -190,6 +190,9 @@
     <h2 id="help-menu-title" class="help-menu-title" tabindex="-1">ヘルプ</h2>
     <div class="help-menu-buttons">
       <button id="help-about-btn" class="primary-btn" type="button">このゲームについて</button>
+      <!-- 全50カテゴリの代表例題・ヒント・模範式を閲覧できる画面への導線（運用開始後に追加）。
+           ゲームモードではなくヘルプの補助画面のため、js/app.js の MODES には追加しない。 -->
+      <button id="help-example-btn" class="primary-btn" type="button">例題確認</button>
       <button id="help-dex-btn" class="primary-btn" type="button">エネミー図鑑</button>
       <!-- 外部の姉妹アプリ「スペース計算ラリー」への導線（運用開始後に追加）。確認ダイアログ
            （space-rally-confirm-dialog）で「はい」を押すと新しいタブでリンクを開く。 -->
@@ -312,6 +315,33 @@
     </div>
   </section>
 
+  <!-- ============== 例題確認：カテゴリ一覧画面（運用開始後に追加） ==============
+       data/category-registry.js から動的に生成する、学年・学期見出し付きのカテゴリ一覧。
+       ゲーム進行・入力・正誤判定・スコアは一切持たない、閲覧専用のヘルプ補助画面。 -->
+  <section id="screen-example-categories" class="screen help-detail-screen">
+    <header class="help-screen-header">
+      <h2 id="example-categories-title" class="help-screen-title" tabindex="-1">例題確認</h2>
+      <button id="example-categories-back-btn" class="help-back-btn" type="button">もどる</button>
+    </header>
+    <div class="help-scroll-area">
+      <div id="example-category-list" class="example-category-list"></div>
+    </div>
+  </section>
+
+  <!-- ============== 例題確認：例題詳細画面（運用開始後に追加） ==============
+       選んだカテゴリの代表例題（問題文・ヒント・模範式・答え）を表示するだけの閲覧専用画面。
+       js/example-viewer.js の generateExample() が組み立てたデータを、js/ui.js の
+       renderExampleDetail() が既存の value-renderer.js の関数だけを使って描画する。 -->
+  <section id="screen-example-detail" class="screen help-detail-screen">
+    <header class="help-screen-header">
+      <h2 id="example-detail-title" class="help-screen-title" tabindex="-1">例題</h2>
+      <button id="example-detail-back-btn" class="help-back-btn" type="button">もどる</button>
+    </header>
+    <div class="help-scroll-area">
+      <div id="example-detail-content" class="example-detail-content"></div>
+    </div>
+  </section>
+
   <!-- ============== カウントダウン画面 ============== -->
   <section id="screen-countdown" class="screen">
     <div id="countdown-text" class="countdown-text">3</div>
@@ -387,13 +417,26 @@
 
     <div id="choices-container" class="choices-container" aria-label="えらべるカード"></div>
 
-    <!-- クリア・解答するボタン（運用開始後に変更。以前は「クリア」だけが選択肢カードの上
+    <!-- クリア・ヒント・解答するボタン（運用開始後に変更。以前は「クリア」だけが選択肢カードの上
          （解答欄の下）にあったが、選択肢カード（数字・＋－×÷）の下へ移動し、「＝」ボタンと
          全く同じ役割を持つ「解答する」ボタンを新設した。js/ui.js が両方のクリックを
-         同じ判定処理につなげる。 -->
+         同じ判定処理につなげる。「ヒント」ボタン（運用開始後に追加）はクリアと解答するの間に置き、
+         トレーニングでは無制限、文章題バトル・総復習では1ゲーム3問までに制限する
+         （js/hint-system.js・各モードの handleHintToggle() 参照）。 -->
     <div class="answer-action-row">
       <button id="clear-slots-btn" class="clear-btn" type="button">クリア</button>
+      <button id="hint-btn" class="hint-btn" type="button" aria-expanded="false" aria-controls="hint-panel">ヒント</button>
       <button id="submit-answer-btn" class="submit-answer-btn" type="button">解答する</button>
+    </div>
+
+    <!-- ヒントパネル（運用開始後に追加。「ヒント」ボタンの上側に配置すると、開閉のたびに
+         ボタン自体の位置が上下してしまうため、ボタン行の下側に配置した。ボタンより下に
+         あるのは絶対配置のオーバーレイ（正解演出・リタイアダイアログ等）だけなので、
+         開閉してもボタンの位置は動かない）。js/ui.js の showHintPanel()/hideHintPanel() が
+         中身と表示/非表示を切り替える。 -->
+    <div id="hint-panel" class="hint-panel" aria-live="polite" hidden>
+      <p class="hint-panel-heading">💡 ヒント</p>
+      <p id="hint-panel-text" class="hint-panel-text"></p>
     </div>
 
     <div id="correct-mark" class="correct-mark" aria-hidden="true">○</div>

@@ -189,6 +189,7 @@
       <label><input type="checkbox" id="check-customTrainingSet" checked /> カスタムトレーニング問題セット検証</label>
       <label><input type="checkbox" id="check-reviewSet" checked /> 総復習問題セット検証</label>
       <label><input type="checkbox" id="check-multiStepRegression" checked /> 1〜3段階の回帰テスト（ミス・時間切れ）</label>
+      <label><input type="checkbox" id="check-learningSupportExamples" checked /> 学習支援データ検証（ヒント・例題確認）</label>
     </div>
     <div class="toolbar">
       <button id="start-btn" type="button">検証を開始</button>
@@ -356,7 +357,8 @@ function buildConfig() {
       reviewSet: el("check-reviewSet").checked,
       questionSetQuality: el("check-questionSetQuality").checked,
       numericDifficulty: el("check-numericDifficulty").checked,
-      multiStepRegression: el("check-multiStepRegression").checked
+      multiStepRegression: el("check-multiStepRegression").checked,
+      learningSupportExamples: el("check-learningSupportExamples").checked
     }
   };
 }
@@ -487,6 +489,7 @@ function renderSummary(result) {
     ["トレーニングセット数", result.trainingSetsChecked, ""],
     ["カスタムトレーニングセット数", result.customTrainingSetsChecked, ""],
     ["総復習セット数", result.reviewSetsChecked, ""],
+    ["学習支援データ検証カテゴリ数", result.learningSupportExamplesChecked, ""],
     ["経過時間", formatElapsed(result.elapsedMs), ""]
   ];
   el("summary-stats").innerHTML = stats

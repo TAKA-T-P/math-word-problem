@@ -10,7 +10,8 @@ import {
   shouldDisplayFractionsUnsimplified
 } from "./question-generator.js";
 import { checkAnswer } from "./answer-checker.js";
-import { calculateQuestionScore, calculateTimeBonus, calculateRank, formatFinalRank, TIME_BONUS_MAX } from "./score.js";
+import { calculateQuestionScore, calculateTimeBonus, calculateRank, formatFinalRank, TIME_BONUS_MAX, HINT_SCORE_PENALTY } from "./score.js";
+import { getHintTextForProblem, markHintUsedIfFirstTime } from "./hint-system.js";
 import {
   loadHighScore,
   saveHighScoreIfBetter,
@@ -44,6 +45,10 @@ const DAMAGE_ANIMATION_MS = 480;
 const CLEAR_MESSAGE_DELAY_MS = 1400;
 const GAMEOVER_MESSAGE_DELAY_MS = 1400;
 const INTERMEDIATE_STEP_DELAY_MS = 900;
+
+// 1回の文章題バトルで使えるヒントの回数（運用開始後に追加。問題単位で数える。
+// js/hint-system.js の markHintUsedIfFirstTime() 参照）。
+const MAX_HINTS_PER_GAME = 3;
 
 // ゲーム状態を1つのオブジェクトで一元管理する
 const gameState = {
@@ -85,6 +90,9 @@ const gameState = {
   isMaxBonusRun: true,
   resultType: null,
   pendingOutcome: null, // 正解演出後の遷移先: "next" | "clear"
+  // ヒント機能（運用開始後に追加）。1回のゲームにつき3問まで使える残り回数。
+  // localStorageには保存せず、新しいゲームを開始するたびにMAX_HINTS_PER_GAMEへ戻す。
+  remainingHints: MAX_HINTS_PER_GAME,
   // 正解した瞬間に回復させた解答時間ゲージの割合（0〜1）。次の問題の開始時にこの割合から
   // タイマーを始める（以前は毎回100%から始めていたが、正解のタイミングで回復する方式に変更）。
   // 不正解・時間切れで同じ問題を再挑戦する場合はこの値を使わず、常に100%に戻す。
@@ -555,6 +563,7 @@ export function startNewGame(settings) {
   gameState.resultType = null;
   gameState.pendingOutcome = null;
   gameState.nextQuestionStartRatio = 1;
+  gameState.remainingHints = MAX_HINTS_PER_GAME;
   gameState.screen = "countdown";
   gameState.currentSlot = null;
   gameState.usedQuestionTexts = new Set();
@@ -702,6 +711,11 @@ function beginQuestion() {
   gameState.currentQuestionDurationSec = initialTimeLimitSec / multiplier;
 
   ui.renderProblem(problem);
+  // ヒント機能（運用開始後に追加）。新しい問題では必ずヒント欄を閉じ、ボタンの残り回数
+  // 表示を今の gameState.remainingHints に同期させる（この問題ではまだ未使用のため
+  // usedForCurrentQuestion は常に false）。
+  ui.hideHintPanel();
+  ui.updateHintButton({ unlimited: false, remaining: gameState.remainingHints, usedForCurrentQuestion: false });
   ui.unlockInput();
   isBusy = false;
   // 1問目は100%（gameState.nextQuestionStartRatioの初期値）から、2問目以降は
@@ -740,6 +754,31 @@ export function handleJudge(answer) {
     gameState.isNoMiss = false;
     handleIncorrectOrTimeout();
   }
+}
+
+/**
+ * 「ヒント」ボタンが押されたときの処理（運用開始後に追加）。
+ * 開いている場合は閉じるだけ。閉じている場合は、今の問題で初めての使用なら
+ * gameState.remainingHints を1減らしてからヒント欄を開く（2回目以降の開閉では
+ * 減らさない＝js/hint-system.js の markHintUsedIfFirstTime() が判定する）。
+ */
+export function handleHintToggle() {
+  if (isBusy || !gameState.currentProblem) return;
+  const problem = gameState.currentProblem;
+
+  if (problem.hintState.visible) {
+    problem.hintState.visible = false;
+    ui.hideHintPanel();
+    return;
+  }
+
+  const isFirstUse = markHintUsedIfFirstTime(problem);
+  if (isFirstUse) {
+    gameState.remainingHints = Math.max(0, gameState.remainingHints - 1);
+  }
+  problem.hintState.visible = true;
+  ui.showHintPanel(getHintTextForProblem(problem));
+  ui.updateHintButton({ unlimited: false, remaining: gameState.remainingHints, usedForCurrentQuestion: true });
 }
 
 /**
@@ -791,6 +830,11 @@ function handleIntermediateStepCorrect(problem, stepResult) {
   window.setTimeout(() => {
     ui.hideIntermediateStepEffect();
     ui.renderStepChoices(problem);
+    // ヒント欄が開いたままなら、次のステップ用のヒントに内容だけ更新する（運用開始後に追加。
+    // 使用回数は追加で消費しない＝markHintUsedIfFirstTimeは呼ばない）。
+    if (problem.hintState && problem.hintState.visible) {
+      ui.showHintPanel(getHintTextForProblem(problem));
+    }
     resumeTimer();
     ui.unlockInput();
     isBusy = false;
@@ -848,6 +892,13 @@ function handleCorrect(resultValue) {
     gameState.isMaxBonusRun = false;
   }
   let addedScore = calculateQuestionScore(questionNumber, timeBonus);
+  // ヒントを使った問題を正解したときは、既存のスコア計算式自体は変えず、計算後の加算値
+  // から500点だけ差し引く（0未満にはしない。運用開始後に追加）。最終問題のハート数
+  // ボーナスより前に適用し、ボーナス自体は減点対象にしない。
+  const hintUsed = !!(problem.hintState && problem.hintState.used);
+  if (hintUsed) {
+    addedScore = Math.max(0, addedScore - HINT_SCORE_PENALTY);
+  }
   if (isFinalQuestion) {
     // 最終問題に正解したときだけ、レベル・残りハート数に応じたボーナスを加算する
     // （ボーナス＝80×レベル×レベル×残りハート数。レベルMAXは内部レベル6として計算する）。
@@ -860,7 +911,7 @@ function handleCorrect(resultValue) {
   // 表示だけをこの瞬間に上書きする（ハイスコア判定・履歴等の内部ロジックには影響しない）。
   const isMaxBonusClear = isFinalQuestion && gameState.isMaxBonusRun;
   ui.updateScoreboard(gameState.score, isMaxBonusClear ? "MAX" : gameState.rank);
-  ui.showScoreDelta(addedScore);
+  ui.showScoreDelta(addedScore, hintUsed);
 
   // 解答時間ゲージは、以前は次の問題の開始時に毎回全回復させていたが、
   // 正解してスコアが加算されるこのタイミングでレベルに応じた割合だけ回復させる方式に変更した。

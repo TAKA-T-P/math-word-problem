@@ -215,6 +215,20 @@ const GENERATOR_TYPE_RULES = {
     computedVariables: [],
     requiresQuantityRelation: true
   },
+  // 単位量あたり・混み具合のうち、全体量が整数でなければならないテンプレート専用
+  // （花の本数・人数・牛の頭数などが小数になる不具合の修正で追加）。
+  // variables の宣言・quantityRelation の型は unitRate/totalFromUnitRate と同一のため、
+  // ルールの形もそのまま踏襲します。
+  unitRateExactTotal: {
+    requiredVariableKeys: [],
+    computedVariables: [],
+    requiresQuantityRelation: true
+  },
+  totalFromUnitRateExactTotal: {
+    requiredVariableKeys: [],
+    computedVariables: [],
+    requiresQuantityRelation: true
+  },
   // 速さ・道のり・時間（小学5年生3学期）は、キー名がテンプレートごとに quantityRelation で
   // 指定されるため、平均・単位量あたりと同じ理由で requiresQuantityRelation を使います。
   findSpeed: {
@@ -2328,6 +2342,126 @@ export function validateCategoryRegistryAgainstTemplates(registry, allTemplates)
   for (const [categoryId, templates] of templatesByCategoryId) {
     if (!registryIds.has(categoryId)) {
       errors.push(`レジストリに存在しない categoryId を持つテンプレートがあります: ${categoryId}（${templates.map((t) => t.id).join(", ")}）`);
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+// ヒントは「式を立てるための数量関係」だけを伝え、「式を作った後の計算方法」（通分・約分・
+// 逆数・筆算・くり上がり／くり下がり・位や小数点をそろえる、等）は説明しない方針
+// （運用開始後に追加。このアプリの目的が「計算の実行」ではなく「文章題から正しい式を
+// 作ること」であるため）。ヒント文にこれらの語句が含まれていないかを機械的に検出する。
+// README・コメント等の説明文は対象外で、実際にプレイヤーへ表示されるヒントデータ
+// （学習支援データのhints・テンプレートのhintSteps）だけを検査する。
+export const FORBIDDEN_HINT_PHRASES = [
+  "通分",
+  "約分",
+  "逆数",
+  "小数点をそろ",
+  "位をそろ",
+  "分母をそろ",
+  "分母はそのまま",
+  "分子どうし",
+  "分母どうし",
+  "ひっくり返",
+  "くり上がり",
+  "くり下がり",
+  "筆算"
+];
+
+function findForbiddenHintPhrases(text) {
+  if (typeof text !== "string") return [];
+  return FORBIDDEN_HINT_PHRASES.filter((phrase) => {
+    if (phrase === "位をそろ") {
+      // 「単位をそろえよう」（速さ・縮尺等で単位を合わせる指示。運用開始後に許容）は
+      // 「位をそろえよう」（筆算の位取りをそろえる、禁止対象の計算テクニック）と
+      // 部分文字列として衝突するため、直前が「単」の場合は除外する。
+      return /(?<!単)位をそろ/.test(text);
+    }
+    return text.includes(phrase);
+  });
+}
+
+/**
+ * カテゴリレジストリと学習支援データ（data/learning-support.js）・実際のテンプレート一覧との
+ * 対応関係を検証します（運用開始後に追加。ヒントボタン・例題確認機能用）。
+ * validateCategoryRegistryAgainstTemplates() と同じく、データはすべて引数で受け取り、
+ * このファイル自身は data/learning-support.js を import しません（呼び出し側＝
+ * tools/quality-check.js・tools/question-validator.html がデータを渡す）。
+ * - トレーニング選択可能な全カテゴリに学習支援データがあるか（MISSING_LEARNING_SUPPORT）
+ * - ヒント文が1件以上、かつ空文字を含まないか（MISSING_HINT_TEXT）
+ * - ヒント文に計算方法を説明する禁止語句が含まれていないか（FORBIDDEN_HINT_PHRASE）
+ * - exampleTemplateId が実在するテンプレートを指しているか（INVALID_EXAMPLE_TEMPLATE）
+ * - そのテンプレートの categoryId が、学習支援データのキーと一致するか（EXAMPLE_CATEGORY_MISMATCH）
+ * - exampleRouteId を指定している場合、そのテンプレートの解法ルートに実在するか（INVALID_EXAMPLE_ROUTE）
+ * - テンプレート側の段階別ヒント（hintSteps）を持つ場合、空文字列・禁止語句を含まない配列か
+ *   （INVALID_HINT_STEP_COUNT・FORBIDDEN_HINT_PHRASE）
+ * @returns {{valid: boolean, errors: string[]}}
+ */
+
+export function validateLearningSupportRegistry(registry, learningSupportByCategory, allTemplates) {
+  const errors = [];
+  const templatesById = new Map((allTemplates || []).map((t) => [t.id, t]));
+
+  for (const category of (registry || []).filter((c) => c.enabledInTraining)) {
+    const support = learningSupportByCategory ? learningSupportByCategory[category.id] : null;
+    if (!support) {
+      errors.push(`[MISSING_LEARNING_SUPPORT] カテゴリ "${category.id}"（${category.label}）の学習支援データがありません`);
+      continue;
+    }
+
+    if (
+      !Array.isArray(support.hints) ||
+      support.hints.length === 0 ||
+      support.hints.some((h) => typeof h !== "string" || h.trim().length === 0)
+    ) {
+      errors.push(`[MISSING_HINT_TEXT] カテゴリ "${category.id}" のヒント文が空、または不正です`);
+    } else {
+      for (const hint of support.hints) {
+        const found = findForbiddenHintPhrases(hint);
+        if (found.length > 0) {
+          errors.push(`[FORBIDDEN_HINT_PHRASE] カテゴリ "${category.id}" のヒントに計算方法の説明（${found.join("・")}）が含まれています: "${hint}"`);
+        }
+      }
+    }
+
+    const template = templatesById.get(support.exampleTemplateId);
+    if (!template) {
+      errors.push(
+        `[INVALID_EXAMPLE_TEMPLATE] カテゴリ "${category.id}" の exampleTemplateId "${support.exampleTemplateId}" に対応するテンプレートがありません`
+      );
+      continue;
+    }
+    if (template.categoryId !== category.id) {
+      errors.push(
+        `[EXAMPLE_CATEGORY_MISMATCH] カテゴリ "${category.id}" の exampleTemplateId "${support.exampleTemplateId}" は、別のカテゴリ "${template.categoryId}" のテンプレートです`
+      );
+    }
+    if (support.exampleRouteId) {
+      const routeIds = (template.solutionRoutes || []).map((r) => r.id);
+      if (!routeIds.includes(support.exampleRouteId)) {
+        errors.push(
+          `[INVALID_EXAMPLE_ROUTE] カテゴリ "${category.id}" の exampleRouteId "${support.exampleRouteId}" は、テンプレート "${template.id}" の解法ルートに存在しません`
+        );
+      }
+    }
+  }
+
+  for (const template of allTemplates || []) {
+    if (template.hintSteps === undefined) continue;
+    if (
+      !Array.isArray(template.hintSteps) ||
+      template.hintSteps.some((h) => typeof h !== "string" || h.trim().length === 0)
+    ) {
+      errors.push(`[INVALID_HINT_STEP_COUNT] テンプレート "${template.id}" の hintSteps が不正です（空文字列を含む、または配列ではありません）`);
+      continue;
+    }
+    for (const hint of template.hintSteps) {
+      const found = findForbiddenHintPhrases(hint);
+      if (found.length > 0) {
+        errors.push(`[FORBIDDEN_HINT_PHRASE] テンプレート "${template.id}" の hintSteps に計算方法の説明（${found.join("・")}）が含まれています: "${hint}"`);
+      }
     }
   }
 

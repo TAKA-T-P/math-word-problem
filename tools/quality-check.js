@@ -19,7 +19,8 @@ import {
   validateGeneratedQuestion,
   filterValidTemplateSets,
   validateCategoryRegistry,
-  validateCategoryRegistryAgainstTemplates
+  validateCategoryRegistryAgainstTemplates,
+  validateLearningSupportRegistry
 } from "../js/question-validator.js";
 import {
   generateQuestionFromTemplate,
@@ -35,6 +36,8 @@ import { generateTrainingQuestions, validateTrainingSetGeneration } from "../js/
 import { generateCustomTrainingQuestions, validateCustomTrainingSetGeneration } from "../js/custom-training.js";
 import { initReview, generateReviewQuestions, getReviewScopeKeys, getReviewScopeLabel, getQuestionCountForScope } from "../js/review-mode.js";
 import { isPlannedGradeTerm, getTotalQuestionsForLevel } from "../js/game.js";
+import { LEARNING_SUPPORT_BY_CATEGORY } from "../data/learning-support.js";
+import { validateAllExamples } from "../js/example-viewer.js";
 import {
   renderValueHtml,
   renderTextPartsHtml,
@@ -354,7 +357,50 @@ function runStructuralValidation(templates) {
     });
   }
 
-  return { findings, valid: valid && registryResult.valid && crossResult.valid };
+  // 学習支援データ（ヒントボタン・例題確認機能。運用開始後に追加）。
+  const learningSupportResult = validateLearningSupportRegistry(categoryRegistry, LEARNING_SUPPORT_BY_CATEGORY, templates);
+  for (const e of learningSupportResult.errors) {
+    findings.push({
+      severity: "error",
+      ruleId: RULE.LEARNING_SUPPORT_INVALID,
+      gradeTerm: "-",
+      categoryId: null,
+      category: "学習支援データ",
+      templateId: "-",
+      generationIndex: null,
+      seed: null,
+      message: e,
+      questionText: null,
+      sample: null
+    });
+  }
+
+  return { findings, valid: valid && registryResult.valid && crossResult.valid && learningSupportResult.valid };
+}
+
+// ============================================================
+// 例題確認の一括生成検証（運用開始後に追加）。全50カテゴリの代表例題を実際に生成し、
+// 例外の有無・決定性・模範式の最終結果が答えと一致するかを確認する。
+// js/example-viewer.js の validateAllExamples() をそのまま再利用し、生成ロジック自体は
+// このファイルで複製しない。
+// ============================================================
+
+function runLearningSupportExampleValidation() {
+  const { errors } = validateAllExamples();
+  const findings = errors.map((e) => ({
+    severity: "error",
+    ruleId: RULE[e.ruleId] || RULE.EXAMPLE_GENERATION_FAILED,
+    gradeTerm: "-",
+    categoryId: e.categoryId,
+    category: e.categoryId,
+    templateId: "-",
+    generationIndex: null,
+    seed: null,
+    message: e.message,
+    questionText: null,
+    sample: null
+  }));
+  return { findings, valid: errors.length === 0 };
 }
 
 // ============================================================
@@ -958,6 +1004,15 @@ export async function runQualityCheck(config, callbacks = {}) {
       });
     }
 
+    // 学習支援データ・例題確認（ヒントボタン・例題確認機能。運用開始後に追加）。
+    // 全50カテゴリの固定例題を一括生成し、例外・決定性・模範式の最終結果を確認する。
+    let learningSupportExampleResult = { findings: [], setsChecked: 0 };
+    if (config.checks.learningSupportExamples) {
+      callbacks.onProgress?.({ phase: "learningSupportExamples", elapsedMs: Date.now() - startedAt });
+      learningSupportExampleResult = runLearningSupportExampleValidation();
+      learningSupportExampleResult.setsChecked = Object.keys(LEARNING_SUPPORT_BY_CATEGORY).length;
+    }
+
     return finalizeResults({
       startedAt,
       structural,
@@ -966,6 +1021,7 @@ export async function runQualityCheck(config, callbacks = {}) {
       trainingSetResult,
       customTrainingSetResult,
       reviewSetResult,
+      learningSupportExampleResult,
       totalGenerations,
       aborted: false
     });
@@ -1002,14 +1058,26 @@ export function abortQualityCheck() {
   resumeQualityCheck();
 }
 
-function finalizeResults({ startedAt, structural, templateResults, battleSetResult, trainingSetResult, customTrainingSetResult, reviewSetResult, totalGenerations, aborted }) {
+function finalizeResults({
+  startedAt,
+  structural,
+  templateResults,
+  battleSetResult,
+  trainingSetResult,
+  customTrainingSetResult,
+  reviewSetResult,
+  learningSupportExampleResult = { findings: [], setsChecked: 0 },
+  totalGenerations,
+  aborted
+}) {
   const allFindings = [
     ...structural.findings,
     ...templateResults.flatMap((r) => r.findings),
     ...battleSetResult.findings,
     ...trainingSetResult.findings,
     ...customTrainingSetResult.findings,
-    ...reviewSetResult.findings
+    ...reviewSetResult.findings,
+    ...learningSupportExampleResult.findings
   ];
 
   const errorCount = allFindings.filter((f) => f.severity === "error").length;
@@ -1054,6 +1122,7 @@ function finalizeResults({ startedAt, structural, templateResults, battleSetResu
     trainingSetsChecked: trainingSetResult.setsChecked,
     customTrainingSetsChecked: customTrainingSetResult.setsChecked,
     reviewSetsChecked: reviewSetResult.setsChecked,
+    learningSupportExamplesChecked: learningSupportExampleResult.setsChecked,
     findings: allFindings,
     templateResults,
     breakdown: { byGradeTerm, byCategory, byRule, byStepCount, byValueType }

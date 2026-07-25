@@ -3,6 +3,12 @@
 const RANK_TABLE = ["H", "G", "F", "E", "D", "C", "B", "A", "S"];
 const TOP_RANK = "SS";
 
+// ヒントを使った問題を正解したときの減点（運用開始後に追加）。既存のスコア計算式
+// （calculateQuestionScore）自体は変更せず、js/game.js の handleCorrect() が
+// 計算後の加算値からこの分だけ差し引く（0未満にはしない）。文章題バトルだけが対象で、
+// トレーニング・総復習はスコアの概念自体が無い/減点しないため、この定数を参照しない。
+export const HINT_SCORE_PENALTY = 500;
+
 const TIME_BONUS_BASE_SECONDS = 24;
 // 文章題バトルの特別ランク「MAX」（js/game.js）が、「全問このタイムボーナス上限で
 // 正解できたか」の判定に使うため、export している。

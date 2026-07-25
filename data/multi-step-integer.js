@@ -27,6 +27,12 @@ export const multiStepIntegerTemplates = [
   // ============================================================
   {
     id: "multi_mul_add_001",
+    // カテゴリ共通ヒントだけでは演算の組み合わせが伝わらないため、段階別ヒントを登録する
+    // （運用開始後に追加。同じ「かけ算→たし算」構造のテンプレートは同じ文言を使う）。
+    hintSteps: [
+      "まず、「1つ分の数」と「いくつ分」を使って、全部の数を求めよう。",
+      "式1で求めた全部の数に、ばらの分をたそう。"
+    ],
     gradeTerm: "4-multi-step",
     category: "2段階・かけ算とたし算",
     categoryId: "multi-step-integer",
@@ -62,6 +68,10 @@ export const multiStepIntegerTemplates = [
   },
   {
     id: "multi_mul_add_002",
+    hintSteps: [
+      "まず、「1つ分の数」と「いくつ分」を使って、全部の数を求めよう。",
+      "式1で求めた全部の数に、ばらの分をたそう。"
+    ],
     gradeTerm: "4-multi-step",
     category: "2段階・かけ算とたし算",
     categoryId: "multi-step-integer",
@@ -97,6 +107,10 @@ export const multiStepIntegerTemplates = [
   },
   {
     id: "multi_mul_add_003",
+    hintSteps: [
+      "まず、「1つ分の数」と「いくつ分」を使って、全部の数を求めよう。",
+      "式1で求めた全部の数に、ばらの分をたそう。"
+    ],
     gradeTerm: "4-multi-step",
     category: "2段階・かけ算とたし算",
     categoryId: "multi-step-integer",
@@ -138,6 +152,10 @@ export const multiStepIntegerTemplates = [
   // ============================================================
   {
     id: "multi_mul_sub_001",
+    hintSteps: [
+      "まず、「1つ分の数」と「いくつ分」を使って、全部の数を求めよう。",
+      "式1で求めた全部の数から、へった分を取りのぞこう。"
+    ],
     gradeTerm: "4-multi-step",
     category: "2段階・かけ算とひき算",
     categoryId: "multi-step-integer",
@@ -173,6 +191,10 @@ export const multiStepIntegerTemplates = [
   },
   {
     id: "multi_mul_sub_002",
+    hintSteps: [
+      "まず、「1つ分の数」と「いくつ分」を使って、全部の数を求めよう。",
+      "式1で求めた全部の数から、へった分を取りのぞこう。"
+    ],
     gradeTerm: "4-multi-step",
     category: "2段階・かけ算とひき算",
     categoryId: "multi-step-integer",
@@ -208,6 +230,10 @@ export const multiStepIntegerTemplates = [
   },
   {
     id: "multi_mul_sub_003",
+    hintSteps: [
+      "まず、「1つ分の数」と「いくつ分」を使って、全部の数を求めよう。",
+      "式1で求めた全部の数から、へった分を取りのぞこう。"
+    ],
     gradeTerm: "4-multi-step",
     category: "2段階・かけ算とひき算",
     categoryId: "multi-step-integer",
@@ -247,6 +273,10 @@ export const multiStepIntegerTemplates = [
   // ============================================================
   {
     id: "multi_add_div_001",
+    hintSteps: [
+      "まず、2つの量を合わせた全部を求めよう。",
+      "式1で求めた全部を同じように分けるので、全部の量を分ける数でわろう。"
+    ],
     gradeTerm: "4-multi-step",
     category: "2段階・たし算とわり算",
     categoryId: "multi-step-integer",
@@ -282,6 +312,10 @@ export const multiStepIntegerTemplates = [
   },
   {
     id: "multi_add_div_002",
+    hintSteps: [
+      "まず、2つの量を合わせた全部を求めよう。",
+      "式1で求めた全部を同じように分けるので、全部の量を分ける数でわろう。"
+    ],
     gradeTerm: "4-multi-step",
     category: "2段階・たし算とわり算",
     categoryId: "multi-step-integer",
@@ -317,6 +351,10 @@ export const multiStepIntegerTemplates = [
   },
   {
     id: "multi_add_div_003",
+    hintSteps: [
+      "まず、2つの量を合わせた全部を求めよう。",
+      "式1で求めた全部を同じように分けるので、全部の量を分ける数でわろう。"
+    ],
     gradeTerm: "4-multi-step",
     category: "2段階・たし算とわり算",
     categoryId: "multi-step-integer",
@@ -359,6 +397,12 @@ export const multiStepIntegerTemplates = [
   // ============================================================
   {
     id: "multi_addsub_route_001",
+    // 2つの正解ルート（先にひく／先にたす）があるため、どちらの順序でも当てはまる
+    // 汎用的なヒントにする。
+    hintSteps: [
+      "配った数と、新しく届いた数のどちらを先に使ってもよいので、まず1つの式を作ろう。",
+      "式1で求めた数量を使って、もう一方の式を作ろう。"
+    ],
     gradeTerm: "4-multi-step",
     category: "2段階・たし算とひき算（複数解法）",
     categoryId: "multi-step-integer",
@@ -411,6 +455,10 @@ export const multiStepIntegerTemplates = [
   },
   {
     id: "multi_addsub_route_002",
+    hintSteps: [
+      "売れた数と、新しく仕入れた数のどちらを先に使ってもよいので、まず1つの式を作ろう。",
+      "式1で求めた数量を使って、もう一方の式を作ろう。"
+    ],
     gradeTerm: "4-multi-step",
     category: "2段階・たし算とひき算（複数解法）",
     categoryId: "multi-step-integer",
@@ -463,6 +511,10 @@ export const multiStepIntegerTemplates = [
   },
   {
     id: "multi_div_add_001",
+    hintSteps: [
+      "まず、全部を同じように分けた1つ分を求めよう。",
+      "式1で求めた量と、あとから加わった量を合わせよう。"
+    ],
     gradeTerm: "4-multi-step",
     category: "2段階・わり算とたし算",
     categoryId: "multi-step-integer",

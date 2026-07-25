@@ -19,6 +19,7 @@
 import { generateQuestion, shuffleArray, shouldDisplayFractionsUnsimplified } from "./question-generator.js";
 import { checkAnswer } from "./answer-checker.js";
 import { filterValidTemplateSets } from "./question-validator.js";
+import { getHintTextForProblem, markHintUsedIfFirstTime } from "./hint-system.js";
 import { formatValue, computeUnsimplifiedFractionResult } from "./value-utils.js";
 import { renderValueHtml } from "./value-renderer.js";
 import { getCategoriesForGrade, getEnabledTrainingCategories } from "../data/category-registry.js";
@@ -38,6 +39,10 @@ const CLEAR_MESSAGE_DELAY_MS = 1400;
 const GAMEOVER_MESSAGE_DELAY_MS = 1400;
 const INTERMEDIATE_STEP_DELAY_MS = 900;
 const ELAPSED_TIMER_INTERVAL_MS = 1000;
+
+// 1回の総復習で使えるヒントの回数（運用開始後に追加。文章題バトルと同じ考え方で、
+// 問題単位で数える。js/hint-system.js の markHintUsedIfFirstTime() 参照）。
+const MAX_HINTS_PER_REVIEW = 3;
 
 // スコープキー（"4"|"5"|"6"|"all"）から、結果画面・ヘッダー表示に使う名前を求める。
 const REVIEW_SCOPE_LABELS = { "4": "4年のまとめ", "5": "5年のまとめ", "6": "6年のまとめ", all: "小学校のまとめ" };
@@ -65,7 +70,10 @@ const reviewState = {
   isNoMiss: true,
   resultType: null,
   pendingOutcome: null, // 正解演出後の遷移先: "next" | "clear"
-  startTimestamp: null // 1問目の開始時刻（elapsed-time表示の起点）
+  startTimestamp: null, // 1問目の開始時刻（elapsed-time表示の起点）
+  // ヒント機能（運用開始後に追加）。1回の総復習につき3問まで使える残り回数。
+  // localStorageには保存せず、新しい総復習を開始するたびにMAX_HINTS_PER_REVIEWへ戻す。
+  remainingHints: MAX_HINTS_PER_REVIEW
 };
 
 let templateSets = {};
@@ -204,6 +212,7 @@ export function startReview(settings) {
   reviewState.resultType = null;
   reviewState.pendingOutcome = null;
   reviewState.startTimestamp = null;
+  reviewState.remainingHints = MAX_HINTS_PER_REVIEW;
 
   isBusy = false;
 
@@ -262,6 +271,10 @@ function beginReviewQuestion() {
 
   ui.updateReviewHeader(reviewState.label, reviewState.solvedQuestions + 1, reviewState.totalQuestions);
   ui.renderProblem(problem);
+  // ヒント機能（運用開始後に追加）。新しい問題では必ずヒント欄を閉じ、ボタンの残り回数
+  // 表示を今の reviewState.remainingHints に同期させる。
+  ui.hideHintPanel();
+  ui.updateHintButton({ unlimited: false, remaining: reviewState.remainingHints, usedForCurrentQuestion: false });
   ui.unlockInput();
   isBusy = false;
   logReviewDebugInfo();
@@ -270,6 +283,29 @@ function beginReviewQuestion() {
 // ============================================================
 // 判定
 // ============================================================
+
+/**
+ * 「ヒント」ボタンが押されたときの処理（運用開始後に追加）。
+ * 文章題バトルの handleHintToggle() と同じ考え方（スコアが無いため減点処理は無い）。
+ */
+export function handleHintToggle() {
+  if (isBusy || !reviewState.currentProblem) return;
+  const problem = reviewState.currentProblem;
+
+  if (problem.hintState.visible) {
+    problem.hintState.visible = false;
+    ui.hideHintPanel();
+    return;
+  }
+
+  const isFirstUse = markHintUsedIfFirstTime(problem);
+  if (isFirstUse) {
+    reviewState.remainingHints = Math.max(0, reviewState.remainingHints - 1);
+  }
+  problem.hintState.visible = true;
+  ui.showHintPanel(getHintTextForProblem(problem));
+  ui.updateHintButton({ unlimited: false, remaining: reviewState.remainingHints, usedForCurrentQuestion: true });
+}
 
 export function handleJudge(answer) {
   if (isBusy || !reviewState.currentProblem) return;
@@ -338,6 +374,10 @@ function handleIntermediateStepCorrect(problem, stepResult) {
     ui.hideIntermediateStepEffect();
     ui.renderStepChoices(problem);
     ui.updateReviewHeader(reviewState.label, reviewState.solvedQuestions + 1, reviewState.totalQuestions);
+    // ヒント欄が開いたままなら、次のステップ用のヒントに内容だけ更新する（運用開始後に追加）。
+    if (problem.hintState && problem.hintState.visible) {
+      ui.showHintPanel(getHintTextForProblem(problem));
+    }
     ui.unlockInput();
     isBusy = false;
   }, INTERMEDIATE_STEP_DELAY_MS);
