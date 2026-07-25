@@ -378,7 +378,7 @@ export const grade6Term1Templates = [
       { type: "value", ref: "totalAmount" },
       { type: "text", value: "Lのペンキを" },
       { type: "value", ref: "walls" },
-      { type: "text", value: "この壁に同じ量ずつ使います。1つの壁分は何Lですか。" }
+      { type: "text", value: "枚のかべに同じ量ずつ使います。かべ1枚分は何Lですか。" }
     ],
     variables: {
       totalAmount: { type: "fraction", denominator: 8, numeratorMin: 1, numeratorMax: 6 },
