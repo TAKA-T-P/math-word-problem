@@ -219,6 +219,29 @@ function generateExactFractionDivisionValues(variables) {
 }
 
 /**
+ * 分数÷分数専用の生成ルール（商が1にならないように選び直す版、運用開始後に追加）。
+ * わられる数・わる数の値がたまたま等しくなる（商が1になる）と、「同じ量を同じ量で
+ * 分けているだけ」の不自然な問題になってしまうため、solutionRoutes[0] が指す
+ * わられる数・わる数の値が異なる組み合わせが見つかるまで選び直します
+ * （1にならない「倍」を選び直す pickMultiplierValueExcludingOne() と同じ設計）。
+ * どの変数名がわられる数・わる数かはテンプレートの solutionRoutes 側が決めるため、
+ * この関数はキー名に依存せず、どの分数÷分数テンプレートにも共通で使えます。
+ */
+function generateFractionDivisionValues(variables, template) {
+  const route = template.solutionRoutes[0];
+  const dividendKey = route.left;
+  const divisorKey = route.right;
+  const MAX_ATTEMPTS = 200;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const values = generateStandardValues(variables);
+    if (!areValuesEqual(values[dividendKey], values[divisorKey])) {
+      return values;
+    }
+  }
+  throw new Error("商が1にならない分数÷分数の値を生成できませんでした（variables の範囲を見直してください）。");
+}
+
+/**
  * 2段階問題「わり算 → 何か」用の生成ルール。
  * divisor・quotient から dividend を求める点は generateExactDivisionValues と同じ。
  * それ以外の変数（2つ目の式で使う独立した数など）は通常どおり生成します。
@@ -831,7 +854,10 @@ const GENERATOR_TYPE_HANDLERS = {
   fractionTimesFraction: (variables) => generateStandardValues(variables),
   fractionDividedByInteger: (variables) => generateStandardValues(variables),
   integerDividedByFraction: (variables) => generateStandardValues(variables),
-  fractionDividedByFraction: (variables) => generateStandardValues(variables),
+  // 分数÷分数は、わられる数とわる数がたまたま等しくなる（商が1になる）と不自然なため、
+  // 商が1にならない組み合わせが見つかるまで選び直す generateFractionDivisionValues() を使う
+  // （不具合修正で standard から変更）。
+  fractionDividedByFraction: (variables, template) => generateFractionDivisionValues(variables, template),
   // 分数÷分数だが、商が必ず整数になるようにする（運用開始後に追加）。
   exactFractionDivision: (variables) => generateExactFractionDivisionValues(variables),
   // 分数倍・比べる量／分数倍・もとの量（小学6年生1学期、第10段階で追加）。
