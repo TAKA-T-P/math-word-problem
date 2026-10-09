@@ -44,9 +44,9 @@ import { getExampleCategoryGroups, generateExample } from "./example-viewer.js";
 
 const DRAG_THRESHOLD = 6;
 
-// 外部の姉妹アプリ「スペース計算ラリー」のURL（運用開始後に追加。ヘルプメニューの
+// 外部のポータル「KEC数学科ラボ」のURL（運用開始後に追加。ヘルプメニューの
 // 確認ダイアログから新しいタブで開く。setupSpaceRallyDialog() 参照）。
-const SPACE_CALC_RALLY_URL = "https://TAKA-T-P.github.io/space-calculation-game/";
+const SPACE_CALC_RALLY_URL = "https://taka-t-p.github.io/math-app-portal/";
 
 // URL に ?debug=true を付けた場合だけ、タイトル画面に開発版の出題範囲
 // 「2段階問題・整数（開発版）」を表示する。通常アクセスでは要素自体を作らない。
@@ -2129,8 +2129,8 @@ function setupResetRecordsDialog() {
 }
 
 /**
- * 「スペース計算ラリー」ボタンの確認ダイアログ（運用開始後に追加）。
- * 「はい」を押すと、外部の姉妹アプリを新しいタブで開く（ゲームの状態は失われない）。
+ * 「KEC数学科ラボへ」ボタンの確認ダイアログ（運用開始後に追加）。
+ * 「はい」を押すと、外部のポータルを新しいタブで開く（ゲームの状態は失われない）。
  * 「いいえ」を押すとダイアログを閉じるだけで、何も起きない。
  */
 function setupSpaceRallyDialog() {

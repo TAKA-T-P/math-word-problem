@@ -124,7 +124,7 @@ button {
   border: 1px solid rgba(255, 255, 255, 0.25);
 }
 
-/* 外部の姉妹アプリ「スペース計算ラリー」への導線ボタン（運用開始後に追加）。
+/* 外部のポータル「KEC数学科ラボ」への導線ボタン（運用開始後に追加）。
    .primary-btn の形・立体感（box-shadowの"棚"）はそのまま使い、色だけ青系に変える。 */
 .space-rally-btn {
   background: linear-gradient(180deg, #4d7dff, #2d4fcf);
